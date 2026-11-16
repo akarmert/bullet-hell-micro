@@ -1,0 +1,19 @@
+{
+  "name": "bullet-hell-micro",
+  "version": "1.0.0",
+  "description": "Bullet Hell Micro – 30 Saniyelik Kaçış",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "bullet-hell",
+    "canvas",
+    "javascript",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT"
+}
