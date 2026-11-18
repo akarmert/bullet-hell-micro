@@ -43,6 +43,23 @@ export class SoundSystem {
         this.grazeCombo = 0;
         this.lastGrazeAt = -Infinity;
         this.lastBossHitAt = -Infinity;
+
+        this.musicVolume = 1;
+        this.sfxVolume = 1;
+    }
+
+    get musicLevel() {
+        return MUSIC_LEVEL * this.musicVolume;
+    }
+
+    /** Ayarlar menüsünden 0-1 ses seviyeleri */
+    setVolumes(music = 1, sfx = 1) {
+        this.musicVolume = music;
+        this.sfxVolume = sfx;
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.bgmGain.gain.setTargetAtTime(this.musicLevel, t, 0.05);
+        this.sfxBus.gain.setTargetAtTime(this.sfxVolume, t, 0.05);
     }
 
     // ------------------------------------------------------------
@@ -118,7 +135,7 @@ export class SoundSystem {
             this.bgmFilter.type = 'lowpass';
             this.bgmFilter.frequency.value = 1800;
             this.bgmGain = ctx.createGain();
-            this.bgmGain.gain.value = MUSIC_LEVEL;
+            this.bgmGain.gain.value = this.musicLevel;
             this.bgmFilter.connect(this.bgmGain);
             this.bgmGain.connect(this.master);
             this.send(this.bgmGain, this.reverb, 0.22);
@@ -139,7 +156,7 @@ export class SoundSystem {
 
             // Efekt yolu
             this.sfxBus = ctx.createGain();
-            this.sfxBus.gain.value = 1;
+            this.sfxBus.gain.value = this.sfxVolume;
             this.sfxBus.connect(this.master);
             this.send(this.sfxBus, this.reverb, 0.14);
 
@@ -198,8 +215,8 @@ export class SoundSystem {
         const t = this.ctx.currentTime;
         g.cancelScheduledValues(t);
         g.setValueAtTime(g.value, t);
-        g.linearRampToValueAtTime(MUSIC_LEVEL * amount, t + 0.03);
-        g.setTargetAtTime(MUSIC_LEVEL, t + hold, 0.25);
+        g.linearRampToValueAtTime(this.musicLevel * amount, t + 0.03);
+        g.setTargetAtTime(this.musicLevel, t + hold, 0.25);
     }
 
     ready() {
@@ -293,7 +310,7 @@ export class SoundSystem {
         this.bgmFilter.frequency.cancelScheduledValues(t);
         this.bgmFilter.frequency.setValueAtTime(this.musicMode === 'menu' ? 2200 : 1800, t);
         this.bgmGain.gain.cancelScheduledValues(t);
-        this.bgmGain.gain.setValueAtTime(MUSIC_LEVEL, t);
+        this.bgmGain.gain.setValueAtTime(this.musicLevel, t);
         this.bgmTimer = setInterval(() => this.scheduleBGM(), 25);
         this.scheduleBGM();
     }
@@ -435,12 +452,14 @@ export class SoundSystem {
 
     /**
      * Graze: baloncuk patlaması; art arda grazelerde pentatonik merdivende yükselir
+     * @param {number|null} combo Oyunun seri sayacı (0 tabanlı); verilmezse kendi zamanlaması
      * @returns {number} Mevcut seri sayısı (0 = tek)
      */
-    playGraze(x = null) {
+    playGraze(x = null, combo = null) {
         if (!this.ctx) return 0;
         const t = this.ctx.currentTime;
-        this.grazeCombo = t - this.lastGrazeAt < GRAZE_CHAIN_GAP ? this.grazeCombo + 1 : 0;
+        if (combo !== null) this.grazeCombo = Math.max(0, combo);
+        else this.grazeCombo = t - this.lastGrazeAt < GRAZE_CHAIN_GAP ? this.grazeCombo + 1 : 0;
         this.lastGrazeAt = t;
         if (!this.enabled) return this.grazeCombo;
 

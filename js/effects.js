@@ -193,6 +193,9 @@ export class EffectsManager {
         // EMP Şok Dalgası Halka Efekti
         this.shockwaves = [];
 
+        // Ayarlar: sarsıntı ve flaş
+        this.motionEnabled = true;
+
         // Arka planda süzülen pastel bulutlar
         this.blobs = this.createBlobs(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
     }
@@ -264,8 +267,8 @@ export class EffectsManager {
     /**
      * Graze (teğet geçme) anında minik sarı kıvılcım parçacığı
      */
-    triggerGraze(x, y) {
-        this.sound.playGraze(x);
+    triggerGraze(x, y, combo = null) {
+        this.sound.playGraze(x, combo);
         const colors = [THEME.PINK, THEME.LAVENDER];
         for (let i = 0; i < 3; i++) {
             this.particles.push(new Particle(x, y, colors[i % 2], 0.4, 0.4));
@@ -473,7 +476,7 @@ export class EffectsManager {
      */
     preRender(ctx) {
         ctx.save();
-        if (this.shakeX !== 0 || this.shakeY !== 0) {
+        if (this.motionEnabled && (this.shakeX !== 0 || this.shakeY !== 0)) {
             ctx.translate(this.shakeX, this.shakeY);
         }
     }
@@ -482,6 +485,10 @@ export class EffectsManager {
      * Reaktif ızgarayı çizer
      */
     renderGrid(ctx) {
+        if (THEME.highContrast) {
+            this.grid.render(ctx);
+            return;
+        }
         for (const b of this.blobs) {
             const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
             g.addColorStop(0, `rgba(${b.color}, 0.55)`);
@@ -515,7 +522,7 @@ export class EffectsManager {
         }
 
         // Pembe flaş
-        if (this.flashAlpha > 0.01) {
+        if (this.motionEnabled && this.flashAlpha > 0.01) {
             ctx.save();
             ctx.fillStyle = `rgba(255, 196, 222, ${this.flashAlpha})`;
             ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);

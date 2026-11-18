@@ -5,6 +5,7 @@
 
 import { GAME_CONFIG } from './config.js';
 import { THEME } from './theme.js';
+import { getSkin, drawMarshmallow } from './skins.js';
 
 export class Player {
     constructor() {
@@ -39,6 +40,9 @@ export class Player {
 
         // Görsel rotasyon / kalkan animasyon fazı
         this.shieldAngle = 0;
+
+        // Kostüm (Progress'ten seçilir)
+        this.skin = getSkin('classic');
     }
 
     /**
@@ -261,42 +265,15 @@ export class Player {
             ctx.stroke();
         }
 
-        // 4. Gövdenin altındaki yumuşak gölge
-        ctx.beginPath();
-        ctx.ellipse(this.x, this.y + r * 0.9, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
-        ctx.fillStyle = THEME.SHADOW;
-        ctx.fill();
-
-        // 5. Marşmelov gövde (dash sırasında hafif ezilme)
+        // 4-7. Kostümlü marşmelov gövde, yüz ve hitbox çekirdeği
         const squash = this.isDashing ? 0.82 : 1 + Math.sin(t * 5) * 0.03;
-        ctx.beginPath();
-        ctx.ellipse(this.x, this.y, r / squash, r * squash, 0, 0, Math.PI * 2);
-        ctx.fillStyle = this.isDashing ? THEME.PINK_SOFT : THEME.WHITE;
-        ctx.fill();
-        ctx.strokeStyle = THEME.INK;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        // 6. Minik yüz: gözler ve yanak allığı
-        ctx.fillStyle = THEME.INK;
         const blink = (t % 3.2) < 0.12 ? 0.25 : 1;
-        for (const side of [-1, 1]) {
-            ctx.beginPath();
-            ctx.ellipse(this.x + side * r * 0.38, this.y - r * 0.2, 1.3, 1.8 * blink, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.fillStyle = 'rgba(255, 111, 174, 0.55)';
-        for (const side of [-1, 1]) {
-            ctx.beginPath();
-            ctx.ellipse(this.x + side * r * 0.62, this.y + r * 0.18, 2.2, 1.3, 0, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // 7. Adil hitbox: merkezdeki pembe nokta
-        ctx.beginPath();
-        ctx.arc(this.x, this.y + r * 0.22, this.hitboxRadius * 0.6, 0, Math.PI * 2);
-        ctx.fillStyle = THEME.PINK_DEEP;
-        ctx.fill();
+        drawMarshmallow(ctx, this.x, this.y, r, this.skin, {
+            squash,
+            blink,
+            hitboxRadius: this.hitboxRadius * 0.6,
+            body: this.isDashing ? THEME.PINK_SOFT : null
+        });
 
         ctx.restore();
     }

@@ -4,6 +4,7 @@
 // ============================================================
 
 import { MODES_CONFIG } from './config.js';
+import { dateKey, hashSeed } from './rng.js';
 
 export class BaseMode {
     constructor(config) {
@@ -41,6 +42,16 @@ export class BaseMode {
      */
     isSimultaneous() {
         return !!this.config.SIMULTANEOUS;
+    }
+
+    /** En iyi skorun saklandığı anahtar */
+    get scoreKey() {
+        return `${this.storageKey}_score`;
+    }
+
+    /** Sabit tohum (günlük mod); null = her tur rastgele */
+    getSeed() {
+        return null;
     }
 }
 
@@ -88,12 +99,35 @@ export class ChaosMode extends BaseMode {
     }
 }
 
+/**
+ * Günlük meydan okuma: tarihten türetilen tohumla herkes aynı mermi dizisini görür.
+ * Rekorlar her gün için ayrı tutulur.
+ */
+export class DailyMode extends BaseMode {
+    constructor() {
+        super(MODES_CONFIG.daily);
+    }
+
+    set storageKey(value) {
+        this.baseKey = value;
+    }
+
+    get storageKey() {
+        return `${this.baseKey}_${dateKey()}`;
+    }
+
+    getSeed() {
+        return hashSeed(`bullet-hell-micro:${dateKey()}`);
+    }
+}
+
 export class ModeRegistry {
     static modes = {
         classic: new ClassicMode(),
         endless: new EndlessMode(),
         hardcore: new HardcoreMode(),
-        chaos: new ChaosMode()
+        chaos: new ChaosMode(),
+        daily: new DailyMode()
     };
 
     static defaultModeId = 'classic';

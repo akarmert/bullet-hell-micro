@@ -186,5 +186,13 @@ export const MODES_CONFIG = {
         INTERVAL_MULT: 0.85,
         SIMULTANEOUS: true,   // Tüm mermi sistemleri eşzamanlı aktif
         DESCRIPTION: 'Kenar, spiral, aim ve seken lazerler aynı anda aktif'
+    },
+    daily: {
+        ID: 'daily',
+        LABEL: 'GÜNLÜK',
+        STORAGE_KEY: 'bulletHellHighScore_daily', // Sonuna tarih eklenir
+        SPEED_MULT: 1.1,
+        INTERVAL_MULT: 0.9,
+        DESCRIPTION: 'bugün herkese aynı desen · arkadaşlarınla yarış'
     }
 };

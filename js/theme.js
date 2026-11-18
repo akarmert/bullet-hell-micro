@@ -18,8 +18,18 @@ export const THEME = {
     PINK_DEEP: '#F0468F',
     PINK_SOFT: '#FFC4DE',
     SHADOW: 'rgba(75, 42, 110, 0.16)',
-    SPRINKLES: ['#FF6FAE', '#8E5BE8', '#CDB8FF', '#FFC4DE', '#FFFFFF']
+    SPRINKLES: ['#FF6FAE', '#8E5BE8', '#CDB8FF', '#FFC4DE', '#FFFFFF'],
+
+    // Ayarlarla değişen görsel bayraklar
+    BULLET_OUTLINE: 1.6,
+    highContrast: false
 };
+
+/** Yüksek kontrast: kalın mermi konturu, sade arka plan */
+export function setHighContrast(on) {
+    THEME.highContrast = !!on;
+    THEME.BULLET_OUTLINE = on ? 2.6 : 1.6;
+}
 
 /**
  * Yuvarlak hatlı yazı tipi tanımı

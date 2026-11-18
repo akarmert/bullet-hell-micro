@@ -15,7 +15,13 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
-import { THEME } from './theme.js';
+import { THEME, setHighContrast } from './theme.js';
+import { ScoreSystem } from './score.js';
+import { Tutorial } from './tutorial.js';
+import { Progress } from './progress.js';
+import { Settings, SETTING_ROWS } from './settings.js';
+import { SKINS } from './skins.js';
+import { seedRandom, dateKey } from './rng.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -42,6 +48,23 @@ export class Game {
         this.effects = new EffectsManager();
         this.ui = new UIManager();
         this.ui.setMode(this.currentMode);
+
+        // Skor, öğretici, ilerleme (kostümler) ve ayarlar
+        this.score = new ScoreSystem();
+        this.tutorial = new Tutorial();
+        this.progress = new Progress();
+        this.settings = new Settings();
+        this.currentHint = null;
+        this.lastUnlocked = [];
+        this.ui.progress = this.progress;
+        this.ui.settings = this.settings;
+        this.ui.skinIndex = Math.max(0, SKINS.findIndex(s => s.id === this.progress.selected));
+        this.player.skin = this.progress.skin;
+        this.settings.onChange((v) => {
+            this.effects.sound.setVolumes(v.musicVolume, v.sfxVolume);
+            this.effects.motionEnabled = v.shake;
+            setHighContrast(v.contrast);
+        });
 
         // State & Zamanlama
         this.state = GAME_STATE.MENU;
@@ -72,6 +95,7 @@ export class Game {
             this.effects.triggerBossRam(boss.x, boss.y);
         };
         this.waveManager.onBossDefeated = (boss) => {
+            this.score.onBossDefeat(boss.x, boss.y);
             const destroyed = this.bulletManager.destroyAll();
             this.effects.triggerBossDefeated(boss.x, boss.y, destroyed);
         };
@@ -146,15 +170,23 @@ export class Game {
             const coords = getCanvasCoords(e.clientX, e.clientY);
 
             if (this.state === GAME_STATE.MENU) {
-                // Menüde buton kontrolü
-                const clickedModeId = this.ui.getClickedMode(coords.x, coords.y);
-                if (clickedModeId) {
-                    this.currentMode = ModeRegistry.get(clickedModeId);
-                    this.ui.setMode(this.currentMode);
-                    this.waveManager.setMode(this.currentMode);
-                    this.effects.sound.playPhase();
-                } else {
+                if (this.ui.settingsOpen) {
+                    const action = this.ui.getSettingsAction(coords.x, coords.y);
+                    if (action) {
+                        this.ui.settingsRow = action.row;
+                        this.activateSetting(action.row, action.dir);
+                    }
+                    return;
+                }
+                const action = this.ui.getMenuAction(coords.x, coords.y);
+                if (!action || action.type === 'play') {
                     this.startGame();
+                } else if (action.type === 'mode') {
+                    this.selectMode(action.id);
+                } else if (action.type === 'settings') {
+                    this.openSettings();
+                } else if (action.type === 'skinPrev' || action.type === 'skinNext') {
+                    this.cycleSkin(action.type === 'skinNext' ? 1 : -1);
                 }
             } else if (this.state === GAME_STATE.PAUSED) {
                 this.resumeGame();
@@ -179,6 +211,24 @@ export class Game {
                 if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); this.resumeGame(); }
                 else if (e.code === 'KeyM') this.returnToMenu();
                 return;
+            }
+
+            // Ayarlar paneli açıkken tüm tuşlar panele gider
+            if (this.state === GAME_STATE.MENU && this.ui.settingsOpen) {
+                e.preventDefault();
+                const rows = SETTING_ROWS.length;
+                if (e.code === 'ArrowUp' || e.code === 'KeyW') this.ui.settingsRow = (this.ui.settingsRow + rows - 1) % rows;
+                else if (e.code === 'ArrowDown' || e.code === 'KeyS') this.ui.settingsRow = (this.ui.settingsRow + 1) % rows;
+                else if (e.code === 'ArrowLeft' || e.code === 'KeyA') this.activateSetting(this.ui.settingsRow, -1, true);
+                else if (e.code === 'ArrowRight' || e.code === 'KeyD') this.activateSetting(this.ui.settingsRow, 1, true);
+                else if (e.code === 'Enter' || e.code === 'Space') this.activateSetting(this.ui.settingsRow, 1);
+                else if (e.code === 'Escape' || e.code === 'KeyO') this.ui.settingsOpen = false;
+                return;
+            }
+            if (this.state === GAME_STATE.MENU) {
+                if (e.code === 'ArrowLeft' || e.code === 'KeyA') { this.cycleSkin(-1); return; }
+                if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.cycleSkin(1); return; }
+                if (e.code === 'KeyO') { this.openSettings(); return; }
             }
 
             // Space veya Enter
@@ -219,6 +269,55 @@ export class Game {
         window.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
         });
+    }
+
+    selectMode(id) {
+        this.currentMode = ModeRegistry.get(id);
+        this.ui.setMode(this.currentMode);
+        this.waveManager.setMode(this.currentMode);
+        this.effects.sound.playPhase();
+    }
+
+    openSettings() {
+        this.ui.settingsOpen = true;
+        this.ui.settingsRow = 0;
+        this.effects.sound.playPhase();
+    }
+
+    /**
+     * Ayar satırını uygular
+     * @param {number} row
+     * @param {number} dir -1 / +1
+     * @param {boolean} arrowsOnly Ok tuşları eylem satırlarını tetiklemesin
+     */
+    activateSetting(row, dir = 1, arrowsOnly = false) {
+        const item = SETTING_ROWS[row];
+        if (!item) return;
+        if (item.type === 'action') {
+            if (arrowsOnly) return;
+            if (item.id === 'close') {
+                this.ui.settingsOpen = false;
+            } else if (item.id === 'tutorial') {
+                this.tutorial.resetProgress();
+                this.effects.triggerBanner('ipuçları sıfırlandı', THEME.LAVENDER);
+            }
+        } else {
+            this.settings.adjust(item.id, dir);
+        }
+        this.effects.sound.playGraze(null, 2);
+    }
+
+    /** Menüde kostümler arasında gezinir; açık olanı seçer */
+    cycleSkin(dir) {
+        const n = SKINS.length;
+        this.ui.skinIndex = (this.ui.skinIndex + dir + n) % n;
+        const skin = SKINS[this.ui.skinIndex];
+        if (this.progress.select(skin.id)) {
+            this.player.skin = this.progress.skin;
+            this.effects.sound.playPickup();
+        } else {
+            this.effects.sound.playGraze(null, 0);
+        }
     }
 
     /**
@@ -346,6 +445,15 @@ export class Game {
         this.resumeCountdown = 0;
         this.effects.sound.bossMode = false;
 
+        // Günlük modda tarih tohumu; diğerlerinde rastgele
+        seedRandom(this.currentMode.getSeed());
+        this.score.reset();
+        this.tutorial.start(this.touchControls.touchDevice);
+        this.currentHint = null;
+        this.lastUnlocked = [];
+        this.ui.settingsOpen = false;
+        this.player.skin = this.progress.skin;
+
         this.dashWasReady = true;
         this.effects.sound.playStart();
     }
@@ -369,9 +477,21 @@ export class Game {
         // Efektleri ateşle & BGM'yi sönümle
         this.effects.triggerDeath(this.player.x, this.player.y);
 
-        // Rekor kontrolü ve kayıt
-        const isRecord = this.ui.checkAndSaveHighScore(this.elapsedMs, this.currentMode);
-        if (isRecord) {
+        // Rekorlar: süre ve skor ayrı tutulur; "yeni rekor" skoru gösterir
+        this.ui.checkAndSaveHighScore(this.elapsedMs, this.currentMode);
+        const isRecord = this.ui.checkAndSaveBestScore(this.score.total, this.currentMode);
+
+        // İstatistikler ve kostüm başarımları
+        this.lastUnlocked = this.progress.recordRun({
+            modeId: this.currentMode.id,
+            timeMs: this.elapsedMs,
+            graze: this.player.grazeCount,
+            bestCombo: this.score.bestCombo,
+            bossDefeated: this.waveManager.bossDefeatedAt !== null,
+            dateKey: dateKey()
+        });
+
+        if (isRecord || this.lastUnlocked.length) {
             setTimeout(() => {
                 this.effects.sound.playRecord();
             }, 350);
@@ -421,6 +541,8 @@ export class Game {
 
         if (this.state === GAME_STATE.PLAYING) {
             this.elapsedMs += dt * 1000;
+            this.score.update(dt * 1000);
+            this.currentHint = this.tutorial.update(this.elapsedMs, this.waveManager.isBossPhase(this.elapsedMs));
 
             // Klavye/Gamepad hareketi sonrasında duvar kontrolü
             if (CollisionSystem.checkPlayerArena(this.player)) {
@@ -455,7 +577,8 @@ export class Game {
                 this.bulletManager.getActiveBullets(),
                 // onGraze
                 (bullet) => {
-                    this.effects.triggerGraze(this.player.x, this.player.y);
+                    const g = this.score.onGraze(this.player.x, this.player.y);
+                    this.effects.triggerGraze(this.player.x, this.player.y, g.combo - 1);
                     const boss = this.waveManager.boss;
                     if (boss && boss.alive) {
                         boss.onGraze();
@@ -521,6 +644,9 @@ export class Game {
         if (this.state !== GAME_STATE.MENU) {
             this.player.render(ctx);
         }
+        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
+            this.ui.renderComboAndPopups(ctx, this.player, this.score);
+        }
 
         // Post-render görsel efektler (Parçacıklar, Şok dalgaları, Flaş, Banner)
         this.effects.postRender(ctx);
@@ -529,17 +655,51 @@ export class Game {
         if (this.state === GAME_STATE.MENU) {
             this.ui.renderMenu(ctx, this.currentMode.id);
         } else if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager);
+            this.renderEdgeWarning(ctx, w, h);
+            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score);
+            if (this.state === GAME_STATE.PLAYING) this.ui.renderHint(ctx, this.currentHint, this.player);
             if (this.waveManager.boss) this.waveManager.boss.renderHealthBar(ctx, this.ui.safe.top);
             if (this.state === GAME_STATE.PAUSED) {
                 this.ui.renderPaused(ctx, this.resumeCountdown, this.touchControls.touchDevice);
             }
         } else if (this.state === GAME_STATE.DEAD) {
-            this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player, this.waveManager);
+            this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player, {
+                score: this.score,
+                waves: this.waveManager,
+                unlocked: this.lastUnlocked
+            });
         }
 
         // Arena sınır çerçevesi
         this.renderArenaBorder(ctx, w, h);
+    }
+
+    /**
+     * Oyuncu kenara yaklaştıkça o kenarda nabız gibi atan pembe uyarı
+     */
+    renderEdgeWarning(ctx, w, h) {
+        const p = this.player;
+        if (!p.alive) return;
+        const range = 60;
+        const band = 50;
+        const pulse = 0.75 + Math.sin(performance.now() * 0.012) * 0.25;
+        const edges = [
+            [p.x - p.radius, [0, 0, band, 0], [0, 0, band, h]],
+            [w - p.x - p.radius, [w, 0, w - band, 0], [w - band, 0, band, h]],
+            [p.y - p.radius, [0, 0, 0, band], [0, 0, w, band]],
+            [h - p.y - p.radius, [0, h, 0, h - band], [0, h - band, w, band]]
+        ];
+        ctx.save();
+        for (const [dist, g, rect] of edges) {
+            if (dist >= range) continue;
+            const k = Math.max(0, 1 - dist / range) * pulse;
+            const grad = ctx.createLinearGradient(g[0], g[1], g[2], g[3]);
+            grad.addColorStop(0, `rgba(240, 70, 143, ${0.6 * k})`);
+            grad.addColorStop(1, 'rgba(240, 70, 143, 0)');
+            ctx.fillStyle = grad;
+            ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+        }
+        ctx.restore();
     }
 
     /**

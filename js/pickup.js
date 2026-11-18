@@ -5,6 +5,7 @@
 
 import { GAME_CONFIG } from './config.js';
 import { THEME, font } from './theme.js';
+import { random } from './rng.js';
 
 export class Pickup {
     constructor({ x, y, typeConfig }) {
@@ -144,15 +145,15 @@ export class PickupManager {
      */
     spawnRandom() {
         const types = Object.values(GAME_CONFIG.PICKUPS.TYPES);
-        const selectedType = types[Math.floor(Math.random() * types.length)];
+        const selectedType = types[Math.floor(random() * types.length)];
 
         const margin = 70;
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
-        const x = margin + Math.random() * (w - margin * 2);
+        const x = margin + random() * (w - margin * 2);
         const top = 150; // HUD ve boss barının altında kalsın
-        const y = top + Math.random() * (h - top - margin);
+        const y = top + random() * (h - top - margin);
 
         this.pickups.push(new Pickup({
             x,
@@ -180,7 +181,7 @@ export class PickupManager {
         // Spawn zamanlayıcısı
         this.spawnTimer -= dtMs;
         if (this.spawnTimer <= 0) {
-            this.spawnTimer = GAME_CONFIG.PICKUPS.SPAWN_INTERVAL + (Math.random() * 2000 - 1000);
+            this.spawnTimer = GAME_CONFIG.PICKUPS.SPAWN_INTERVAL + (random() * 2000 - 1000);
             // Sahada en fazla 2 güçlendirme olabilir
             if (this.pickups.length < 2) {
                 this.spawnRandom();

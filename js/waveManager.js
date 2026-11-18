@@ -6,6 +6,7 @@
 import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
 import { Boss, BOSS_STATE } from './boss.js';
+import { random } from './rng.js';
 
 export class WaveManager {
     constructor(bulletManager, mode = null) {
@@ -266,32 +267,32 @@ export class WaveManager {
     spawnBorderBullet(cfg, progress, elapsedMs = 0) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
-        const edge = Math.floor(Math.random() * 4); // 0: üst, 1: sağ, 2: alt, 3: sol
+        const edge = Math.floor(random() * 4); // 0: üst, 1: sağ, 2: alt, 3: sol
 
         let x, y;
         const margin = 10;
 
         switch (edge) {
             case 0:
-                x = Math.random() * w;
+                x = random() * w;
                 y = -margin;
                 break;
             case 1:
                 x = w + margin;
-                y = Math.random() * h;
+                y = random() * h;
                 break;
             case 2:
-                x = Math.random() * w;
+                x = random() * w;
                 y = h + margin;
                 break;
             case 3:
                 x = -margin;
-                y = Math.random() * h;
+                y = random() * h;
                 break;
         }
 
-        const targetX = w * 0.2 + Math.random() * w * 0.6;
-        const targetY = h * 0.2 + Math.random() * h * 0.6;
+        const targetX = w * 0.2 + random() * w * 0.6;
+        const targetY = h * 0.2 + random() * h * 0.6;
 
         const dx = targetX - x;
         const dy = targetY - y;
@@ -395,15 +396,15 @@ export class WaveManager {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
-        const edge = Math.floor(Math.random() * 4);
+        const edge = Math.floor(random() * 4);
         let sx, sy;
         const margin = 12;
 
         switch (edge) {
-            case 0: sx = Math.random() * w; sy = -margin; break;
-            case 1: sx = w + margin; sy = Math.random() * h; break;
-            case 2: sx = Math.random() * w; sy = h + margin; break;
-            case 3: sx = -margin; sy = Math.random() * h; break;
+            case 0: sx = random() * w; sy = -margin; break;
+            case 1: sx = w + margin; sy = random() * h; break;
+            case 2: sx = random() * w; sy = h + margin; break;
+            case 3: sx = -margin; sy = random() * h; break;
         }
 
         const targetX = player.x;
@@ -522,30 +523,30 @@ export class WaveManager {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
-        const edge = Math.floor(Math.random() * 4);
+        const edge = Math.floor(random() * 4);
         let x, y;
         let angle;
 
         switch (edge) {
             case 0:
-                x = 50 + Math.random() * (w - 100);
+                x = 50 + random() * (w - 100);
                 y = 10;
-                angle = Math.PI * 0.2 + Math.random() * Math.PI * 0.6;
+                angle = Math.PI * 0.2 + random() * Math.PI * 0.6;
                 break;
             case 1:
                 x = w - 10;
-                y = 50 + Math.random() * (h - 100);
-                angle = Math.PI * 0.7 + Math.random() * Math.PI * 0.6;
+                y = 50 + random() * (h - 100);
+                angle = Math.PI * 0.7 + random() * Math.PI * 0.6;
                 break;
             case 2:
-                x = 50 + Math.random() * (w - 100);
+                x = 50 + random() * (w - 100);
                 y = h - 10;
-                angle = -Math.PI * 0.2 - Math.random() * Math.PI * 0.6;
+                angle = -Math.PI * 0.2 - random() * Math.PI * 0.6;
                 break;
             case 3:
                 x = 10;
-                y = 50 + Math.random() * (h - 100);
-                angle = -Math.PI * 0.3 + Math.random() * Math.PI * 0.6;
+                y = 50 + random() * (h - 100);
+                angle = -Math.PI * 0.3 + random() * Math.PI * 0.6;
                 break;
         }
 

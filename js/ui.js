@@ -1,29 +1,48 @@
 // ============================================================
 // ui.js — Kullanıcı Arayüzü Yöneticisi
-// Şeker temalı menü, HUD (Graze, Dash Bar, Kalkan), duraklatma ve ölüm ekranı
+// Şeker temalı menü (modlar, günlük meydan okuma, kostüm seçici),
+// HUD (skor, seri, dash), ipuçları, ayarlar, duraklatma ve ölüm ekranı
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
 import { THEME, font, candyPanel, outlinedText } from './theme.js';
+import { formatScore } from './score.js';
+import { SKINS, drawMarshmallow } from './skins.js';
+import { SETTING_ROWS } from './settings.js';
+import { dateLabel } from './rng.js';
+
+const SETTINGS_LAYOUT = { x: 110, y: 112, w: 380, rowTop: 170, rowH: 46 };
 
 export class UIManager {
     constructor() {
         this.currentMode = ModeRegistry.get('classic');
-        this.highScores = {};
+        this.highScores = {};  // En iyi süre (ms)
+        this.bestScores = {};  // En iyi skor
         this.loadAllHighScores();
-        this.isNewRecord = false;
+        this.isNewRecord = false;      // Skor rekoru
+        this.isNewTimeRecord = false;  // Süre rekoru
+        this.safe = { left: 0, right: 0, top: 0, bottom: 0 };
 
-        // Menü Buton Koordinatları (2x2 Izgara)
+        // Game tarafından bağlanır
+        this.progress = null;
+        this.settings = null;
+        this.skinIndex = 0;
+        this.settingsOpen = false;
+        this.settingsRow = 0;
+
+        // Menü düzeni (600x600 menü alanında)
         this.modeButtons = [
-            { id: 'classic', label: 'CLASSIC', x: 90, y: 140, w: 200, h: 68 },
-            { id: 'endless', label: 'ENDLESS', x: 310, y: 140, w: 200, h: 68 },
-            { id: 'hardcore', label: 'HARDCORE', x: 90, y: 218, w: 200, h: 68 },
-            { id: 'chaos', label: 'CHAOS', x: 310, y: 218, w: 200, h: 68 }
+            { id: 'classic', label: 'CLASSIC', x: 90, y: 118, w: 200, h: 60 },
+            { id: 'endless', label: 'ENDLESS', x: 310, y: 118, w: 200, h: 60 },
+            { id: 'hardcore', label: 'HARDCORE', x: 90, y: 188, w: 200, h: 60 },
+            { id: 'chaos', label: 'CHAOS', x: 310, y: 188, w: 200, h: 60 },
+            { id: 'daily', label: 'GÜNLÜK', x: 90, y: 258, w: 420, h: 46, wide: true }
         ];
-
-        // Başlat Butonu Koordinatları
-        this.playButton = { x: 170, y: 440, w: 260, h: 74 };
+        this.playButton = { x: 170, y: 398, w: 260, h: 64 };
+        this.settingsButton = { x: 478, y: 14, w: 108, h: 34 };
+        this.skinPrev = { x: 222, y: 522, r: 20 };
+        this.skinNext = { x: 378, y: 522, r: 20 };
     }
 
     setLayout(width, height, safe = { left: 0, right: 0, top: 0, bottom: 0 }) {
@@ -44,29 +63,27 @@ export class UIManager {
         const minutes = Math.floor(totalSeconds / 60);
         const seconds = totalSeconds % 60;
         const milliseconds = Math.floor(ms % 1000);
-
-        const mStr = String(minutes).padStart(2, '0');
-        const sStr = String(seconds).padStart(2, '0');
-        const msStr = String(milliseconds).padStart(3, '0');
-
-        return `${mStr}:${sStr}.${msStr}`;
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
     }
 
+    // ------------------------------------------------------------
+    // REKORLAR
+    // ------------------------------------------------------------
+
     loadAllHighScores() {
-        const modes = ModeRegistry.getAll();
-        for (const m of modes) {
+        for (const m of ModeRegistry.getAll()) {
             try {
                 let saved = localStorage.getItem(m.storageKey);
                 if (!saved && m.legacyKey) {
                     saved = localStorage.getItem(m.legacyKey);
-                    if (saved) {
-                        localStorage.setItem(m.storageKey, saved);
-                    }
+                    if (saved) localStorage.setItem(m.storageKey, saved);
                 }
                 this.highScores[m.id] = saved ? parseFloat(saved) : 0;
+                const score = localStorage.getItem(m.scoreKey);
+                this.bestScores[m.id] = score ? parseFloat(score) : 0;
             } catch (e) {
-                console.warn(`${m.id} rekoru okunamadı:`, e);
                 this.highScores[m.id] = 0;
+                this.bestScores[m.id] = 0;
             }
         }
     }
@@ -75,47 +92,89 @@ export class UIManager {
         return this.highScores[modeId] || 0;
     }
 
+    getBestScore(modeId = this.currentMode.id) {
+        return this.bestScores[modeId] || 0;
+    }
+
+    /** Süre rekoru (ms) */
     checkAndSaveHighScore(finalTimeMs, mode = this.currentMode) {
-        const currentBest = this.getHighScore(mode.id);
-        if (finalTimeMs > currentBest) {
-            this.highScores[mode.id] = finalTimeMs;
-            this.isNewRecord = true;
-            try {
-                localStorage.setItem(mode.storageKey, finalTimeMs.toString());
-            } catch (e) {
-                console.warn(`${mode.id} rekoru kaydedilemedi:`, e);
-            }
-            return true;
+        this.isNewTimeRecord = finalTimeMs > this.getHighScore(mode.id);
+        if (!this.isNewTimeRecord) return false;
+        this.highScores[mode.id] = finalTimeMs;
+        try {
+            localStorage.setItem(mode.storageKey, finalTimeMs.toString());
+        } catch (e) {
+            // kaydedilemedi
         }
-        this.isNewRecord = false;
-        return false;
+        return true;
+    }
+
+    /** Skor rekoru: ölüm ekranındaki "yeni rekor" bunu gösterir */
+    checkAndSaveBestScore(score, mode = this.currentMode) {
+        this.isNewRecord = score > this.getBestScore(mode.id);
+        if (!this.isNewRecord) return false;
+        this.bestScores[mode.id] = score;
+        try {
+            localStorage.setItem(mode.scoreKey, String(score));
+        } catch (e) {
+            // kaydedilemedi
+        }
+        return true;
     }
 
     resetGameSession() {
         this.isNewRecord = false;
+        this.isNewTimeRecord = false;
     }
 
-    getClickedMode(x, y) {
-        x = (x - this.menuOffsetX) / this.menuScale;
-        y = (y - this.menuOffsetY) / this.menuScale;
-        for (const btn of this.modeButtons) {
-            if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
-                return btn.id;
-            }
-        }
-        return null;
-    }
+    // ------------------------------------------------------------
+    // GİRDİ EŞLEME
+    // ------------------------------------------------------------
 
-    isPlayButtonClicked(x, y) {
-        x = (x - this.menuOffsetX) / this.menuScale;
-        y = (y - this.menuOffsetY) / this.menuScale;
-        const btn = this.playButton;
-        return x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h;
+    toMenuSpace(x, y) {
+        return { x: (x - this.menuOffsetX) / this.menuScale, y: (y - this.menuOffsetY) / this.menuScale };
     }
 
     /**
-     * Küçük hap etiketi (mod adı, durum bildirimleri)
+     * Menüde tıklanan öğe
+     * @returns {{type:'mode', id:string}|{type:'play'|'settings'|'skinPrev'|'skinNext'}|null}
      */
+    getMenuAction(px, py) {
+        const { x, y } = this.toMenuSpace(px, py);
+        const inRect = (b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+        const inCircle = (c) => Math.hypot(x - c.x, y - c.y) <= c.r + 8;
+        for (const btn of this.modeButtons) if (inRect(btn)) return { type: 'mode', id: btn.id };
+        if (inRect(this.settingsButton)) return { type: 'settings' };
+        if (inCircle(this.skinPrev)) return { type: 'skinPrev' };
+        if (inCircle(this.skinNext)) return { type: 'skinNext' };
+        if (inRect(this.playButton)) return { type: 'play' };
+        return null;
+    }
+
+    /** Geriye dönük uyumluluk */
+    getClickedMode(x, y) {
+        const a = this.getMenuAction(x, y);
+        return a && a.type === 'mode' ? a.id : null;
+    }
+
+    /**
+     * Ayarlar panelinde tıklanan satır ve yön
+     * @returns {{row:number, dir:number}|null}
+     */
+    getSettingsAction(px, py) {
+        const { x, y } = this.toMenuSpace(px, py);
+        const L = SETTINGS_LAYOUT;
+        if (x < L.x || x > L.x + L.w) return { row: SETTING_ROWS.length - 1, dir: 0, outside: true };
+        const row = Math.floor((y - L.rowTop) / L.rowH);
+        if (row < 0 || row >= SETTING_ROWS.length) return y < L.rowTop ? null : { row: SETTING_ROWS.length - 1, dir: 0, outside: true };
+        return { row, dir: x < L.x + L.w - 100 ? -1 : 1 };
+    }
+
+    // ------------------------------------------------------------
+    // ORTAK ÇİZİM PARÇALARI
+    // ------------------------------------------------------------
+
+    /** Küçük hap etiketi */
     static pill(ctx, text, x, y, fill, color = THEME.INK, align = 'left', size = 11) {
         ctx.save();
         ctx.font = font(size, 700);
@@ -129,11 +188,34 @@ export class UIManager {
         ctx.textBaseline = 'middle';
         ctx.fillText(text, px + pw / 2, y + 1);
         ctx.restore();
+        return pw;
     }
 
-    /**
-     * Menü Ekranı (Mod Seçimi ve Kontrol İpuçları)
-     */
+    static roundButton(ctx, x, y, r, label) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y + 3, r, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.INK;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.WHITE;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = THEME.INK;
+        ctx.stroke();
+        ctx.font = font(r, 700);
+        ctx.fillStyle = THEME.INK;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(label, x, y + 1);
+        ctx.restore();
+    }
+
+    // ------------------------------------------------------------
+    // MENÜ
+    // ------------------------------------------------------------
+
     renderMenu(ctx, activeModeId = this.currentMode.id) {
         const w = 600;
         const t = performance.now() / 1000;
@@ -144,14 +226,22 @@ export class UIManager {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
 
-        // Başlık: pembe gölgeli çıkartma yazı
+        // Ayarlar butonu
+        const sb = this.settingsButton;
+        candyPanel(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2, THEME.WHITE, { depth: 3, lineWidth: 2 });
+        ctx.font = font(14, 700);
+        ctx.fillStyle = THEME.INK;
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚙ ayarlar', sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
+        ctx.textBaseline = 'alphabetic';
+
+        // Başlık
         ctx.font = font(42, 700);
-        const titleY = 72 + Math.sin(t * 2) * 2;
+        const titleY = 70 + Math.sin(t * 2) * 2;
         ctx.lineJoin = 'round';
         ctx.fillStyle = THEME.PINK;
         ctx.fillText('BULLET HELL', w / 2 + 3, titleY + 4);
         outlinedText(ctx, 'BULLET HELL', w / 2, titleY, THEME.INK, THEME.WHITE, 6);
-
         ctx.save();
         ctx.translate(w / 2 + 128, titleY + 14);
         ctx.rotate(-0.08);
@@ -160,42 +250,50 @@ export class UIManager {
 
         ctx.font = font(13, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('mod seç', w / 2, 118);
+        ctx.fillText('mod seç', w / 2, 108);
 
-        // Mod Seçim Butonları
+        // Mod butonları
         for (const btn of this.modeButtons) {
             const isSelected = btn.id === activeModeId;
             const lift = isSelected ? -2 : 0;
-            candyPanel(ctx, btn.x, btn.y + lift, btn.w, btn.h, 18,
-                isSelected ? THEME.PINK : THEME.WHITE,
+            const y = btn.y + lift;
+            candyPanel(ctx, btn.x, y, btn.w, btn.h, 18, isSelected ? THEME.PINK : THEME.WHITE,
                 { depth: isSelected ? 6 : 4, lineWidth: 2 });
-
-            ctx.textAlign = 'center';
+            const best = `en iyi ★ ${formatScore(this.getBestScore(btn.id))}`;
             ctx.textBaseline = 'middle';
-            ctx.font = font(18, 700);
-            ctx.fillStyle = isSelected ? THEME.WHITE : THEME.INK;
-            ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + lift + btn.h / 2 - 8);
-
-            ctx.font = font(11, 600);
-            ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.9)' : THEME.MUTED;
-            ctx.fillText(`en iyi ${UIManager.formatTime(this.getHighScore(btn.id))}`, btn.x + btn.w / 2, btn.y + lift + btn.h / 2 + 14);
+            if (btn.wide) {
+                ctx.textAlign = 'left';
+                ctx.font = font(17, 700);
+                ctx.fillStyle = isSelected ? THEME.WHITE : THEME.INK;
+                ctx.fillText(`☀ ${btn.label} · ${dateLabel()}`, btn.x + 20, y + btn.h / 2 + 1);
+                ctx.textAlign = 'right';
+                ctx.font = font(12, 600);
+                ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.9)' : THEME.MUTED;
+                ctx.fillText(best, btn.x + btn.w - 20, y + btn.h / 2 + 1);
+            } else {
+                ctx.textAlign = 'center';
+                ctx.font = font(18, 700);
+                ctx.fillStyle = isSelected ? THEME.WHITE : THEME.INK;
+                ctx.fillText(btn.label, btn.x + btn.w / 2, y + btn.h / 2 - 8);
+                ctx.font = font(11, 600);
+                ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.9)' : THEME.MUTED;
+                ctx.fillText(best, btn.x + btn.w / 2, y + btn.h / 2 + 13);
+            }
         }
 
-        // Mod Açıklaması
+        // Açıklama ve ipuçları
         const activeMode = ModeRegistry.get(activeModeId);
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
         ctx.font = font(14, 500);
         ctx.fillStyle = THEME.INK;
-        ctx.fillText(activeMode.description, w / 2, 318);
-
-        // Kontrol İpuçları
+        ctx.fillText(activeMode.description, w / 2, 334);
         ctx.font = font(12, 500);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('Joystick · Fare · WASD · Gamepad  →  hareket', w / 2, 356);
-        ctx.fillText('DASH · Sağ tık · Shift · Space  →  dokunulmazlık', w / 2, 378);
-        ctx.fillText('P / ESC  →  duraklat     B  →  müzik     N  →  efektler', w / 2, 400);
+        ctx.fillText('fare · WASD · joystick → hareket     DASH · sağ tık · shift → dokunulmazlık', w / 2, 360);
+        ctx.fillText('P / ESC duraklat · B müzik · N efektler · ← → kostüm', w / 2, 380);
 
-        // OYNA butonu: yavaşça süzülen mor şeker
+        // OYNA
         const pb = this.playButton;
         const bob = Math.sin(t * 3) * 2;
         candyPanel(ctx, pb.x, pb.y + bob, pb.w, pb.h, pb.h / 2, THEME.PURPLE, { depth: 6, lineWidth: 2.5 });
@@ -208,13 +306,117 @@ export class UIManager {
         ctx.textBaseline = 'middle';
         ctx.fillText(`OYNA ▶ ${activeMode.label}`, w / 2, pb.y + bob + pb.h / 2 + 2);
 
+        // Kostüm seçici
+        this.renderSkinPicker(ctx, t);
+
+        ctx.restore();
+
+        if (this.settingsOpen) this.renderSettings(ctx);
+    }
+
+    renderSkinPicker(ctx, t) {
+        if (!this.progress) return;
+        const skin = SKINS[this.skinIndex] || SKINS[0];
+        const locked = !this.progress.isUnlocked(skin.id);
+        const cx = 300;
+        const cy = this.skinPrev.y;
+
+        UIManager.roundButton(ctx, this.skinPrev.x, cy, this.skinPrev.r, '‹');
+        UIManager.roundButton(ctx, this.skinNext.x, cy, this.skinNext.r, '›');
+
+        const bob = Math.sin(t * 2.4) * 2;
+        const blink = (t % 3.2) < 0.12 ? 0.25 : 1;
+        drawMarshmallow(ctx, cx, cy - 4 + bob, 22, skin, { locked, blink, squash: 1 + Math.sin(t * 5) * 0.03 });
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'alphabetic';
+        ctx.font = font(15, 700);
+        ctx.fillStyle = locked ? THEME.MUTED : THEME.INK;
+        const count = `${this.progress.unlocked.length}/${SKINS.length}`;
+        ctx.fillText(`${skin.name}${this.progress.selected === skin.id ? ' ✓' : ''}`, cx, cy + 44);
+        ctx.font = font(11, 600);
+        ctx.fillStyle = locked ? THEME.PINK_DEEP : THEME.MUTED;
+        ctx.fillText(locked ? `kilitli · ${skin.hint}` : `kostüm ${count}`, cx, cy + 62);
+    }
+
+    // ------------------------------------------------------------
+    // AYARLAR PANELİ
+    // ------------------------------------------------------------
+
+    renderSettings(ctx) {
+        const S = this.settings;
+        if (!S) return;
+        const L = SETTINGS_LAYOUT;
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 246, 250, 0.8)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.translate(this.menuOffsetX, this.menuOffsetY);
+        ctx.scale(this.menuScale, this.menuScale);
+
+        const height = L.rowTop - L.y + SETTING_ROWS.length * L.rowH + 18;
+        candyPanel(ctx, L.x, L.y, L.w, height, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = font(26, 700);
+        ctx.fillStyle = THEME.PURPLE;
+        ctx.fillText('ayarlar', 300, L.y + 30);
+
+        SETTING_ROWS.forEach((row, i) => {
+            const y = L.rowTop + i * L.rowH;
+            const cy = y + L.rowH / 2;
+            const selected = i === this.settingsRow;
+            if (selected) {
+                ctx.beginPath();
+                ctx.roundRect(L.x + 14, y + 4, L.w - 28, L.rowH - 8, 14);
+                ctx.fillStyle = 'rgba(205, 184, 255, 0.45)';
+                ctx.fill();
+            }
+            if (row.type === 'action') {
+                ctx.textAlign = 'center';
+                ctx.font = font(15, 700);
+                ctx.fillStyle = row.id === 'close' ? THEME.PINK_DEEP : THEME.INK;
+                ctx.fillText(row.id === 'close' ? 'kapat ✕' : row.label, 300, cy);
+                return;
+            }
+            ctx.textAlign = 'left';
+            ctx.font = font(15, 600);
+            ctx.fillStyle = THEME.INK;
+            ctx.fillText(row.label, L.x + 30, cy);
+
+            const vx = L.x + L.w - 70;
+            if (row.type === 'volume') {
+                ctx.textAlign = 'center';
+                ctx.font = font(16, 700);
+                ctx.fillStyle = THEME.MUTED;
+                ctx.fillText('‹', vx - 46, cy);
+                ctx.fillText('›', vx + 46, cy);
+                ctx.fillStyle = THEME.PURPLE;
+                ctx.fillText(S.display(row.id), vx, cy);
+            } else {
+                const on = S.get(row.id);
+                UIManager.pill(ctx, S.display(row.id), vx, cy, on ? THEME.PINK : THEME.WHITE, on ? THEME.WHITE : THEME.INK, 'center', 12);
+            }
+        });
+
+        ctx.font = font(11, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.textAlign = 'center';
+        ctx.fillText('↑ ↓ seç · ← → değiştir · ESC kapat', 300, L.y + height - 14);
         ctx.restore();
     }
 
+    // ------------------------------------------------------------
+    // OYUN İÇİ
+    // ------------------------------------------------------------
+
     /**
-     * Oynanış HUD: Mod, Süre, Graze Sayacı, Kalkan ve Dash Şarj Çubuğu
+     * HUD: mod, süre, skor, graze, güçlendirmeler ve dash çubuğu
      */
-    renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null) {
+    renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null, score = null) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
         const left = 18 + this.safe.left;
@@ -224,20 +426,24 @@ export class UIManager {
         ctx.translate(0, this.safe.top);
         ctx.textBaseline = 'middle';
 
-        // Sol üst: mod ve rekor
+        // Sol üst: mod ve graze
         UIManager.pill(ctx, mode.label, left, 24, THEME.LAVENDER, THEME.INK, 'left', 11);
-        // Orta: büyük sayaç ve altında rekor (dar ekranlarda küçülür)
+        ctx.font = font(12, 600);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText(`graze ${player ? player.grazeCount : 0}`, left + 2, 50);
+
+        // Orta: süre ve rekor
         ctx.textAlign = 'center';
         ctx.font = font(Math.min(36, w * 0.085), 700);
         outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.INK, THEME.WHITE, 6);
         ctx.font = font(11, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(`rekor ${UIManager.formatTime(this.getHighScore(mode.id))}`, w / 2, 70);
+        ctx.fillText(`en iyi ★ ${formatScore(this.getBestScore(mode.id))}`, w / 2, 70);
 
-        // Sağ üst: graze ve aktif güçlendirmeler
-        const graze = player ? player.grazeCount : 0;
-        UIManager.pill(ctx, `graze ${graze}`, right, 24, THEME.PINK, THEME.WHITE, 'right', 12);
-        let rowY = 52;
+        // Sağ üst: skor ve aktif güçlendirmeler
+        UIManager.pill(ctx, `★ ${formatScore(score ? score.total : 0)}`, right, 24, THEME.PINK, THEME.WHITE, 'right', 13);
+        let rowY = 54;
         if (player && player.hasShield) {
             UIManager.pill(ctx, 'kalkan', right, rowY, THEME.PURPLE, THEME.WHITE, 'right', 10);
             rowY += 24;
@@ -247,7 +453,7 @@ export class UIManager {
             UIManager.pill(ctx, `yavaş ${remaining}s`, right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
         }
 
-        // Alt orta: Dash şarj çubuğu (dokunmatikte buton halkası gösterir)
+        // Alt orta: dash çubuğu (dokunmatikte buton halkası gösterir)
         if (player && !matchMedia('(any-pointer: coarse)').matches) {
             const barW = 140;
             const barH = 10;
@@ -283,8 +489,58 @@ export class UIManager {
     }
 
     /**
-     * Duraklatma Ekranı ve Devam Geri Sayımı
+     * Oyuncunun yanındaki seri göstergesi ve süzülen puan yazıları (dünya koordinatı)
      */
+    renderComboAndPopups(ctx, player, score) {
+        if (!score) return;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        for (const p of score.popups) {
+            const k = p.age / 700;
+            ctx.globalAlpha = 1 - k;
+            ctx.font = font(p.big ? 20 : 11 + p.multiplier, 700);
+            outlinedText(ctx, p.text, p.x, p.y - 18 - k * 26, p.multiplier > 1 ? THEME.PINK_DEEP : THEME.PURPLE, THEME.WHITE, 3);
+        }
+        ctx.globalAlpha = 1;
+
+        if (player && player.alive && score.combo >= 2) {
+            const x = player.x;
+            const y = player.y - 30;
+            const label = score.multiplier > 1 ? `x${score.multiplier} · ${score.combo}` : `seri ${score.combo}`;
+            ctx.font = font(11, 700);
+            const tw = ctx.measureText(label).width + 16;
+            candyPanel(ctx, x - tw / 2, y - 9, tw, 18, 9, score.multiplier > 1 ? THEME.PINK : THEME.WHITE, { lineWidth: 1.5, depth: 2 });
+            // Kalan seri süresi
+            ctx.fillStyle = score.multiplier > 1 ? 'rgba(255, 255, 255, 0.5)' : 'rgba(205, 184, 255, 0.7)';
+            ctx.fillRect(x - tw / 2 + 6, y + 5, (tw - 12) * score.comboRatio, 2);
+            ctx.fillStyle = score.multiplier > 1 ? THEME.WHITE : THEME.INK;
+            ctx.fillText(label, x, y);
+        }
+        ctx.restore();
+    }
+
+    /** İlk oyun ipucu balonu */
+    renderHint(ctx, hint, player = null) {
+        if (!hint) return;
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const y = h - this.safe.bottom - 120;
+        ctx.save();
+        // Oyuncu balonun yakınındaysa saydamlaşır, oyunu kapatmaz
+        const near = player && Math.abs(player.y - y) < 60;
+        ctx.globalAlpha = Math.max(0, hint.alpha) * (near ? 0.25 : 1);
+        ctx.font = font(14, 700);
+        const tw = Math.min(w - 40, ctx.measureText(hint.text).width + 36);
+        candyPanel(ctx, w / 2 - tw / 2, y - 18, tw, 36, 18, THEME.WHITE, { depth: 4, shadow: THEME.PURPLE });
+        ctx.fillStyle = THEME.INK;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`💡 ${hint.text}`, w / 2, y + 1, tw - 20);
+        ctx.restore();
+    }
+
     renderPaused(ctx, countdownMs = 0, touch = false) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
@@ -334,9 +590,11 @@ export class UIManager {
     }
 
     /**
-     * Ölüm Ekranı
+     * Ölüm ekranı
+     * @param {object} info { score, waves, unlocked: Skin[] }
      */
-    renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, waves = null) {
+    renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, info = {}) {
+        const { score = null, waves = null, unlocked = [] } = info;
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
         const cx = w / 2;
@@ -347,68 +605,78 @@ export class UIManager {
         ctx.fillRect(0, 0, w, h);
 
         const cw = Math.min(360, w - 32);
-        candyPanel(ctx, cx - cw / 2, cy - 152, cw, 332, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+        candyPanel(ctx, cx - cw / 2, cy - 160, cw, 350, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // OYUN BİTTİ
-        ctx.font = font(32, 700);
+        ctx.font = font(30, 700);
         ctx.fillStyle = THEME.PINK_SOFT;
-        ctx.fillText('OYUN BİTTİ', cx + 2, cy - 110 + 3);
+        ctx.fillText('OYUN BİTTİ', cx + 2, cy - 122 + 3);
         ctx.fillStyle = THEME.PINK_DEEP;
-        ctx.fillText('OYUN BİTTİ', cx, cy - 110);
+        ctx.fillText('OYUN BİTTİ', cx, cy - 122);
 
-        UIManager.pill(ctx, mode.label, cx, cy - 76, THEME.LAVENDER, THEME.INK, 'center', 11);
+        const modeLabel = mode.id === 'daily' ? `${mode.label} · ${dateLabel()}` : mode.label;
+        UIManager.pill(ctx, modeLabel, cx, cy - 90, THEME.LAVENDER, THEME.INK, 'center', 11);
 
         if (this.isNewRecord) {
             const bounce = Math.abs(Math.sin(performance.now() * 0.005)) * 3;
-            UIManager.pill(ctx, '★ yeni rekor! ★', cx, cy - 46 - bounce, THEME.PURPLE, THEME.WHITE, 'center', 13);
+            UIManager.pill(ctx, '★ yeni rekor! ★', cx, cy - 62 - bounce, THEME.PURPLE, THEME.WHITE, 'center', 13);
         }
 
-        // İstatistikler
+        // Skor
         ctx.font = font(12, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('hayatta kalma', cx - 78, cy - 12);
-        ctx.fillText('graze', cx + 92, cy - 12);
+        ctx.fillText('skor', cx, cy - 36);
+        ctx.font = font(36, 700);
+        outlinedText(ctx, formatScore(score ? score.total : 0), cx, cy - 8, THEME.PINK_DEEP, THEME.WHITE, 5);
 
-        ctx.font = font(28, 700);
-        ctx.fillStyle = THEME.INK;
-        ctx.fillText(UIManager.formatTime(finalTimeMs), cx - 78, cy + 16);
-        ctx.fillStyle = THEME.PINK;
-        ctx.fillText(player ? player.grazeCount.toString() : '0', cx + 92, cy + 16);
+        // Süre · graze · seri
+        const cols = [
+            ['süre', UIManager.formatTime(finalTimeMs)],
+            ['graze', player ? String(player.grazeCount) : '0'],
+            ['en uzun seri', score ? String(score.bestCombo) : '0']
+        ];
+        const colW = Math.min(110, (cw - 20) / 3);
+        cols.forEach(([label, value], i) => {
+            const x = cx + (i - 1) * colW;
+            ctx.font = font(11, 600);
+            ctx.fillStyle = THEME.MUTED;
+            ctx.fillText(label, x, cy + 26);
+            ctx.font = font(17, 700);
+            ctx.fillStyle = THEME.INK;
+            ctx.fillText(value, x, cy + 46);
+        });
 
-        // En iyi
         ctx.font = font(12, 600);
-        ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(`en iyi (${mode.label})`, cx, cy + 52);
-        ctx.font = font(19, 700);
         ctx.fillStyle = THEME.PURPLE;
-        ctx.fillText(UIManager.formatTime(this.getHighScore(mode.id)), cx, cy + 74);
+        ctx.fillText(`en iyi ★ ${formatScore(this.getBestScore(mode.id))} · ${UIManager.formatTime(this.getHighScore(mode.id))}`, cx, cy + 74);
 
-        // Boss sonucu
+        let lineY = cy + 96;
         if (waves && waves.boss) {
             ctx.font = font(12, 700);
             if (waves.bossDefeatedAt !== null) {
                 ctx.fillStyle = THEME.PURPLE_DEEP;
-                ctx.fillText(`✓ Jöle Kral eridi (${UIManager.formatTime(waves.bossDefeatedAt)})`, cx, cy + 100);
+                ctx.fillText(`✓ Jöle Kral eridi (${UIManager.formatTime(waves.bossDefeatedAt)})`, cx, lineY);
             } else {
                 ctx.fillStyle = THEME.PINK_DEEP;
-                ctx.fillText(`Jöle Kral enerjisi: %${Math.ceil(waves.boss.hpRatio * 100)}`, cx, cy + 100);
+                ctx.fillText(`Jöle Kral enerjisi: %${Math.ceil(waves.boss.hpRatio * 100)}`, cx, lineY);
             }
+            lineY += 20;
+        }
+        if (unlocked.length) {
+            UIManager.pill(ctx, `🎁 yeni kostüm: ${unlocked.map(s => s.name).join(', ')}`, cx, lineY + 2, THEME.PINK, THEME.WHITE, 'center', 12);
         }
 
-        // Yeniden başlatma
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
         ctx.font = font(15, 700);
         ctx.globalAlpha = 0.7 + pulse * 0.3;
         ctx.fillStyle = THEME.INK;
-        ctx.fillText('tıkla · space · enter → tekrar oyna', cx, cy + 132);
+        ctx.fillText('tıkla · space · enter → tekrar oyna', cx, cy + 146);
         ctx.globalAlpha = 1;
-
         ctx.font = font(12, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('M / ESC → ana menü', cx, cy + 156);
+        ctx.fillText('M / ESC → ana menü', cx, cy + 168);
 
         ctx.restore();
     }

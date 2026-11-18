@@ -137,7 +137,7 @@ export class Bullet {
             ctx.globalAlpha = 1.0;
         }
 
-        ctx.lineWidth = 1.6;
+        ctx.lineWidth = THEME.BULLET_OUTLINE;
         ctx.strokeStyle = THEME.INK;
         ctx.lineJoin = 'round';
 
@@ -242,7 +242,7 @@ export class Bullet {
      */
     renderRing(ctx) {
         const r = this.radius * 1.35;
-        ctx.lineWidth = 1.3;
+        ctx.lineWidth = THEME.BULLET_OUTLINE * 0.85;
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
