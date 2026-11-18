@@ -36,10 +36,14 @@ export class UIManager {
         // Dokunmatik kontrol şeması ('joystick' | 'drag') ve menüdeki değiştirme butonu
         this.touchScheme = 'joystick';
         this.schemeButton = { x: 180, y: 508, w: 240, h: 42 };
+
+        // Tam ekranda çentik/ana ekran çubuğu güvenli alanları (mantıksal birim)
+        this.safe = { top: 0, right: 0, bottom: 0, left: 0 };
     }
 
     isSchemeToggleClicked(x, y) {
         x -= this.offsetX;
+        y -= this.offsetY;
         if (!this.isTouch) return false;
         const b = this.schemeButton;
         return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
@@ -60,6 +64,10 @@ export class UIManager {
         return (GAME_CONFIG.CANVAS.WIDTH - GAME_CONFIG.CANVAS.BASE_SIZE) / 2;
     }
 
+    get offsetY() {
+        return (GAME_CONFIG.CANVAS.HEIGHT - GAME_CONFIG.CANVAS.BASE_SIZE) / 2;
+    }
+
     setInputType(type) {
         this.inputType = type;
     }
@@ -73,6 +81,7 @@ export class UIManager {
      */
     getDeadAction(x, y) {
         x -= this.offsetX;
+        y -= this.offsetY;
         for (const btn of this.deadButtons) {
             if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                 return btn.id;
@@ -145,6 +154,7 @@ export class UIManager {
 
     getClickedMode(x, y) {
         x -= this.offsetX;
+        y -= this.offsetY;
         for (const btn of this.modeButtons) {
             if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                 return btn.id;
@@ -155,6 +165,7 @@ export class UIManager {
 
     isPlayButtonClicked(x, y) {
         x -= this.offsetX;
+        y -= this.offsetY;
         const btn = this.playButton;
         return x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h;
     }
@@ -166,7 +177,7 @@ export class UIManager {
         const w = GAME_CONFIG.CANVAS.BASE_SIZE;
 
         ctx.save();
-        ctx.translate(this.offsetX, 0);
+        ctx.translate(this.offsetX, this.offsetY);
 
         // Başlık
         ctx.textAlign = 'center';
@@ -244,8 +255,7 @@ export class UIManager {
             if (this.touchScheme === 'joystick') {
                 ctx.fillText('[ Ekrana Bas & Kaydır ] Joystick', w / 2, 372);
                 ctx.fillStyle = '#8e8ea8';
-                const dashWhere = GAME_CONFIG.CANVAS.WIDTH > GAME_CONFIG.CANVAS.BASE_SIZE ? 'Sağdaki' : 'Sağ Alt';
-                ctx.fillText(`[ ${dashWhere} DASH / 2. Parmak ] Dash`, w / 2, 396);
+                ctx.fillText('[ Sağ Alt DASH / 2. Parmak ] Dash', w / 2, 396);
                 ctx.font = '11px "JetBrains Mono", monospace';
                 ctx.fillText('Az it = yavaş & hassas · Tam it = hızlı', w / 2, 418);
             } else {
@@ -305,9 +315,13 @@ export class UIManager {
      * Oynanış HUD: Mod, Süre, Graze Sayacı, Kalkan ve Dash Şarj Çubuğu
      */
     renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null) {
-        const w = GAME_CONFIG.CANVAS.WIDTH;
+        // HUD güvenli alan içinde çizilir (çentik / ana ekran çubuğu)
+        const sf = this.safe;
+        const w = GAME_CONFIG.CANVAS.WIDTH - sf.left - sf.right;
+        const hudH = GAME_CONFIG.CANVAS.HEIGHT - sf.top - sf.bottom;
 
         ctx.save();
+        ctx.translate(sf.left, sf.top);
 
         // 1. Sol Üst: Graze (Teğet Geçme) Sayacı
         ctx.textAlign = 'left';
@@ -365,7 +379,7 @@ export class UIManager {
             const barW = 120;
             const barH = 5;
             const barX = (w - barW) / 2;
-            const barY = 575;
+            const barY = hudH - 25;
             const ratio = player.getDashReadyRatio();
             const isReady = ratio >= 1.0;
 
@@ -400,13 +414,13 @@ export class UIManager {
      */
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null) {
         const w = GAME_CONFIG.CANVAS.BASE_SIZE;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const h = GAME_CONFIG.CANVAS.BASE_SIZE;
 
         ctx.save();
 
         ctx.fillStyle = 'rgba(8, 8, 15, 0.84)';
-        ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, h);
-        ctx.translate(this.offsetX, 0);
+        ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
+        ctx.translate(this.offsetX, this.offsetY);
 
         ctx.textAlign = 'center';
 
@@ -499,12 +513,12 @@ export class UIManager {
      */
     renderPaused(ctx) {
         const w = GAME_CONFIG.CANVAS.BASE_SIZE;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const h = GAME_CONFIG.CANVAS.BASE_SIZE;
 
         ctx.save();
         ctx.fillStyle = 'rgba(8, 8, 15, 0.72)';
-        ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, h);
-        ctx.translate(this.offsetX, 0);
+        ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
+        ctx.translate(this.offsetX, this.offsetY);
 
         ctx.textAlign = 'center';
         ctx.font = '900 28px "JetBrains Mono", monospace';

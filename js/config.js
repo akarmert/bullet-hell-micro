@@ -14,13 +14,10 @@ export const GAME_CONFIG = {
 
     // --- EKRAN YERLEŞİMİ ---
     LAYOUT: {
-        PADDING: 8,              // Kenar boşluğu (CSS px)
-        MAX_CSS_SIZE: 900,       // Kare arenanın en büyük ekran boyutu
-        LANDSCAPE_MIN_RATIO: 1.15, // Dokunmatik cihazda en/boy bu oranı aşarsa yatay yerleşim
-        GUTTER_RATIO: 0.17,      // Yatayda her iki yandaki başparmak bölgesi (ekran genişliği oranı)
-        GUTTER_MIN: 110,
-        GUTTER_MAX: 170,
-        MAX_ARENA_W: 1200,       // Mantıksal arena genişliği üst sınırı
+        PADDING: 8,              // Masaüstünde kenar boşluğu (CSS px)
+        MAX_CSS_SIZE: 900,       // Masaüstünde kare arenanın en büyük ekran boyutu
+        MAX_ARENA_LONG: 1400,    // Tam ekranda uzun kenarın mantıksal üst sınırı (~21:9)
+        REFLOW_GRACE_MS: 1500,   // Tur başındaki bu sürede boyut değişimi duraklatmaz (tam ekran geçişi)
         DENSITY_COMPENSATION: true // Geniş arenada mermi sıklığını alanla orantılı artır (adil zorluk)
     },
 
@@ -48,6 +45,9 @@ export const GAME_CONFIG = {
         DEFAULT_SCHEME: 'joystick', // 'joystick' | 'drag'
         SCHEME_STORAGE_KEY: 'bulletHell_touchScheme'
     },
+
+    // --- KONTROL GÖRÜNÜRLÜĞÜ (0 = görünmez, 1 = tam opak) ---
+    CONTROLS_OPACITY: 0.55,
 
     // --- SANAL JOYSTICK (PUBG / FIFA tarzı yüzen joystick) ---
     // Ölçüler ekran (CSS) pikseli cinsindendir; arena ölçeğinden bağımsızdır.

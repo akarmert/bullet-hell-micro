@@ -1,9 +1,8 @@
 // ============================================================
 // layout.js — Ekran Yerleşimi & Arena Boyutlandırma
-// Telefon yatay tutulduğunda arena ekran oranına göre genişler (yükseklik 600
-// sabit kalır, genişlik 600–1200 arası). Sol ve sağda başparmaklar için boşluk
-// (gutter) bırakılır; joystick ve DASH butonu arenayı kapatmaz.
-// Masaüstü ve dikey ekranda klasik 600x600 kare arena korunur.
+// Telefonda/tablette arena tüm ekranı kaplar (dikey veya yatay). Kısa kenar
+// 600 mantıksal birim, uzun kenar ekran oranıyla uzar. Joystick ve DASH butonu
+// arenanın üzerinde yarı şeffaf olarak durur. Masaüstünde 600x600 kare korunur.
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
@@ -39,40 +38,43 @@ function isCoarsePointer() {
 }
 
 /**
- * Mevcut ekrana göre arena ve canvas yerleşimini hesaplar
- * @returns {{landscape:boolean, arenaW:number, arenaH:number, cssW:number, cssH:number, gutter:number}}
+ * Mevcut ekrana göre arena ve canvas yerleşimini hesaplar.
+ * Dokunmatik cihazda canvas tüm ekranı kaplar: kısa kenar 600 mantıksal birim,
+ * uzun kenar ekran oranına göre uzar (dikey veya yatay fark etmez).
+ * Masaüstünde klasik 600x600 kare arena korunur.
+ * @returns {{fullscreen:boolean, landscape:boolean, arenaW:number, arenaH:number, cssW:number, cssH:number}}
  */
 export function computeLayout() {
     const L = GAME_CONFIG.LAYOUT;
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const ins = getSafeInsets();
-    const pad = L.PADDING;
+    const base = GAME_CONFIG.CANVAS.BASE_SIZE;
 
-    const availH = vh - Math.max(pad, ins.top) - Math.max(pad, ins.bottom);
-    const landscape = isCoarsePointer() && vw > vh * L.LANDSCAPE_MIN_RATIO;
+    if (isCoarsePointer()) {
+        const landscape = vw >= vh;
+        const ratio = Math.max(vw, vh) / Math.max(1, Math.min(vw, vh));
+        const longSide = Math.round(Math.min(L.MAX_ARENA_LONG, Math.max(base, base * ratio)));
+        const arenaW = landscape ? longSide : base;
+        const arenaH = landscape ? base : longSide;
 
-    if (landscape) {
-        // Başparmak bölgeleri: ekran genişliğine oranlı, sınırlı
-        const gutter = Math.round(Math.min(L.GUTTER_MAX, Math.max(L.GUTTER_MIN, vw * L.GUTTER_RATIO)));
-        const availW = vw - 2 * gutter - ins.left - ins.right;
-
-        const arenaH = GAME_CONFIG.CANVAS.BASE_SIZE;
-        const ratio = Math.max(1, availW / availH);
-        const arenaW = Math.round(Math.min(L.MAX_ARENA_W, Math.max(arenaH, arenaH * ratio)));
-
-        let cssH = availH;
-        let cssW = cssH * (arenaW / arenaH);
-        if (cssW > availW) {
-            cssW = availW;
-            cssH = cssW * (arenaH / arenaW);
+        // Çok uzun ekranlarda üst sınır aşılırsa oranı koruyarak sığdır (nadiren siyah şerit)
+        // Sınır aşılmadıysa ekranı birebir kapla (yuvarlama kaynaklı 1px boşluk olmasın)
+        let cssW = vw;
+        let cssH = vh;
+        if (longSide < base * ratio - 0.5) {
+            cssH = vw * (arenaH / arenaW);
+            if (cssH > vh) {
+                cssH = vh;
+                cssW = vh * (arenaW / arenaH);
+            }
         }
-        return { landscape, arenaW, arenaH, cssW: Math.floor(cssW), cssH: Math.floor(cssH), gutter };
+        return { fullscreen: true, landscape, arenaW, arenaH, cssW: Math.floor(cssW), cssH: Math.floor(cssH) };
     }
 
-    // Dikey / masaüstü: kare arena
+    const ins = getSafeInsets();
+    const pad = L.PADDING;
     const availW = vw - Math.max(pad, ins.left) - Math.max(pad, ins.right);
+    const availH = vh - Math.max(pad, ins.top) - Math.max(pad, ins.bottom);
     const size = Math.floor(Math.min(availW, availH, L.MAX_CSS_SIZE));
-    const base = GAME_CONFIG.CANVAS.BASE_SIZE;
-    return { landscape: false, arenaW: base, arenaH: base, cssW: size, cssH: size, gutter: 0 };
+    return { fullscreen: false, landscape: false, arenaW: base, arenaH: base, cssW: size, cssH: size };
 }

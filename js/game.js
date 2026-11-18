@@ -15,7 +15,7 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { Haptics } from './haptics.js';
 import { TouchControls } from './touchControls.js';
-import { computeLayout } from './layout.js';
+import { computeLayout, getSafeInsets } from './layout.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -45,6 +45,7 @@ export class Game {
         this.effects = new EffectsManager();
         this.ui = new UIManager();
         this.ui.setMode(this.currentMode);
+        this.applyLayout(true); // HUD güvenli alanları için UI hazır olduktan sonra tekrar
 
         // State & Zamanlama
         this.state = GAME_STATE.MENU;
@@ -104,13 +105,24 @@ export class Game {
         if (this.canvas.width !== bw) this.canvas.width = bw;
         if (this.canvas.height !== bh) this.canvas.height = bh;
         this.renderScale = bw / L.arenaW;
+        document.body.classList.toggle('fullscreen', L.fullscreen);
         document.body.classList.toggle('landscape', L.landscape);
         if (this.touch) this.touch.setLayout(L);
 
+        // Çentik / ana ekran çubuğu boşluklarını mantıksal birime çevir (HUD için)
+        const ins = L.fullscreen ? getSafeInsets() : { top: 0, right: 0, bottom: 0, left: 0 };
+        const k = L.arenaW / L.cssW;
+        if (this.ui) {
+            this.ui.safe = { top: ins.top * k, right: ins.right * k, bottom: ins.bottom * k, left: ins.left * k };
+        }
+
         if (initial || !arenaChanged) return;
 
-        // Oyun sırasında döndürme: duraklat, oyuncuyu yeni arenaya sığdır
-        if (this.state === GAME_STATE.PLAYING) this.pauseGame();
+        // Oyun sırasında döndürme: duraklat, oyuncuyu yeni arenaya sığdır.
+        // Tur başındaki kısa sürede (ör. tam ekrana geçiş) duraklatmadan devam edilir.
+        if (this.state === GAME_STATE.PLAYING && this.elapsedMs > GAME_CONFIG.LAYOUT.REFLOW_GRACE_MS) {
+            this.pauseGame();
+        }
         if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
             this.player.reset();
         } else {
@@ -288,6 +300,7 @@ export class Game {
      */
     handleTouchDown(e) {
         this.effects.initAudio();
+        this.requestFullscreen();
         this.ui.setInputType('touch');
         const coords = this.getCanvasCoords(e.clientX, e.clientY);
 
@@ -327,6 +340,22 @@ export class Game {
                 break;
             }
         }
+    }
+
+    /**
+     * Android'de adres çubuğunu gizlemek için tarayıcı tam ekranını ister
+     * (iOS Safari desteklemez; ana ekrana eklenen PWA zaten tam ekran açılır).
+     */
+    requestFullscreen() {
+        if (this.fullscreenRequested) return;
+        this.fullscreenRequested = true;
+        const el = document.documentElement;
+        const fn = el.requestFullscreen || el.webkitRequestFullscreen;
+        if (!fn || document.fullscreenElement) return;
+        try {
+            const p = fn.call(el, { navigationUI: 'hide' });
+            if (p && p.catch) p.catch(() => {});
+        } catch (err) { /* yok say */ }
     }
 
     selectMode(modeId) {

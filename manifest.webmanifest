@@ -1,0 +1,10 @@
+{
+  "name": "Bullet Hell Micro",
+  "short_name": "BulletHell",
+  "description": "30 saniyelik minimalist bullet hell kaçış oyunu",
+  "start_url": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#05050a",
+  "theme_color": "#05050a"
+}

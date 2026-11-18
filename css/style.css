@@ -86,3 +86,12 @@ html, body {
     pointer-events: none;
     z-index: 10;
 }
+
+/* Dokunmatik cihazlarda tam ekran: kenar boşluğu, köşe yuvarlama ve gölge yok */
+body.fullscreen .game-container {
+    padding: 0;
+}
+body.fullscreen #gameCanvas {
+    border-radius: 0;
+    box-shadow: none;
+}

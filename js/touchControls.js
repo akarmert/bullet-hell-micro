@@ -47,7 +47,7 @@ export class TouchControls {
         document.body.appendChild(this.overlay);
         this.octx = this.overlay.getContext('2d');
         this.dpr = 1;
-        this.layout = null; // Game.applyLayout tarafından atanır (yatay/dikey, gutter)
+        this.layout = null; // Game.applyLayout tarafından atanır (yatay/dikey, tam ekran)
         this.insets = { top: 0, right: 0, bottom: 0, left: 0 };
         this.resize();
         window.addEventListener('resize', () => this.resize());
@@ -103,16 +103,12 @@ export class TouchControls {
     getDashButton() {
         const J = GAME_CONFIG.JOYSTICK;
         const ins = this.insets;
-        if (this.isLandscape) {
-            // Yatay: sağ başparmak bölgesinin ortası, alt üçte birlik kısım
-            const g = this.layout.gutter;
-            const r = Math.min(J.DASH_BUTTON_RADIUS, g / 2 - 10);
-            return { x: this.vw - ins.right - g / 2, y: this.vh * 0.66, r };
-        }
         const r = J.DASH_BUTTON_RADIUS;
+        // Yatayda biraz daha yukarı: başparmak doğal olarak ekranın alt-orta kısmında durur
+        const lift = this.isLandscape ? 30 : 16;
         return {
             x: this.vw - ins.right - J.DASH_BUTTON_MARGIN - r,
-            y: this.vh - ins.bottom - J.DASH_BUTTON_MARGIN - r - 16,
+            y: this.vh - ins.bottom - J.DASH_BUTTON_MARGIN - r - lift,
             r
         };
     }
@@ -120,13 +116,10 @@ export class TouchControls {
     getJoystickHint() {
         const J = GAME_CONFIG.JOYSTICK;
         const ins = this.insets;
-        if (this.isLandscape) {
-            const g = this.layout.gutter;
-            return { x: ins.left + g / 2, y: this.vh * 0.66, r: Math.min(J.BASE_RADIUS, g / 2 - 8) };
-        }
+        const lift = this.isLandscape ? 30 : 16;
         return {
             x: ins.left + J.DASH_BUTTON_MARGIN + J.BASE_RADIUS,
-            y: this.vh - ins.bottom - J.DASH_BUTTON_MARGIN - J.BASE_RADIUS - 16,
+            y: this.vh - ins.bottom - J.DASH_BUTTON_MARGIN - J.BASE_RADIUS - lift,
             r: J.BASE_RADIUS
         };
     }
@@ -311,54 +304,57 @@ export class TouchControls {
         if (!visible || !this.isJoystick) return;
 
         const J = GAME_CONFIG.JOYSTICK;
+        // Tüm kontroller yarı şeffaf: mermiler kontrollerin altından görünür kalır
+        const op = GAME_CONFIG.CONTROLS_OPACITY;
+        const a = (v) => (v * op).toFixed(3);
+
         ctx.save();
 
         // --- Joystick ---
         if (this.joystickActive) {
-            // Taban
+            // Taban: neredeyse görünmez dolgu, ince halka
             ctx.beginPath();
             ctx.arc(this.joyBase.x, this.joyBase.y, J.BASE_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.06)';
+            ctx.fillStyle = `rgba(255, 255, 255, ${a(0.06)})`;
             ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.35)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${a(0.45)})`;
             ctx.stroke();
 
-            // Yön göstergesi (itiş gücüne göre parlayan yay)
+            // Yön göstergesi (itiş gücüyle parlayan yay)
             const mag = Math.hypot(this.vector.x, this.vector.y);
             if (mag > 0) {
                 const ang = Math.atan2(this.vector.y, this.vector.x);
                 ctx.beginPath();
                 ctx.arc(this.joyBase.x, this.joyBase.y, J.BASE_RADIUS, ang - 0.5, ang + 0.5);
-                ctx.lineWidth = 4;
-                ctx.strokeStyle = `rgba(0, 255, 255, ${0.35 + mag * 0.6})`;
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = `rgba(0, 255, 255, ${a(0.5 + mag * 0.5)})`;
                 ctx.stroke();
             }
 
-            // Topuz
+            // Topuz: cam görünümü
             ctx.beginPath();
             ctx.arc(this.joyKnob.x, this.joyKnob.y, J.KNOB_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.28)';
+            ctx.fillStyle = `rgba(255, 255, 255, ${a(0.18)})`;
             ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(200, 255, 255, 0.85)';
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${a(0.7)})`;
             ctx.stroke();
         } else {
-            // Boşta: sol altta silik ipucu halkası
+            // Boşta: sol altta silik kesikli ipucu halkası
             const hint = this.getJoystickHint();
-            const hx = hint.x, hy = hint.y;
-            ctx.setLineDash([6, 6]);
+            ctx.setLineDash([5, 7]);
             ctx.beginPath();
-            ctx.arc(hx, hy, hint.r, 0, Math.PI * 2);
-            ctx.lineWidth = 1.5;
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.18)';
+            ctx.arc(hint.x, hint.y, hint.r, 0, Math.PI * 2);
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = `rgba(255, 255, 255, ${a(0.3)})`;
             ctx.stroke();
             ctx.setLineDash([]);
-            ctx.font = '600 11px "JetBrains Mono", monospace';
+            ctx.font = '600 10px "JetBrains Mono", monospace';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillStyle = 'rgba(0, 255, 255, 0.35)';
-            ctx.fillText('HAREKET', hx, hy);
+            ctx.fillStyle = `rgba(255, 255, 255, ${a(0.4)})`;
+            ctx.fillText('HAREKET', hint.x, hint.y);
         }
 
         // --- DASH Butonu ---
@@ -369,36 +365,29 @@ export class TouchControls {
 
         ctx.beginPath();
         ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
-        ctx.fillStyle = ready
-            ? (pressed ? 'rgba(255, 255, 255, 0.35)' : 'rgba(0, 255, 255, 0.18)')
-            : 'rgba(255, 255, 255, 0.05)';
+        ctx.fillStyle = pressed
+            ? `rgba(255, 255, 255, ${a(0.3)})`
+            : `rgba(255, 255, 255, ${a(ready ? 0.08 : 0.03)})`;
         ctx.fill();
         ctx.lineWidth = 1.5;
-        ctx.strokeStyle = ready ? 'rgba(0, 255, 255, 0.7)' : 'rgba(255, 255, 255, 0.18)';
+        ctx.strokeStyle = ready
+            ? `rgba(0, 255, 255, ${a(0.75)})`
+            : `rgba(255, 255, 255, ${a(0.25)})`;
         ctx.stroke();
 
         // Şarj halkası
         if (!ready) {
             ctx.beginPath();
             ctx.arc(b.x, b.y, r + 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * dashRatio);
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.55)';
+            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = `rgba(0, 255, 255, ${a(0.6)})`;
             ctx.stroke();
-        } else {
-            ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 12;
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, r + 5, 0, Math.PI * 2);
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
-            ctx.stroke();
-            ctx.shadowBlur = 0;
         }
 
-        ctx.font = '800 14px "JetBrains Mono", monospace';
+        ctx.font = '800 13px "JetBrains Mono", monospace';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = ready ? '#ffffff' : 'rgba(255, 255, 255, 0.4)';
+        ctx.fillStyle = `rgba(255, 255, 255, ${a(ready ? 0.9 : 0.4)})`;
         ctx.fillText('DASH', b.x, b.y);
 
         ctx.restore();
