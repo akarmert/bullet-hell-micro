@@ -1,10 +1,11 @@
 // ============================================================
 // ui.js — Kullanıcı Arayüzü Yöneticisi
-// Çoklu Mod Menüsü, Gelişmiş HUD (Graze, Dash Bar, Kalkan), Ölüm Ekranı
+// Şeker temalı menü, HUD (Graze, Dash Bar, Kalkan), duraklatma ve ölüm ekranı
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
+import { THEME, font, candyPanel, outlinedText } from './theme.js';
 
 export class UIManager {
     constructor() {
@@ -113,111 +114,99 @@ export class UIManager {
     }
 
     /**
-     * Menü Ekranı (Mod Seçimi ve Klavye/Fare/Gamepad İpuçları)
+     * Küçük hap etiketi (mod adı, durum bildirimleri)
+     */
+    static pill(ctx, text, x, y, fill, color = THEME.INK, align = 'left', size = 11) {
+        ctx.save();
+        ctx.font = font(size, 700);
+        const tw = ctx.measureText(text).width;
+        const pw = tw + 16;
+        const ph = size + 9;
+        const px = align === 'right' ? x - pw : align === 'center' ? x - pw / 2 : x;
+        candyPanel(ctx, px, y - ph / 2, pw, ph, ph / 2, fill, { lineWidth: 1.5, depth: 2 });
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, px + pw / 2, y + 1);
+        ctx.restore();
+    }
+
+    /**
+     * Menü Ekranı (Mod Seçimi ve Kontrol İpuçları)
      */
     renderMenu(ctx, activeModeId = this.currentMode.id) {
         const w = 600;
+        const t = performance.now() / 1000;
 
         ctx.save();
         ctx.translate(this.menuOffsetX, this.menuOffsetY);
         ctx.scale(this.menuScale, this.menuScale);
-
-        // Başlık
         ctx.textAlign = 'center';
-        ctx.font = '900 27px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 18;
-        ctx.fillText('BULLET HELL MICRO', w / 2, 70);
+        ctx.textBaseline = 'alphabetic';
 
-        ctx.font = '700 12px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#00ffff';
-        ctx.shadowBlur = 8;
-        ctx.fillText('SELECT GAME MODE', w / 2, 102);
+        // Başlık: pembe gölgeli çıkartma yazı
+        ctx.font = font(42, 700);
+        const titleY = 72 + Math.sin(t * 2) * 2;
+        ctx.lineJoin = 'round';
+        ctx.fillStyle = THEME.PINK;
+        ctx.fillText('BULLET HELL', w / 2 + 3, titleY + 4);
+        outlinedText(ctx, 'BULLET HELL', w / 2, titleY, THEME.INK, THEME.WHITE, 6);
+
+        ctx.save();
+        ctx.translate(w / 2 + 128, titleY + 14);
+        ctx.rotate(-0.08);
+        UIManager.pill(ctx, 'micro', 0, 0, THEME.PINK, THEME.WHITE, 'center', 14);
+        ctx.restore();
+
+        ctx.font = font(13, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText('mod seç', w / 2, 118);
 
         // Mod Seçim Butonları
         for (const btn of this.modeButtons) {
             const isSelected = btn.id === activeModeId;
+            const lift = isSelected ? -2 : 0;
+            candyPanel(ctx, btn.x, btn.y + lift, btn.w, btn.h, 18,
+                isSelected ? THEME.PINK : THEME.WHITE,
+                { depth: isSelected ? 6 : 4, lineWidth: 2 });
 
-            ctx.save();
-            if (isSelected) {
-                ctx.fillStyle = 'rgba(0, 255, 255, 0.18)';
-                ctx.strokeStyle = '#00ffff';
-                ctx.lineWidth = 2;
-                ctx.shadowColor = '#00ffff';
-                ctx.shadowBlur = 14;
-            } else {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.18)';
-                ctx.lineWidth = 1;
-                ctx.shadowBlur = 0;
-            }
-
-            ctx.beginPath();
-            ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 6);
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.font = isSelected ? 'bold 14px "JetBrains Mono", monospace' : '13px "JetBrains Mono", monospace';
-            ctx.fillStyle = isSelected ? '#ffffff' : '#8c8ca0';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2);
+            ctx.font = font(18, 700);
+            ctx.fillStyle = isSelected ? THEME.WHITE : THEME.INK;
+            ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + lift + btn.h / 2 - 8);
 
-            if (isSelected) {
-                ctx.font = 'bold 9px "JetBrains Mono", monospace';
-                ctx.fillStyle = '#00ffff';
-                ctx.fillText('● AKTİF', btn.x + btn.w / 2, btn.y + btn.h - 7);
-            }
-
-            ctx.restore();
+            ctx.font = font(11, 600);
+            ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.9)' : THEME.MUTED;
+            ctx.fillText(`en iyi ${UIManager.formatTime(this.getHighScore(btn.id))}`, btn.x + btn.w / 2, btn.y + lift + btn.h / 2 + 14);
         }
 
         // Mod Açıklaması
         const activeMode = ModeRegistry.get(activeModeId);
-        ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
-        ctx.font = '12px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#a2a2bd';
-        ctx.fillText(`“${activeMode.description}”`, w / 2, 305);
+        ctx.font = font(14, 500);
+        ctx.fillStyle = THEME.INK;
+        ctx.fillText(activeMode.description, w / 2, 318);
 
-        // Rekor
-        const bestTime = this.getHighScore(activeModeId);
-        ctx.font = 'bold 13px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffe600';
-        ctx.shadowColor = 'rgba(255, 230, 0, 0.4)';
-        ctx.shadowBlur = 8;
-        ctx.fillText(`EN İYİ REKOR (${activeMode.label}): ${UIManager.formatTime(bestTime)}`, w / 2, 335);
-        ctx.shadowBlur = 0;
+        // Kontrol İpuçları
+        ctx.font = font(12, 500);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText('Joystick · Fare · WASD · Gamepad  →  hareket', w / 2, 356);
+        ctx.fillText('DASH · Sağ tık · Shift · Space  →  dokunulmazlık', w / 2, 378);
+        ctx.fillText('P / ESC  →  duraklat      B  →  müzik', w / 2, 400);
 
-        // Kontrol ve Mekanik İpuçları
-        ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#00ffff';
-        ctx.fillText('[ Joystick / Fare / WASD / Gamepad ] Hareket', w / 2, 370);
-
-        ctx.fillStyle = '#8e8ea8';
-        ctx.fillText('[ DASH / Sağ Tık / Shift / Space ] Dokunulmazlık', w / 2, 390);
-        ctx.fillText('[ P / ESC ] Duraklat   [ B ] Synth Müzik', w / 2, 410);
-
-        // PLAY Butonu
+        // OYNA butonu: yavaşça süzülen mor şeker
         const pb = this.playButton;
-        const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
-
-        ctx.fillStyle = `rgba(0, 255, 255, ${0.12 + pulse * 0.08})`;
-        ctx.strokeStyle = '#00ffff';
-        ctx.lineWidth = 2;
-        ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 10 + pulse * 8;
-
+        const bob = Math.sin(t * 3) * 2;
+        candyPanel(ctx, pb.x, pb.y + bob, pb.w, pb.h, pb.h / 2, THEME.PURPLE, { depth: 6, lineWidth: 2.5 });
         ctx.beginPath();
-        ctx.roundRect(pb.x, pb.y, pb.w, pb.h, 8);
+        ctx.roundRect(pb.x + 18, pb.y + bob + 8, pb.w - 36, 8, 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
         ctx.fill();
-        ctx.stroke();
-
-        ctx.font = 'bold 15px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffffff';
+        ctx.font = font(22, 700);
+        ctx.fillStyle = THEME.WHITE;
         ctx.textBaseline = 'middle';
-        ctx.fillText(`OYNA: ${activeMode.label}`, w / 2, pb.y + pb.h / 2);
+        ctx.fillText(`OYNA ▶ ${activeMode.label}`, w / 2, pb.y + bob + pb.h / 2 + 2);
 
         ctx.restore();
     }
@@ -227,92 +216,67 @@ export class UIManager {
      */
     renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
         const left = 18 + this.safe.left;
         const right = w - 18 - this.safe.right;
 
         ctx.save();
         ctx.translate(0, this.safe.top);
+        ctx.textBaseline = 'middle';
 
-        // 1. Sol Üst: Graze (Teğet Geçme) Sayacı
-        ctx.textAlign = 'right';
-        ctx.font = 'bold 13px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffe600';
-        ctx.shadowColor = '#ffe600';
-        ctx.shadowBlur = 6;
+        // Sol üst: mod ve rekor
+        UIManager.pill(ctx, mode.label, left, 24, THEME.LAVENDER, THEME.INK, 'left', 11);
+        // Orta: büyük sayaç ve altında rekor (dar ekranlarda küçülür)
+        ctx.textAlign = 'center';
+        ctx.font = font(Math.min(36, w * 0.085), 700);
+        outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.INK, THEME.WHITE, 6);
+        ctx.font = font(11, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText(`rekor ${UIManager.formatTime(this.getHighScore(mode.id))}`, w / 2, 70);
+
+        // Sağ üst: graze ve aktif güçlendirmeler
         const graze = player ? player.grazeCount : 0;
-        ctx.fillText(`GRAZE: ${graze}`, right, 28);
-        ctx.shadowBlur = 0;
-
-        // Kalkan aktifse sol üstte yeşil kalkan ikonu/metni
+        UIManager.pill(ctx, `graze ${graze}`, right, 24, THEME.PINK, THEME.WHITE, 'right', 12);
+        let rowY = 52;
         if (player && player.hasShield) {
-            ctx.font = 'bold 11px "JetBrains Mono", monospace';
-            ctx.fillStyle = '#00ff88';
-            ctx.shadowColor = '#00ff88';
-            ctx.shadowBlur = 6;
-            ctx.fillText('KALKAN AKTİF', right, 48);
-            ctx.shadowBlur = 0;
+            UIManager.pill(ctx, 'kalkan', right, rowY, THEME.PURPLE, THEME.WHITE, 'right', 10);
+            rowY += 24;
         }
-
-        // Slow-mo aktifse bildirim
         if (pickupManager && pickupManager.isSlowmoActive()) {
-            ctx.font = 'bold 11px "JetBrains Mono", monospace';
-            ctx.fillStyle = '#ffaa00';
-            ctx.shadowColor = '#ffaa00';
-            ctx.shadowBlur = 8;
             const remaining = (pickupManager.slowmoTimer / 1000).toFixed(1);
-            ctx.fillText(`SLOW-MO: ${remaining}s`, right, player && player.hasShield ? 68 : 48);
-            ctx.shadowBlur = 0;
+            UIManager.pill(ctx, `yavaş ${remaining}s`, right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
         }
 
-        // 2. Orta Üst: Mod Etiketi ve Büyük Sayaç
-        ctx.textAlign = 'center';
-        ctx.font = 'bold 12px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#00ffff';
-        ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 6;
-        ctx.textAlign = 'left';
-        ctx.fillText(mode.label, left, 26);
-        ctx.textAlign = 'center';
-
-        ctx.font = 'bold 34px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowBlur = 10;
-        ctx.fillText(UIManager.formatTime(elapsedMs), w / 2, 62);
-        ctx.shadowBlur = 0;
-
-        // 3. Sağ Üst: Modun Rekoru
-        ctx.textAlign = 'left';
-        ctx.font = '12px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#808098';
-        ctx.fillText(`REKOR: ${UIManager.formatTime(this.getHighScore(mode.id))}`, left, 46);
-
-        // 4. Alt Orta: Dash (I-Frame) Şarj Göstergesi
+        // Alt orta: Dash şarj çubuğu (dokunmatikte buton halkası gösterir)
         if (player && !matchMedia('(any-pointer: coarse)').matches) {
-            const barW = 120;
-            const barH = 5;
+            const barW = 140;
+            const barH = 10;
             const barX = (w - barW) / 2;
-            const barY = 575;
+            const barY = h - this.safe.top - this.safe.bottom - 26;
             const ratio = player.getDashReadyRatio();
             const isReady = ratio >= 1.0;
 
-            // Arka zemin çerçevesi
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.fillRect(barX, barY, barW, barH);
-
-            // Doluluk
-            ctx.fillStyle = isReady ? '#00ffff' : 'rgba(0, 255, 255, 0.45)';
-            if (isReady) {
-                ctx.shadowColor = '#00ffff';
-                ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, barH / 2);
+            ctx.fillStyle = THEME.WHITE;
+            ctx.fill();
+            if (ratio > 0) {
+                ctx.save();
+                ctx.clip();
+                ctx.fillStyle = isReady ? THEME.PINK : THEME.LAVENDER;
+                ctx.fillRect(barX, barY, barW * ratio, barH);
+                ctx.restore();
             }
-            ctx.fillRect(barX, barY, barW * ratio, barH);
-            ctx.shadowBlur = 0;
+            ctx.beginPath();
+            ctx.roundRect(barX, barY, barW, barH, barH / 2);
+            ctx.strokeStyle = THEME.INK;
+            ctx.lineWidth = 2;
+            ctx.stroke();
 
-            // Dash Durum Metni
             ctx.textAlign = 'center';
-            ctx.font = 'bold 10px "JetBrains Mono", monospace';
-            ctx.fillStyle = isReady ? '#00ffff' : '#686880';
-            ctx.fillText(isReady ? 'DASH HAZIR (Sağ Tık / Space / Shift)' : 'DASH DOLUYOR...', w / 2, barY - 6);
+            ctx.font = font(11, 700);
+            ctx.fillStyle = isReady ? THEME.PINK_DEEP : THEME.MUTED;
+            ctx.fillText(isReady ? 'DASH hazır · sağ tık / space / shift' : 'dash doluyor…', w / 2, barY - 11);
         }
 
         ctx.restore();
@@ -332,36 +296,39 @@ export class UIManager {
         if (countdownMs > 0) {
             const step = Math.ceil(countdownMs / 500);
             const frac = (countdownMs % 500) / 500;
-            ctx.fillStyle = 'rgba(8, 8, 15, 0.35)';
+            ctx.fillStyle = 'rgba(255, 246, 250, 0.35)';
             ctx.fillRect(0, 0, w, h);
-            ctx.font = `900 ${48 + frac * 22}px "JetBrains Mono", monospace`;
-            ctx.fillStyle = `rgba(255, 255, 255, ${0.45 + frac * 0.55})`;
-            ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 20;
-            ctx.fillText(String(step), w / 2, h / 2);
+            ctx.font = font(64 + frac * 26, 700);
+            ctx.globalAlpha = 0.5 + frac * 0.5;
+            ctx.fillStyle = THEME.PINK;
+            ctx.fillText(String(step), w / 2 + 3, h / 2 + 5);
+            outlinedText(ctx, String(step), w / 2, h / 2, THEME.INK, THEME.WHITE, 7);
             ctx.restore();
             return;
         }
 
-        ctx.fillStyle = 'rgba(8, 8, 15, 0.72)';
+        ctx.fillStyle = 'rgba(255, 246, 250, 0.78)';
         ctx.fillRect(0, 0, w, h);
 
-        ctx.font = '900 30px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#00ffff';
-        ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 16;
-        ctx.fillText('DURAKLATILDI', w / 2, h / 2 - 30);
-        ctx.shadowBlur = 0;
+        const cw = Math.min(320, w - 40);
+        const ch = touch ? 120 : 140;
+        candyPanel(ctx, w / 2 - cw / 2, h / 2 - ch / 2 - 10, cw, ch, 22, THEME.WHITE, { depth: 6, lineWidth: 2.5 });
+
+        ctx.font = font(28, 700);
+        ctx.fillStyle = THEME.PURPLE;
+        ctx.fillText('duraklatıldı', w / 2, h / 2 - 36);
 
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
-        ctx.font = '13px "JetBrains Mono", monospace';
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + pulse * 0.4})`;
-        ctx.fillText(touch ? 'Devam etmek için dokun' : '[ Tıkla / Space / P / ESC ] Devam Et', w / 2, h / 2 + 18);
+        ctx.font = font(14, 600);
+        ctx.globalAlpha = 0.65 + pulse * 0.35;
+        ctx.fillStyle = THEME.INK;
+        ctx.fillText(touch ? 'devam etmek için dokun' : 'tıkla · space · P · ESC → devam', w / 2, h / 2 + 2);
+        ctx.globalAlpha = 1;
 
         if (!touch) {
-            ctx.font = '11px "JetBrains Mono", monospace';
-            ctx.fillStyle = '#7a7a92';
-            ctx.fillText('[ M ] Ana Menü', w / 2, h / 2 + 44);
+            ctx.font = font(12, 600);
+            ctx.fillStyle = THEME.MUTED;
+            ctx.fillText('M → ana menü', w / 2, h / 2 + 28);
         }
         ctx.restore();
     }
@@ -372,81 +339,76 @@ export class UIManager {
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, waves = null) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const cx = w / 2;
+        const cy = h / 2;
 
         ctx.save();
-
-        ctx.fillStyle = 'rgba(8, 8, 15, 0.84)';
+        ctx.fillStyle = 'rgba(255, 246, 250, 0.82)';
         ctx.fillRect(0, 0, w, h);
 
+        const cw = Math.min(360, w - 32);
+        candyPanel(ctx, cx - cw / 2, cy - 152, cw, 332, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
         // OYUN BİTTİ
-        ctx.font = '900 28px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ff0055';
-        ctx.shadowColor = '#ff0055';
-        ctx.shadowBlur = 15;
-        ctx.fillText('OYUN BİTTİ', w / 2, h / 2 - 115);
+        ctx.font = font(32, 700);
+        ctx.fillStyle = THEME.PINK_SOFT;
+        ctx.fillText('OYUN BİTTİ', cx + 2, cy - 110 + 3);
+        ctx.fillStyle = THEME.PINK_DEEP;
+        ctx.fillText('OYUN BİTTİ', cx, cy - 110);
 
-        // MOD GÖSTERGESİ
-        ctx.font = 'bold 13px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#00ffff';
-        ctx.shadowColor = '#00ffff';
-        ctx.shadowBlur = 8;
-        ctx.fillText(`MOD: ${mode.label}`, w / 2, h / 2 - 82);
+        UIManager.pill(ctx, mode.label, cx, cy - 76, THEME.LAVENDER, THEME.INK, 'center', 11);
 
-        // Yeni rekor banner'ı
         if (this.isNewRecord) {
-            ctx.font = 'bold 15px "JetBrains Mono", monospace';
-            ctx.fillStyle = '#ffe600';
-            ctx.shadowColor = '#ffe600';
-            ctx.shadowBlur = 12;
-            ctx.fillText('★ YENİ REKOR! ★', w / 2, h / 2 - 48);
+            const bounce = Math.abs(Math.sin(performance.now() * 0.005)) * 3;
+            UIManager.pill(ctx, '★ yeni rekor! ★', cx, cy - 46 - bounce, THEME.PURPLE, THEME.WHITE, 'center', 13);
         }
 
-        // SÜRE
-        ctx.shadowBlur = 0;
-        ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#9090a8';
-        ctx.fillText('HAYATTA KALMA SÜRESİ', w / 2 - 80, h / 2 - 12);
-        ctx.fillText('GRAZE (TEĞET)', w / 2 + 80, h / 2 - 12);
+        // İstatistikler
+        ctx.font = font(12, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText('hayatta kalma', cx - 78, cy - 12);
+        ctx.fillText('graze', cx + 92, cy - 12);
 
-        ctx.font = 'bold 24px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffffff';
-        ctx.fillText(UIManager.formatTime(finalTimeMs), w / 2 - 80, h / 2 + 18);
+        ctx.font = font(28, 700);
+        ctx.fillStyle = THEME.INK;
+        ctx.fillText(UIManager.formatTime(finalTimeMs), cx - 78, cy + 16);
+        ctx.fillStyle = THEME.PINK;
+        ctx.fillText(player ? player.grazeCount.toString() : '0', cx + 92, cy + 16);
 
-        ctx.fillStyle = '#ffe600';
-        ctx.fillText(player ? player.grazeCount.toString() : '0', w / 2 + 80, h / 2 + 18);
-
-        // EN İYİ REKOR
-        ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#9090a8';
-        ctx.fillText(`EN İYİ REKOR (${mode.label})`, w / 2, h / 2 + 58);
-
-        ctx.font = 'bold 17px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#00ffff';
-        ctx.fillText(UIManager.formatTime(this.getHighScore(mode.id)), w / 2, h / 2 + 82);
+        // En iyi
+        ctx.font = font(12, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText(`en iyi (${mode.label})`, cx, cy + 52);
+        ctx.font = font(19, 700);
+        ctx.fillStyle = THEME.PURPLE;
+        ctx.fillText(UIManager.formatTime(this.getHighScore(mode.id)), cx, cy + 74);
 
         // Boss sonucu
         if (waves && waves.boss) {
-            ctx.font = 'bold 11px "JetBrains Mono", monospace';
+            ctx.font = font(12, 700);
             if (waves.bossDefeatedAt !== null) {
-                ctx.fillStyle = '#ffe600';
-                ctx.fillText(`✓ NEXUS YENİLDİ (${UIManager.formatTime(waves.bossDefeatedAt)})`, w / 2, h / 2 + 106);
+                ctx.fillStyle = THEME.PURPLE_DEEP;
+                ctx.fillText(`✓ Jöle Kral eridi (${UIManager.formatTime(waves.bossDefeatedAt)})`, cx, cy + 100);
             } else {
-                ctx.fillStyle = '#ff7a1a';
-                ctx.fillText(`NEXUS ENERJİSİ: %${Math.ceil(waves.boss.hpRatio * 100)}`, w / 2, h / 2 + 106);
+                ctx.fillStyle = THEME.PINK_DEEP;
+                ctx.fillText(`Jöle Kral enerjisi: %${Math.ceil(waves.boss.hpRatio * 100)}`, cx, cy + 100);
             }
         }
 
-        // Hızlı Yeniden Başlatma & Menü Seçenekleri
+        // Yeniden başlatma
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
-        ctx.font = '13px "JetBrains Mono", monospace';
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + pulse * 0.4})`;
-        ctx.fillText('[ Tıkla / Space / Enter ] Tekrar Oyna', w / 2, h / 2 + 130);
+        ctx.font = font(15, 700);
+        ctx.globalAlpha = 0.7 + pulse * 0.3;
+        ctx.fillStyle = THEME.INK;
+        ctx.fillText('tıkla · space · enter → tekrar oyna', cx, cy + 132);
+        ctx.globalAlpha = 1;
 
-        ctx.font = '11px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#7a7a92';
-        ctx.fillText('[ M / ESC ] Ana Menü / Mod Değiştir', w / 2, h / 2 + 158);
+        ctx.font = font(12, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText('M / ESC → ana menü', cx, cy + 156);
 
         ctx.restore();
     }

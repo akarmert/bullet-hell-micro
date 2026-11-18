@@ -4,6 +4,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { THEME } from './theme.js';
 
 export class Bullet {
     constructor(params = {}) {
@@ -122,22 +123,25 @@ export class Bullet {
 
         ctx.save();
 
-        // 1. Trail çizimi (varsa)
+        // 1. Yumuşak iz (varsa): solan pastel noktalar
         if (this.trail.length > 1) {
-            for (let i = 0; i < this.trail.length; i++) {
+            ctx.fillStyle = this.color;
+            for (let i = 1; i < this.trail.length; i += 2) {
                 const pt = this.trail[i];
                 const ratio = 1 - i / this.trail.length;
+                ctx.globalAlpha = ratio * 0.4;
                 ctx.beginPath();
-                ctx.arc(pt.x, pt.y, this.radius * ratio * 0.75, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = ratio * 0.35;
+                ctx.arc(pt.x, pt.y, this.radius * ratio * 0.7, 0, Math.PI * 2);
                 ctx.fill();
             }
+            ctx.globalAlpha = 1.0;
         }
 
-        ctx.globalAlpha = 1.0;
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineJoin = 'round';
 
-        // 2. Mermi Gövdesi (Şekle göre özelleştirilmiş render)
+        // 2. Şekere göre gövde
         switch (this.shape) {
             case 'diamond':
                 this.renderDiamond(ctx);
@@ -158,139 +162,103 @@ export class Bullet {
     }
 
     /**
-     * Klasik dairesel mermi
+     * Sakız topu: dolgun daire + parlak nokta
      */
     renderCircle(ctx) {
-        // Dış neon ışıma
+        const r = this.radius * 1.15;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 2, 0, Math.PI * 2);
-        ctx.fillStyle = this.glow;
-        ctx.fill();
-
-        // Mermi çekirdeği
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 8;
         ctx.fill();
+        ctx.stroke();
 
-        // Merkez beyaz parlaklık
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 0.45, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
+        ctx.arc(this.x - r * 0.35, this.y - r * 0.35, r * 0.3, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.WHITE;
         ctx.fill();
     }
 
     /**
-     * Aim mermileri için sivri elmas / yönlü ok
+     * Nişanlı şeker kristali: yönlü damla
      */
     renderDiamond(ctx) {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
+        const r = this.radius * 1.1;
 
-        const r = this.radius;
-
-        // Dış ışıma
-        ctx.beginPath();
-        ctx.moveTo(r * 2.5, 0);
-        ctx.lineTo(0, -r * 1.5);
-        ctx.lineTo(-r * 1.5, 0);
-        ctx.lineTo(0, r * 1.5);
-        ctx.closePath();
-        ctx.fillStyle = this.glow;
-        ctx.fill();
-
-        // Ana gövde
         ctx.beginPath();
         ctx.moveTo(r * 2, 0);
-        ctx.lineTo(0, -r);
-        ctx.lineTo(-r, 0);
-        ctx.lineTo(0, r);
+        ctx.quadraticCurveTo(r * 0.4, -r * 1.1, -r, 0);
+        ctx.quadraticCurveTo(r * 0.4, r * 1.1, r * 2, 0);
         ctx.closePath();
         ctx.fillStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 10;
         ctx.fill();
+        ctx.stroke();
 
-        // Beyaz keskin merkez
         ctx.beginPath();
-        ctx.moveTo(r * 1.2, 0);
-        ctx.lineTo(0, -r * 0.4);
-        ctx.lineTo(-r * 0.4, 0);
-        ctx.lineTo(0, r * 0.4);
-        ctx.closePath();
-        ctx.fillStyle = '#ffffff';
+        ctx.ellipse(r * 0.2, -r * 0.3, r * 0.5, r * 0.2, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         ctx.fill();
     }
 
     /**
-     * Seken lazer / kaos mermileri için kapsül ışın formu
+     * Seken çizgili şeker çubuğu
      */
     renderCapsule(ctx) {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
+        const length = this.radius * 3.6;
+        const width = this.radius * 1.9;
+        const x = -length / 2;
+        const y = -width / 2;
 
-        const length = this.radius * 3.5;
-        const width = this.radius * 1.6;
-
-        // Dış neon glow
-        ctx.strokeStyle = this.glow;
-        ctx.lineWidth = width * 1.8;
-        ctx.lineCap = 'round';
         ctx.beginPath();
-        ctx.moveTo(-length / 2, 0);
-        ctx.lineTo(length / 2, 0);
-        ctx.stroke();
+        ctx.roundRect(x, y, length, width, width / 2);
+        ctx.fillStyle = THEME.WHITE;
+        ctx.fill();
 
-        // Ana renkli kapsül
-        ctx.strokeStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = width;
-        ctx.beginPath();
-        ctx.moveTo(-length / 2, 0);
-        ctx.lineTo(length / 2, 0);
-        ctx.stroke();
+        // Çapraz şeker şeritleri
+        ctx.save();
+        ctx.clip();
+        ctx.fillStyle = this.color;
+        for (let sx = x - width; sx < length / 2 + width; sx += width * 0.9) {
+            ctx.beginPath();
+            ctx.moveTo(sx, y + width);
+            ctx.lineTo(sx + width * 0.45, y + width);
+            ctx.lineTo(sx + width * 0.45 + width, y);
+            ctx.lineTo(sx + width, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
 
-        // Beyaz parlak iç lazer çekirdeği
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = width * 0.4;
         ctx.beginPath();
-        ctx.moveTo(-length / 2 + 2, 0);
-        ctx.lineTo(length / 2 - 2, 0);
+        ctx.roundRect(x, y, length, width, width / 2);
         ctx.stroke();
     }
 
     /**
-     * Spiral dalgalar için halkalı enerji küresi
+     * Spiral fazı için lavanta donut
      */
     renderRing(ctx) {
-        // Dış ışıma
+        const r = this.radius * 1.35;
+        ctx.lineWidth = 1.3;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = this.glow;
-        ctx.fill();
-
-        // İnce parlak dış halka
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 1.3, 0, Math.PI * 2);
-        ctx.strokeStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 8;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        // Orta renkli çekirdek
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 0.7, 0, Math.PI * 2);
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
+        ctx.stroke();
 
-        // Merkez beyaz nokta
+        // Krema parlaması ve küçük delik
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
+        ctx.arc(this.x, this.y, r * 0.66, Math.PI * 1.05, Math.PI * 1.55);
+        ctx.strokeStyle = THEME.WHITE;
+        ctx.lineWidth = 1.6;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r * 0.28, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.BG;
         ctx.fill();
     }
 }

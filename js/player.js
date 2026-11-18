@@ -4,6 +4,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { THEME } from './theme.js';
 
 export class Player {
     constructor() {
@@ -212,91 +213,89 @@ export class Player {
     }
 
     /**
-     * Oyuncuyu, kalkanını, dash izlerini ve hitbox/graze alanını çizer
+     * Marşmelov oyuncu: beyaz yumuşak gövde, minik yüz, pembe hitbox çekirdeği
      */
     render(ctx) {
         if (!this.alive) return;
+        const r = this.radius * 1.9;
+        const t = performance.now() / 1000;
 
         ctx.save();
+        ctx.lineJoin = 'round';
 
-        // 1. Dash After-images (Hayalet izler)
+        // 1. Dash hayalet izleri (pembe yumuşak kopyalar)
         for (let i = 0; i < this.afterImages.length; i++) {
             const img = this.afterImages[i];
-            ctx.save();
-            ctx.globalAlpha = img.alpha;
+            ctx.globalAlpha = img.alpha * 0.7;
             ctx.beginPath();
-            ctx.arc(img.x, img.y, this.radius * 2, 0, Math.PI * 2);
-            ctx.fillStyle = '#00ffff';
-            ctx.shadowColor = '#00ffff';
-            ctx.shadowBlur = 10;
+            ctx.arc(img.x, img.y, r, 0, Math.PI * 2);
+            ctx.fillStyle = THEME.PINK_SOFT;
             ctx.fill();
-            ctx.restore();
         }
+        ctx.globalAlpha = 1;
 
-        // 2. Teğet Geçme (Graze) Alanı İnce Halka Göstergesi
+        // 2. Graze alanı: kesikli lavanta halka
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.grazeRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = this.isDashing ? 'rgba(255, 255, 255, 0.4)' : 'rgba(0, 255, 255, 0.12)';
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = this.isDashing ? THEME.PINK : 'rgba(142, 91, 232, 0.28)';
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([3, 4]);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // 3. Kalkan (Shield) Varsa Etrafında Dönen Enerji Bariyeri
+        // 3. Kalkan: dönen sabun köpüğü
         if (this.hasShield) {
-            ctx.save();
-            ctx.translate(this.x, this.y);
-            ctx.rotate(this.shieldAngle);
-
+            const sr = this.radius * 3.9;
             ctx.beginPath();
-            ctx.arc(0, 0, this.radius * 3.8, 0, Math.PI * 2);
-            ctx.strokeStyle = '#00ff88';
+            ctx.arc(this.x, this.y, sr, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(205, 184, 255, 0.22)';
+            ctx.fill();
+            ctx.strokeStyle = THEME.PURPLE;
             ctx.lineWidth = 2;
-            ctx.shadowColor = '#00ff88';
-            ctx.shadowBlur = 12;
             ctx.stroke();
-
-            // Kalkan altıgen/üçgen köşe kristal noktaları
-            for (let i = 0; i < 3; i++) {
-                const ang = (i * Math.PI * 2) / 3;
-                ctx.beginPath();
-                ctx.arc(Math.cos(ang) * this.radius * 3.8, Math.sin(ang) * this.radius * 3.8, 2.5, 0, Math.PI * 2);
-                ctx.fillStyle = '#ffffff';
-                ctx.fill();
-            }
-            ctx.restore();
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, sr - 4, this.shieldAngle, this.shieldAngle + 0.9);
+            ctx.strokeStyle = THEME.WHITE;
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            ctx.stroke();
         }
 
-        // 4. Dash esnasında patlayan parlak aura
-        if (this.isDashing) {
+        // 4. Gövdenin altındaki yumuşak gölge
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y + r * 0.9, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.SHADOW;
+        ctx.fill();
+
+        // 5. Marşmelov gövde (dash sırasında hafif ezilme)
+        const squash = this.isDashing ? 0.82 : 1 + Math.sin(t * 5) * 0.03;
+        ctx.beginPath();
+        ctx.ellipse(this.x, this.y, r / squash, r * squash, 0, 0, Math.PI * 2);
+        ctx.fillStyle = this.isDashing ? THEME.PINK_SOFT : THEME.WHITE;
+        ctx.fill();
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // 6. Minik yüz: gözler ve yanak allığı
+        ctx.fillStyle = THEME.INK;
+        const blink = (t % 3.2) < 0.12 ? 0.25 : 1;
+        for (const side of [-1, 1]) {
             ctx.beginPath();
-            ctx.arc(this.x, this.y, this.radius * 4, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-            ctx.shadowColor = '#ffffff';
-            ctx.shadowBlur = 20;
+            ctx.ellipse(this.x + side * r * 0.38, this.y - r * 0.2, 1.3, 1.8 * blink, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(255, 111, 174, 0.55)';
+        for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(this.x + side * r * 0.62, this.y + r * 0.18, 2.2, 1.3, 0, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // 5. Standart Dış Neon Işıma
+        // 7. Adil hitbox: merkezdeki pembe nokta
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius * 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = this.isDashing ? '#ffffff' : this.glow;
-        ctx.fill();
-
-        // 6. Orta Parlak Halka
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius + 1, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 10;
-        ctx.fill();
-
-        // 7. Adil Hitbox Göstergesi (Merkez beyaz çekirdek nokta)
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.hitboxRadius * 0.75, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.shadowColor = '#ffffff';
-        ctx.shadowBlur = 4;
+        ctx.arc(this.x, this.y + r * 0.22, this.hitboxRadius * 0.6, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.PINK_DEEP;
         ctx.fill();
 
         ctx.restore();

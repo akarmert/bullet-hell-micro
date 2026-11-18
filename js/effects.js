@@ -1,12 +1,25 @@
 // ============================================================
-// effects.js — Görsel Efektler, Reaktif Izgara ve Prosedürel Web Audio BGM
-// Screen shake, parçacık patlamaları, esnek yaylı ızgara ve synth müzik
+// effects.js — Görsel Efektler, Reaktif Benekli Zemin ve Prosedürel Müzik
+// Şeker serpintisi parçacıkları, pastel bulutlar, yaylı benek zemini,
+// marimba/pop sesleri ve faza göre katmanlanan neşeli müzik
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { THEME, font, candyPanel } from './theme.js';
+
+const midi = (m) => 440 * Math.pow(2, (m - 69) / 12);
+
+// Akor ilerlemeleri (MIDI): normal C – Am – F – G, boss Am – F – C – E
+const CHORDS = {
+    normal: [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]],
+    boss: [[57, 60, 64], [53, 57, 60], [60, 64, 67], [52, 56, 59]]
+};
+const ARP = [0, 1, 2, 1, 0, 2, 1, 2];
+const BELL = [2, 0, 1, 2];
 
 /**
- * 100% Sıfır Bağımlılıklı Web Audio API Ses ve Dinamik BGM Sistemi
+ * Sıfır bağımlılıklı Web Audio ses sistemi
+ * Marimba/pop efektleri ve ileriye dönük zamanlamalı (lookahead) sequencer
  */
 class SoundSystem {
     constructor() {
@@ -14,12 +27,17 @@ class SoundSystem {
         this.enabled = true;
         this.bgmEnabled = true;
 
-        // BGM Sentezleyici Durumu
         this.bgmPlaying = false;
         this.bgmStep = 0;
         this.bgmTimer = null;
         this.bgmFilter = null;
         this.bgmGain = null;
+        this.master = null;
+        this.noiseBuffer = null;
+        this.nextNoteTime = 0;
+
+        this.tension = 0;      // 0-3: faza göre müzik katmanları
+        this.bossMode = false; // Boss sırasında minör ilerleme ve hızlı tempo
     }
 
     /**
@@ -28,135 +46,191 @@ class SoundSystem {
     init() {
         if (!this.ctx) {
             const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            if (AudioContextClass) {
-                this.ctx = new AudioContextClass();
+            if (!AudioContextClass) return;
+            const ctx = new AudioContextClass();
+            this.ctx = ctx;
 
-                // BGM Ana Filtresi ve Kazanç Hattı
-                this.bgmFilter = this.ctx.createBiquadFilter();
-                this.bgmFilter.type = 'lowpass';
-                this.bgmFilter.frequency.setValueAtTime(1000, this.ctx.currentTime);
+            const comp = ctx.createDynamicsCompressor();
+            comp.threshold.value = -14;
+            comp.ratio.value = 4;
+            comp.connect(ctx.destination);
 
-                this.bgmGain = this.ctx.createGain();
-                this.bgmGain.gain.setValueAtTime(0.12, this.ctx.currentTime);
+            this.master = ctx.createGain();
+            this.master.gain.value = GAME_CONFIG.AUDIO.MASTER_VOLUME * 3;
+            this.master.connect(comp);
 
-                this.bgmFilter.connect(this.bgmGain);
-                this.bgmGain.connect(this.ctx.destination);
-            }
+            this.bgmFilter = ctx.createBiquadFilter();
+            this.bgmFilter.type = 'lowpass';
+            this.bgmFilter.frequency.value = 1800;
+            this.bgmGain = ctx.createGain();
+            this.bgmGain.gain.value = 0.55;
+            this.bgmFilter.connect(this.bgmGain);
+            this.bgmGain.connect(this.master);
+
+            const len = ctx.sampleRate;
+            this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+            const data = this.noiseBuffer.getChannelData(0);
+            for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
         }
-        if (this.ctx && this.ctx.state === 'suspended') {
-            this.ctx.resume();
-        }
+        if (this.ctx.state === 'suspended') this.ctx.resume();
     }
 
     // ------------------------------------------------------------
-    // PROSEDÜREL DİNAMİK BGM (Cyberpunk Retro Synth Sequencer)
+    // SES ÜRETİCİ YARDIMCILAR
+    // ------------------------------------------------------------
+
+    /** Tek osilatörlü nota (isteğe bağlı kayma ve vibrato) */
+    tone(freq, time, { type = 'sine', dur = 0.2, vol = 0.2, attack = 0.005, glideTo = null, vibrato = 0, dest = null } = {}) {
+        const ctx = this.ctx;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, time);
+        if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, time + dur);
+        if (vibrato) {
+            const lfo = ctx.createOscillator();
+            const depth = ctx.createGain();
+            lfo.frequency.value = 11;
+            depth.gain.value = vibrato;
+            lfo.connect(depth);
+            depth.connect(osc.frequency);
+            lfo.start(time);
+            lfo.stop(time + dur + 0.05);
+        }
+        gain.gain.setValueAtTime(0.0001, time);
+        gain.gain.linearRampToValueAtTime(vol, time + attack);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+        osc.connect(gain);
+        gain.connect(dest || this.master);
+        osc.start(time);
+        osc.stop(time + dur + 0.05);
+    }
+
+    /** Marimba benzeri yumuşak tını: temel + 4x kısmi */
+    pluck(freq, time, vol = 0.18, dur = 0.35, dest = null) {
+        this.tone(freq, time, { type: 'sine', dur, vol, dest });
+        this.tone(freq * 4, time, { type: 'sine', dur: dur * 0.18, vol: vol * 0.35, dest });
+    }
+
+    /** Filtrelenmiş gürültü vuruşu (shaker, snap, whoosh) */
+    noise(time, { dur = 0.05, vol = 0.1, type = 'highpass', freq = 6000, q = 0.8, sweepTo = null, dest = null } = {}) {
+        const ctx = this.ctx;
+        const src = ctx.createBufferSource();
+        src.buffer = this.noiseBuffer;
+        const filter = ctx.createBiquadFilter();
+        filter.type = type;
+        filter.frequency.setValueAtTime(freq, time);
+        if (sweepTo) filter.frequency.exponentialRampToValueAtTime(sweepTo, time + dur);
+        filter.Q.value = q;
+        const gain = ctx.createGain();
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.0001, time + dur);
+        src.connect(filter);
+        filter.connect(gain);
+        gain.connect(dest || this.master);
+        src.start(time, Math.random() * 0.5);
+        src.stop(time + dur + 0.02);
+    }
+
+    ready() {
+        return this.ctx && this.enabled;
+    }
+
+    // ------------------------------------------------------------
+    // PROSEDÜREL MÜZİK (lookahead zamanlayıcı)
     // ------------------------------------------------------------
 
     startBGM() {
         if (!this.ctx || !this.bgmEnabled || this.bgmPlaying) return;
         this.bgmPlaying = true;
         this.bgmStep = 0;
-
-        if (this.bgmFilter) {
-            this.bgmFilter.frequency.setValueAtTime(800, this.ctx.currentTime);
-        }
-
-        const stepTime = 115; // ~130 BPM (16th note aralığı)
-
-        const scheduleTick = () => {
-            if (!this.bgmPlaying) return;
-            this.tickBGM();
-            this.bgmTimer = setTimeout(scheduleTick, stepTime);
-        };
-
-        scheduleTick();
+        this.nextNoteTime = this.ctx.currentTime + 0.06;
+        this.bgmFilter.frequency.cancelScheduledValues(this.ctx.currentTime);
+        this.bgmFilter.frequency.setValueAtTime(1800, this.ctx.currentTime);
+        this.bgmTimer = setInterval(() => this.scheduleBGM(), 25);
+        this.scheduleBGM();
     }
 
-    tickBGM() {
-        if (!this.ctx || !this.bgmPlaying || !this.enabled || !this.bgmEnabled) return;
+    scheduleBGM() {
+        if (!this.bgmPlaying || !this.ctx) return;
+        const bpm = this.bossMode ? 132 : 116;
+        const stepDur = 60 / bpm / 4;
+        while (this.nextNoteTime < this.ctx.currentTime + 0.12) {
+            this.tickBGM(this.nextNoteTime);
+            this.nextNoteTime += stepDur;
+            this.bgmStep++;
+        }
+    }
 
-        const now = this.ctx.currentTime;
+    tickBGM(time) {
+        if (!this.enabled || !this.bgmEnabled) return;
+        const out = this.bgmFilter;
         const step = this.bgmStep % 16;
-        this.bgmStep++;
+        const bar = Math.floor(this.bgmStep / 16) % 4;
+        const chord = (this.bossMode ? CHORDS.boss : CHORDS.normal)[bar];
+        const root = chord[0] - 24;
+        const tension = this.bossMode ? 3 : this.tension;
 
-        // D-Minor Pentatonik Arpej Nota Havuzu (Hz)
-        const arpNotes = [293.66, 349.23, 440.00, 523.25, 587.33, 523.25, 440.00, 392.00];
-
-        // 1. Kick/Sub Bas: Adımlar 0, 4, 8, 12 (Düz 4/4 vuruş)
-        if (step % 4 === 0) {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-
-            osc.type = 'triangle';
-            osc.frequency.setValueAtTime(110, now);
-            osc.frequency.exponentialRampToValueAtTime(45, now + 0.09);
-
-            gain.gain.setValueAtTime(0.22, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-
-            osc.connect(gain);
-            gain.connect(this.bgmFilter);
-
-            osc.start(now);
-            osc.stop(now + 0.12);
+        // Yumuşak kick
+        const kickSteps = this.bossMode ? [0, 4, 8, 12] : [0, 8];
+        if (kickSteps.includes(step)) {
+            this.tone(140, time, { dur: 0.16, vol: 0.5, glideTo: 50, dest: out });
         }
 
-        // 2. Synth Arpej Hattı (16'lık adımlar)
-        if (step % 2 === 0 || this.bgmStep > 16) {
-            const noteIdx = (step + Math.floor(this.bgmStep / 16)) % arpNotes.length;
-            const freq = arpNotes[noteIdx];
+        // Zıplayan bas
+        const bass = { 0: 0, 6: 12, 8: 0, 14: 7 };
+        if (bass[step] !== undefined) {
+            this.tone(midi(root + bass[step]), time, { type: 'triangle', dur: 0.22, vol: 0.32, dest: out });
+        }
 
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
+        // Marimba arpej (8'likler), gerilimde 16'lık süslemeler
+        if (step % 2 === 0) {
+            const note = chord[ARP[(step / 2) % 8] % 3] + 12;
+            this.pluck(midi(note), time, 0.14, 0.3, out);
+        } else if (tension >= 2) {
+            const note = chord[(step + bar) % 3] + 24;
+            this.pluck(midi(note), time, 0.05, 0.18, out);
+        }
 
-            osc.type = 'sawtooth';
-            osc.frequency.setValueAtTime(freq, now);
+        // Shaker ve parmak şıklatma
+        if (tension >= 1) {
+            if (step % 4 === 2 || (this.bossMode && step % 2 === 1)) {
+                this.noise(time, { dur: 0.035, vol: 0.08, freq: 7000, dest: out });
+            }
+            if (step === 4 || step === 12) {
+                this.noise(time, { dur: 0.09, vol: 0.22, type: 'bandpass', freq: 1900, q: 1.2, dest: out });
+            }
+        }
 
-            gain.gain.setValueAtTime(0.06, now);
-            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
-
-            osc.connect(gain);
-            gain.connect(this.bgmFilter);
-
-            osc.start(now);
-            osc.stop(now + 0.08);
+        // Çan melodisi
+        if (tension >= 3 && step % 4 === 0) {
+            const note = chord[BELL[step / 4]] + 24;
+            this.tone(midi(note), time, { type: 'triangle', dur: 0.45, vol: 0.07, dest: out });
+            this.tone(midi(note) * 2, time, { type: 'sine', dur: 0.25, vol: 0.03, dest: out });
         }
     }
 
     /**
-     * Süreye göre müziğin tansiyonunu ve filtre frekansını açar
+     * Süreye göre müzik katmanlarını ve filtre açıklığını ayarlar
      */
     updateBGMTension(elapsedMs) {
         if (!this.ctx || !this.bgmFilter) return;
-        const now = this.ctx.currentTime;
-
-        let targetCutoff = 800;
-        if (elapsedMs < 10000) {
-            targetCutoff = 800 + (elapsedMs / 10000) * 400; // 800 -> 1200
-        } else if (elapsedMs < 20000) {
-            targetCutoff = 1200 + ((elapsedMs - 10000) / 10000) * 600; // 1200 -> 1800
-        } else if (elapsedMs < 30000) {
-            targetCutoff = 1800 + ((elapsedMs - 20000) / 10000) * 800; // 1800 -> 2600
-        } else {
-            targetCutoff = 2800;
-        }
-
-        this.bgmFilter.frequency.setTargetAtTime(targetCutoff, now, 0.2);
+        this.tension = elapsedMs < 10000 ? 0 : elapsedMs < 20000 ? 1 : elapsedMs < 30000 ? 2 : 3;
+        const target = this.bossMode ? 6500 : 1800 + this.tension * 1300;
+        this.bgmFilter.frequency.setTargetAtTime(target, this.ctx.currentTime, 0.3);
     }
 
     stopBGM() {
         this.bgmPlaying = false;
         if (this.bgmTimer) {
-            clearTimeout(this.bgmTimer);
+            clearInterval(this.bgmTimer);
             this.bgmTimer = null;
         }
     }
 
     toggleBGM() {
         this.bgmEnabled = !this.bgmEnabled;
-        if (!this.bgmEnabled) {
-            this.stopBGM();
-        }
+        if (!this.bgmEnabled) this.stopBGM();
         return this.bgmEnabled;
     }
 
@@ -164,216 +238,93 @@ class SoundSystem {
     // OYUN İÇİ SES EFEKTLERİ
     // ------------------------------------------------------------
 
+    /** Başlangıç: yukarı tırmanan marimba */
     playStart() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(220, now);
-        osc.frequency.exponentialRampToValueAtTime(880, now + 0.15);
-
-        gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.18);
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        [72, 76, 79, 84].forEach((m, i) => this.pluck(midi(m), t + i * 0.06, 0.22, 0.4));
     }
 
+    /** Ölüm: sönen balon + hüzünlü iki nota */
     playDeath() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-
-        // BGM'yi dramatik alçak geçiren filtreyle sönümle
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
         if (this.bgmFilter) {
-            this.bgmFilter.frequency.setValueAtTime(400, now);
-            this.bgmFilter.frequency.exponentialRampToValueAtTime(60, now + 0.4);
+            this.bgmFilter.frequency.cancelScheduledValues(t);
+            this.bgmFilter.frequency.setValueAtTime(1500, t);
+            this.bgmFilter.frequency.exponentialRampToValueAtTime(80, t + 0.4);
         }
         this.stopBGM();
-
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(180, now);
-        osc.frequency.exponentialRampToValueAtTime(25, now + 0.32);
-
-        gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 1.6, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.35);
+        this.tone(620, t, { type: 'sine', dur: 0.55, vol: 0.4, glideTo: 90, vibrato: 35 });
+        this.noise(t, { dur: 0.3, vol: 0.25, type: 'lowpass', freq: 1200, sweepTo: 200 });
+        this.tone(midi(67), t + 0.45, { type: 'triangle', dur: 0.3, vol: 0.18 });
+        this.tone(midi(60), t + 0.72, { type: 'triangle', dur: 0.6, vol: 0.18 });
     }
 
-    /**
-     * Graze (Teğet geçme) geri bildirim tık sesi (hafif, tatmin edici)
-     */
+    /** Graze: minik baloncuk patlaması (her seferinde hafif farklı perde) */
     playGraze() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(1400, now);
-        osc.frequency.exponentialRampToValueAtTime(2200, now + 0.04);
-
-        gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 0.4, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.045);
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        const f = 520 * (1 + Math.random() * 0.35);
+        this.tone(f, t, { dur: 0.06, vol: 0.16, glideTo: f * 2.6, attack: 0.002 });
     }
 
-    /**
-     * Dash (I-Frame) hava yarılma / sıyrılma sesi
-     */
+    /** Dash: yumuşak hava süpürmesi */
     playDash() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(550, now);
-        osc.frequency.exponentialRampToValueAtTime(120, now + 0.14);
-
-        gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 0.9, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.16);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.16);
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        this.noise(t, { dur: 0.22, vol: 0.35, type: 'bandpass', freq: 500, sweepTo: 3500, q: 1.4 });
+        this.tone(300, t, { dur: 0.16, vol: 0.12, glideTo: 640 });
     }
 
-    /**
-     * Kalkan kırılma / darbe emme sesi
-     */
+    /** Kalkan kırılması: büyük köpük patlaması + düşen ışıltı */
     playShieldBreak() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-
-        osc.type = 'square';
-        osc.frequency.setValueAtTime(420, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now + 0.22);
-
-        gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 1.2, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.24);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.24);
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        this.tone(260, t, { dur: 0.1, vol: 0.4, glideTo: 900, attack: 0.002 });
+        this.noise(t, { dur: 0.12, vol: 0.2, type: 'bandpass', freq: 2500, q: 0.7 });
+        [96, 93, 89].forEach((m, i) => this.tone(midi(m), t + 0.06 + i * 0.05, { dur: 0.12, vol: 0.06 }));
     }
 
-    /**
-     * Güçlendirme (Pick-up) toplama sesi (parlak arpej)
-     */
+    /** Güçlendirme: parlak üçlü çan */
     playPickup() {
-        if (!this.ctx || !this.enabled) return;
-        const notes = [440, 659.25, 880]; // A4, E5, A5
-        const now = this.ctx.currentTime;
-
-        notes.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            const startTime = now + idx * 0.05;
-
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, startTime);
-
-            gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 0.8, startTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.12);
-
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-
-            osc.start(startTime);
-            osc.stop(startTime + 0.12);
-        });
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        [84, 88, 91].forEach((m, i) => this.pluck(midi(m), t + i * 0.05, 0.16, 0.3));
     }
 
+    /** Yeni rekor: küçük fanfar */
     playRecord() {
-        if (!this.ctx || !this.enabled) return;
-        const notes = [523.25, 659.25, 783.99, 1046.50];
-        const now = this.ctx.currentTime;
-
-        notes.forEach((freq, idx) => {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            const startTime = now + idx * 0.08;
-
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(freq, startTime);
-
-            gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME, startTime);
-            gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.2);
-
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-
-            osc.start(startTime);
-            osc.stop(startTime + 0.2);
-        });
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        [72, 76, 79].forEach((m, i) => this.pluck(midi(m), t + i * 0.09, 0.2, 0.3));
+        this.pluck(midi(84), t + 0.27, 0.24, 0.8);
+        this.tone(midi(88), t + 0.27, { type: 'triangle', dur: 0.8, vol: 0.08 });
     }
 
-    playBossAlarm() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-        for (let i = 0; i < 3; i++) {
-            const t = now + i * 0.32;
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'square';
-            osc.frequency.setValueAtTime(220, t);
-            osc.frequency.linearRampToValueAtTime(160, t + 0.24);
-            gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 0.45, t);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(t);
-            osc.stop(t + 0.26);
-        }
-    }
-
+    /** Faz değişimi: iki notalı çan */
     playPhase() {
-        if (!this.ctx || !this.enabled) return;
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        this.pluck(midi(79), t, 0.16, 0.25);
+        this.pluck(midi(84), t + 0.08, 0.16, 0.4);
+    }
 
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(600, now);
-        osc.frequency.exponentialRampToValueAtTime(900, now + 0.1);
-
-        gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 0.7, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-
-        osc.start(now);
-        osc.stop(now + 0.12);
+    /** Boss geliyor: titrek "uh-oh" */
+    playBossAlarm() {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        for (let i = 0; i < 2; i++) {
+            const s = t + i * 0.6;
+            this.tone(midi(76), s, { type: 'triangle', dur: 0.2, vol: 0.28, vibrato: 18 });
+            this.tone(midi(71), s + 0.22, { type: 'triangle', dur: 0.32, vol: 0.28, glideTo: midi(69), vibrato: 18 });
+            this.tone(110, s, { dur: 0.2, vol: 0.35, glideTo: 55 });
+        }
     }
 }
 
 /**
- * Patlama ve Efekt Parçacığı
+ * Şeker serpintisi parçacığı (dönen yuvarlak çubuk veya minik top)
  */
 class Particle {
     constructor(x, y, color, speedScale = 1.0, lifeScale = 1.0) {
@@ -386,8 +337,13 @@ class Particle {
 
         this.vx = Math.cos(angle) * speed;
         this.vy = Math.sin(angle) * speed;
-        this.radius = (2 + Math.random() * 3) * Math.min(speedScale, 1.5);
-        this.maxLife = GAME_CONFIG.EFFECTS.PARTICLE_LIFETIME * lifeScale;
+        const scale = Math.min(speedScale, 1.5);
+        this.length = (5 + Math.random() * 5) * scale;
+        this.width = 2.6 * Math.max(0.7, scale);
+        this.round = Math.random() < 0.3; // Bazıları minik şeker topu
+        this.rotation = Math.random() * Math.PI;
+        this.spin = (Math.random() * 2 - 1) * 10;
+        this.maxLife = GAME_CONFIG.EFFECTS.PARTICLE_LIFETIME * lifeScale * 1.3;
         this.life = this.maxLife;
     }
 
@@ -395,22 +351,30 @@ class Particle {
         this.life -= dt * 1000;
         this.x += this.vx * dt;
         this.y += this.vy * dt;
-        this.vx *= 0.95; // Sürtünme
-        this.vy *= 0.95;
+        this.vx *= 0.94;
+        this.vy = this.vy * 0.94 + 160 * dt; // Hafif yerçekimi: konfeti gibi düşer
+        this.rotation += this.spin * dt;
     }
 
     render(ctx) {
         if (this.life <= 0) return;
-        const alpha = Math.max(0, this.life / this.maxLife);
+        const alpha = Math.min(1, (this.life / this.maxLife) * 1.8);
 
         ctx.save();
         ctx.globalAlpha = alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.rotation);
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        if (this.round) {
+            ctx.arc(0, 0, this.width * 0.9, 0, Math.PI * 2);
+        } else {
+            ctx.roundRect(-this.length / 2, -this.width / 2, this.length, this.width, this.width / 2);
+        }
         ctx.fillStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 6;
         ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = THEME.INK_SOFT;
+        ctx.stroke();
         ctx.restore();
     }
 }
@@ -491,33 +455,20 @@ class SpringGrid {
     }
 
     /**
-     * Esnemiş ızgara çizgilerini çizer
+     * Esneyen benekli zemin: itilen benekler büyür ve pembeleşir
      */
     render(ctx) {
         ctx.save();
-        ctx.strokeStyle = 'rgba(0, 255, 255, 0.04)';
-        ctx.lineWidth = 1;
-
-        // Yatay çizgiler
-        for (let r = 0; r < this.rows; r++) {
-            ctx.beginPath();
-            ctx.moveTo(this.points[0][r].x, this.points[0][r].y);
-            for (let c = 1; c < this.cols; c++) {
-                ctx.lineTo(this.points[c][r].x, this.points[c][r].y);
-            }
-            ctx.stroke();
-        }
-
-        // Dikey çizgiler
         for (let c = 0; c < this.cols; c++) {
-            ctx.beginPath();
-            ctx.moveTo(this.points[c][0].x, this.points[c][0].y);
-            for (let r = 1; r < this.rows; r++) {
-                ctx.lineTo(this.points[c][r].x, this.points[c][r].y);
+            for (let r = 0; r < this.rows; r++) {
+                const pt = this.points[c][r];
+                const d = Math.min(24, Math.abs(pt.x - pt.baseX) + Math.abs(pt.y - pt.baseY));
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 2 + d * 0.14, 0, Math.PI * 2);
+                ctx.fillStyle = d > 3 ? 'rgba(255, 111, 174, 0.55)' : 'rgba(142, 91, 232, 0.16)';
+                ctx.fill();
             }
-            ctx.stroke();
         }
-
         ctx.restore();
     }
 
@@ -556,10 +507,31 @@ export class EffectsManager {
 
         // EMP Şok Dalgası Halka Efekti
         this.shockwaves = [];
+
+        // Arka planda süzülen pastel bulutlar
+        this.blobs = this.createBlobs(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
+    }
+
+    createBlobs(width, height) {
+        const colors = ['255, 196, 222', '205, 184, 255', '255, 214, 232'];
+        const blobs = [];
+        const count = Math.max(5, Math.round(width / 140));
+        for (let i = 0; i < count; i++) {
+            blobs.push({
+                x: Math.random() * width,
+                y: Math.random() * height,
+                r: 90 + Math.random() * 110,
+                vx: (Math.random() * 2 - 1) * 8,
+                vy: (Math.random() * 2 - 1) * 6,
+                color: colors[i % colors.length]
+            });
+        }
+        return blobs;
     }
 
     resize(width, height) {
         this.grid = new SpringGrid(width, height, 50);
+        this.blobs = this.createBlobs(width, height);
     }
 
     initAudio() {
@@ -576,7 +548,7 @@ export class EffectsManager {
 
         this.particles = [];
         const count = GAME_CONFIG.EFFECTS.PARTICLE_COUNT;
-        const colors = ['#00ffff', '#ffffff', '#ff0055', '#ffea00'];
+        const colors = THEME.SPRINKLES;
 
         for (let i = 0; i < count; i++) {
             const color = colors[i % colors.length];
@@ -591,14 +563,14 @@ export class EffectsManager {
      * Faz değişimini bildirir
      */
     triggerPhase(phaseName) {
-        this.triggerBanner(`FAZ: ${phaseName}`, '#00ffff');
+        this.triggerBanner(`FAZ: ${phaseName}`, THEME.PURPLE);
         this.sound.playPhase();
     }
 
     /**
      * Genel amaçlı ekran üstü neon bildirim
      */
-    triggerBanner(text, color = '#ffffff') {
+    triggerBanner(text, color = THEME.PINK) {
         this.bannerText = text;
         this.bannerColor = color;
         this.bannerTimer = 1600;
@@ -609,7 +581,7 @@ export class EffectsManager {
      */
     triggerGraze(x, y) {
         this.sound.playGraze();
-        const colors = ['#ffe600', '#ffffff'];
+        const colors = [THEME.PINK, THEME.LAVENDER];
         for (let i = 0; i < 3; i++) {
             this.particles.push(new Particle(x, y, colors[i % 2], 0.4, 0.4));
         }
@@ -622,7 +594,7 @@ export class EffectsManager {
     triggerDash(x, y) {
         this.sound.playDash();
         for (let i = 0; i < 8; i++) {
-            this.particles.push(new Particle(x, y, '#ffffff', 0.6, 0.5));
+            this.particles.push(new Particle(x, y, i % 2 ? THEME.WHITE : THEME.PINK_SOFT, 0.6, 0.5));
         }
         this.grid.applyForce(x, y, 120, 100);
     }
@@ -637,7 +609,7 @@ export class EffectsManager {
         this.flashAlpha = 0.25;
 
         for (let i = 0; i < 16; i++) {
-            this.particles.push(new Particle(x, y, '#00ff88', 0.9, 0.8));
+            this.particles.push(new Particle(x, y, i % 2 ? THEME.PURPLE : THEME.LAVENDER, 0.9, 0.8));
         }
         this.grid.applyForce(x, y, 160, 130);
     }
@@ -666,7 +638,7 @@ export class EffectsManager {
             y,
             radius: 10,
             maxRadius: 450,
-            color: '#ff00aa',
+            color: THEME.PINK,
             alpha: 1.0
         });
 
@@ -685,7 +657,7 @@ export class EffectsManager {
      * Boss geliyor uyarısı
      */
     triggerBossIncoming() {
-        this.triggerBanner('⚠ BOSS YAKLAŞIYOR: NEXUS', '#ff7a1a');
+        this.triggerBanner('⚠ JÖLE KRAL GELİYOR!', THEME.PINK_DEEP);
         this.bannerTimer = 2200;
         this.shakeTimer = 600;
         this.shakeIntensity = 4;
@@ -696,13 +668,13 @@ export class EffectsManager {
      * Boss aşama değişimi: turuncu şok dalgası
      */
     triggerBossStage(x, y, stageName) {
-        this.triggerBanner(`NEXUS: ${stageName}`, '#ff7a1a');
+        this.triggerBanner(`JÖLE KRAL: ${stageName}`, THEME.PINK_DEEP);
         this.sound.playPhase();
         this.shakeTimer = 220;
         this.shakeIntensity = 6;
-        this.shockwaves.push({ x, y, radius: 10, maxRadius: 220, color: '#ff7a1a', alpha: 1.0 });
+        this.shockwaves.push({ x, y, radius: 10, maxRadius: 220, color: THEME.PINK, alpha: 1.0 });
         for (let i = 0; i < 16; i++) {
-            this.particles.push(new Particle(x, y, i % 2 ? '#ffffff' : '#ff7a1a', 0.8, 0.7));
+            this.particles.push(new Particle(x, y, i % 2 ? THEME.LAVENDER : THEME.PINK, 0.8, 0.7));
         }
         this.grid.applyForce(x, y, 200, 160);
     }
@@ -712,16 +684,16 @@ export class EffectsManager {
      */
     triggerBossDefeated(x, y, destroyedBullets) {
         this.triggerEMP(x, y, destroyedBullets);
-        this.shockwaves[this.shockwaves.length - 1].color = '#ff7a1a';
-        this.shockwaves.push({ x, y, radius: 4, maxRadius: 700, color: '#ffffff', alpha: 1.0 });
+        this.shockwaves[this.shockwaves.length - 1].color = THEME.PINK_DEEP;
+        this.shockwaves.push({ x, y, radius: 4, maxRadius: 700, color: THEME.PURPLE, alpha: 1.0 });
         this.shakeTimer = 500;
         this.shakeIntensity = 14;
         this.flashAlpha = 0.6;
-        const colors = ['#ff7a1a', '#ffffff', '#ffe600'];
-        for (let i = 0; i < 48; i++) {
-            this.particles.push(new Particle(x, y, colors[i % 3], 1.3, 1.4));
+        const colors = THEME.SPRINKLES;
+        for (let i = 0; i < 60; i++) {
+            this.particles.push(new Particle(x, y, colors[i % colors.length], 1.3, 1.4));
         }
-        this.triggerBanner('★ NEXUS YENİLDİ! ★', '#ffe600');
+        this.triggerBanner('★ JÖLE KRAL ERİDİ! ★', THEME.PURPLE);
         this.bannerTimer = 2200;
         this.sound.playRecord();
     }
@@ -734,8 +706,20 @@ export class EffectsManager {
     update(dt, elapsedMs = 0) {
         const dtMs = dt * 1000;
 
-        // Reaktif ızgara fiziği
+        // Reaktif benek fiziği
         this.grid.update(dt);
+
+        // Pastel bulut süzülmesi (kenarlardan dolanır)
+        const W = GAME_CONFIG.CANVAS.WIDTH;
+        const H = GAME_CONFIG.CANVAS.HEIGHT;
+        for (const b of this.blobs) {
+            b.x += b.vx * dt;
+            b.y += b.vy * dt;
+            if (b.x < -b.r) b.x = W + b.r;
+            if (b.x > W + b.r) b.x = -b.r;
+            if (b.y < -b.r) b.y = H + b.r;
+            if (b.y > H + b.r) b.y = -b.r;
+        }
 
         // BGM Filtresi gerilim güncellemesi
         if (this.sound.bgmPlaying) {
@@ -800,6 +784,13 @@ export class EffectsManager {
      * Reaktif ızgarayı çizer
      */
     renderGrid(ctx) {
+        for (const b of this.blobs) {
+            const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+            g.addColorStop(0, `rgba(${b.color}, 0.55)`);
+            g.addColorStop(1, `rgba(${b.color}, 0)`);
+            ctx.fillStyle = g;
+            ctx.fillRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+        }
         this.grid.render(ctx);
     }
 
@@ -807,45 +798,46 @@ export class EffectsManager {
      * Çizim bittikten sonra parçacıkları, şok dalgalarını, flaşı ve banner'ı çizer
      */
     postRender(ctx) {
-        // Şok dalgaları
+        // Şok dalgaları: kalın yumuşak halkalar
         for (let i = 0; i < this.shockwaves.length; i++) {
             const sw = this.shockwaves[i];
             ctx.save();
-            ctx.globalAlpha = sw.alpha;
+            ctx.globalAlpha = sw.alpha * 0.8;
             ctx.beginPath();
             ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
             ctx.strokeStyle = sw.color;
-            ctx.lineWidth = 3;
-            ctx.shadowColor = sw.color;
-            ctx.shadowBlur = 14;
+            ctx.lineWidth = 6 * sw.alpha + 1;
             ctx.stroke();
             ctx.restore();
         }
 
-        // Parçacıklar
+        // Şeker serpintisi
         for (let i = 0; i < this.particles.length; i++) {
             this.particles[i].render(ctx);
         }
 
-        // Flash efekti
+        // Pembe flaş
         if (this.flashAlpha > 0.01) {
             ctx.save();
-            ctx.fillStyle = `rgba(255, 255, 255, ${this.flashAlpha})`;
+            ctx.fillStyle = `rgba(255, 196, 222, ${this.flashAlpha})`;
             ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
             ctx.restore();
         }
 
-        // Bildirim banner'ı
+        // Bildirim: şeker etiketi
         if (this.bannerTimer > 0) {
             ctx.save();
-            const alpha = Math.min(1, this.bannerTimer / 350);
-            ctx.globalAlpha = alpha;
-            ctx.font = 'bold 16px "JetBrains Mono", monospace';
-            ctx.fillStyle = '#ffffff';
+            ctx.globalAlpha = Math.min(1, this.bannerTimer / 300);
+            ctx.font = font(16, 700);
+            const tw = ctx.measureText(this.bannerText).width;
+            const cx = GAME_CONFIG.CANVAS.WIDTH / 2;
+            const cy = 148; // Sayaç ve boss barının altında
+            ctx.translate(cx, cy);
+            candyPanel(ctx, -tw / 2 - 16, -15, tw + 32, 30, 15, THEME.WHITE, { depth: 3, shadow: this.bannerColor });
+            ctx.fillStyle = THEME.INK;
             ctx.textAlign = 'center';
-            ctx.shadowColor = this.bannerColor;
-            ctx.shadowBlur = 14;
-            ctx.fillText(this.bannerText, GAME_CONFIG.CANVAS.WIDTH / 2, 95);
+            ctx.textBaseline = 'middle';
+            ctx.fillText(this.bannerText, 0, 1);
             ctx.restore();
         }
 

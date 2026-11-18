@@ -4,6 +4,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { THEME, font } from './theme.js';
 
 export class Pickup {
     constructor({ x, y, typeConfig }) {
@@ -35,54 +36,90 @@ export class Pickup {
         // Son 1.5 saniyede yanıp sönerek kaybolma uyarısı
         let alpha = 1.0;
         if (this.lifetime < 1500) {
-            alpha = (Math.sin(this.lifetime * 0.02) + 1) * 0.4 + 0.2;
+            alpha = (Math.sin(this.lifetime * 0.02) + 1) * 0.35 + 0.3;
         }
 
-        const pulseScale = 1.0 + Math.sin(this.pulsePhase) * 0.18;
-        const r = this.radius * pulseScale;
+        const bob = Math.sin(this.pulsePhase) * 2.5;
+        const r = this.radius;
+        const wiggle = Math.sin(this.pulsePhase * 0.8) * 0.25;
 
         ctx.save();
         ctx.globalAlpha = alpha;
+        ctx.translate(this.x, this.y + bob);
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2;
 
-        // 1. Dış parıldayan neon halo
+        // Gölge
         ctx.beginPath();
-        ctx.arc(this.x, this.y, r * 2.2, 0, Math.PI * 2);
-        ctx.fillStyle = this.glow;
+        ctx.ellipse(0, r + 6 - bob, r * 0.9, 3, 0, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.SHADOW;
         ctx.fill();
 
-        // 2. Dış dönen geometrik halka
+        // Ambalaj kanatları (paketli şeker)
         ctx.save();
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.pulsePhase * 0.5);
-        ctx.beginPath();
-        ctx.strokeStyle = this.color;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 12;
-        ctx.lineWidth = 1.8;
-        
-        // Kare/Baklava çerçeve
-        ctx.strokeRect(-r, -r, r * 2, r * 2);
+        ctx.rotate(wiggle);
+        for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.moveTo(side * r * 0.8, 0);
+            ctx.lineTo(side * r * 1.75, -r * 0.65);
+            ctx.lineTo(side * r * 1.75, r * 0.65);
+            ctx.closePath();
+            ctx.fillStyle = THEME.WHITE;
+            ctx.fill();
+            ctx.stroke();
+        }
         ctx.restore();
 
-        // 3. İç parlak çekirdek küre
+        // Şeker gövdesi
         ctx.beginPath();
-        ctx.arc(this.x, this.y, r * 0.75, 0, Math.PI * 2);
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
+        ctx.stroke();
 
-        // 4. Merkez beyaz parlak nokta
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, r * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
+        // İkon
+        ctx.fillStyle = THEME.WHITE;
+        ctx.strokeStyle = THEME.WHITE;
+        ctx.lineWidth = 1.8;
+        ctx.lineCap = 'round';
+        if (this.type === 'shield') {
+            ctx.beginPath();
+            ctx.moveTo(0, -r * 0.55);
+            ctx.lineTo(r * 0.45, -r * 0.35);
+            ctx.lineTo(r * 0.35, r * 0.2);
+            ctx.lineTo(0, r * 0.55);
+            ctx.lineTo(-r * 0.35, r * 0.2);
+            ctx.lineTo(-r * 0.45, -r * 0.35);
+            ctx.closePath();
+            ctx.fill();
+        } else if (this.type === 'slowmo') {
+            ctx.beginPath();
+            ctx.arc(0, 0, r * 0.5, 0, Math.PI * 2);
+            ctx.moveTo(0, 0);
+            ctx.lineTo(0, -r * 0.35);
+            ctx.moveTo(0, 0);
+            ctx.lineTo(r * 0.25, r * 0.1);
+            ctx.stroke();
+        } else {
+            ctx.beginPath();
+            for (let i = 0; i < 10; i++) {
+                const a = -Math.PI / 2 + (i * Math.PI) / 5;
+                const rr = i % 2 ? r * 0.25 : r * 0.6;
+                ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * rr, Math.sin(a) * rr);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
 
-        // 5. Küçük etiket metni
-        ctx.font = 'bold 9px "JetBrains Mono", monospace';
-        ctx.fillStyle = '#ffffff';
+        // Etiket
+        ctx.font = font(10, 700);
         ctx.textAlign = 'center';
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 6;
-        ctx.fillText(this.label, this.x, this.y - r * 1.5);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = THEME.WHITE;
+        ctx.strokeText(this.label, 0, -r * 1.55);
+        ctx.fillStyle = THEME.INK;
+        ctx.fillText(this.label, 0, -r * 1.55);
 
         ctx.restore();
     }
@@ -114,7 +151,8 @@ export class PickupManager {
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
         const x = margin + Math.random() * (w - margin * 2);
-        const y = margin + Math.random() * (h - margin * 2);
+        const top = 150; // HUD ve boss barının altında kalsın
+        const y = top + Math.random() * (h - top - margin);
 
         this.pickups.push(new Pickup({
             x,

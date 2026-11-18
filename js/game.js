@@ -15,6 +15,7 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
+import { THEME } from './theme.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -199,7 +200,8 @@ export class Game {
             } else if (e.code === 'KeyB') {
                 // 'B' tuşu: Synth Müziği Aç / Kapat
                 const isBgmOn = this.effects.sound.toggleBGM();
-                this.effects.triggerBanner(isBgmOn ? 'SYNTH MÜZİK: AÇIK' : 'SYNTH MÜZİK: KAPALI', '#00ffff');
+                if (isBgmOn && this.state === GAME_STATE.PLAYING) this.effects.sound.startBGM();
+                this.effects.triggerBanner(isBgmOn ? '♪ müzik açık' : '♪ müzik kapalı', THEME.LAVENDER);
             } else if (e.code === 'KeyM' || e.code === 'Escape') {
                 // Mod değiştirmek veya ana menüye dönmek için
                 if (this.state === GAME_STATE.DEAD) {
@@ -338,6 +340,7 @@ export class Game {
 
         this.elapsedMs = 0;
         this.resumeCountdown = 0;
+        this.effects.sound.bossMode = false;
 
         this.effects.sound.playStart();
         this.effects.sound.startBGM();
@@ -419,6 +422,9 @@ export class Game {
                 this.player.isDashing ? 65 : 40
             );
 
+            // Müzik boss sırasında minör ve hızlı çalar
+            this.effects.sound.bossMode = this.waveManager.isBossPhase(this.elapsedMs);
+
             // Slow-mo güçlendirmesi çarpanı
             const speedFactor = this.pickupManager.getSpeedFactor();
 
@@ -442,7 +448,7 @@ export class Game {
                 // onShieldBreak
                 (bullet) => {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
-                    this.effects.triggerBanner('KALKAN KIRILDI!', '#00ff88');
+                    this.effects.triggerBanner('KALKAN PATLADI!', THEME.PURPLE);
                 }
             );
 
@@ -457,7 +463,7 @@ export class Game {
                 const contact = boss.resolveBodyContact(this.player);
                 if (contact === 'shield') {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
-                    this.effects.triggerBanner('KALKAN KIRILDI!', '#00ff88');
+                    this.effects.triggerBanner('KALKAN PATLADI!', THEME.PURPLE);
                 } else if (contact === 'fatal') {
                     this.triggerDeath();
                     return;
@@ -478,7 +484,7 @@ export class Game {
         this.effects.preRender(ctx);
 
         // Arka plan temizliği
-        ctx.fillStyle = '#080811';
+        ctx.fillStyle = THEME.BG;
         ctx.fillRect(0, 0, w, h);
 
         // Reaktif Dinamik Yaylı Izgara
@@ -524,9 +530,11 @@ export class Game {
      */
     renderArenaBorder(ctx, w, h) {
         ctx.save();
-        ctx.strokeStyle = this.state === GAME_STATE.DEAD ? 'rgba(255, 0, 85, 0.8)' : 'rgba(0, 255, 255, 0.35)';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(1, 1, w - 2, h - 2);
+        ctx.strokeStyle = this.state === GAME_STATE.DEAD ? THEME.PINK : THEME.LAVENDER;
+        ctx.lineWidth = 6;
+        ctx.beginPath();
+        ctx.roundRect(3, 3, w - 6, h - 6, 18);
+        ctx.stroke();
         ctx.restore();
     }
 }

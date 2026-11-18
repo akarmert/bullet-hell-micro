@@ -13,8 +13,8 @@ export const GAME_CONFIG = {
         RADIUS: 5,
         HITBOX_RADIUS: 4,     // Adil oyun hissi için hafif küçük hitbox
         GRAZE_RADIUS: 16,     // Teğet geçme (Graze) algılama yarıçapı
-        COLOR: '#00ffff',
-        GLOW: 'rgba(0, 255, 255, 0.6)',
+        COLOR: '#FFFFFF',
+        GLOW: 'rgba(255, 111, 174, 0.25)',
         START_X: 300,
         START_Y: 300,
         KEYBOARD_SPEED: 360,  // Klavye / Gamepad hareket hızı (px/s)
@@ -31,9 +31,9 @@ export const GAME_CONFIG = {
         LIFETIME: 6500,        // Sahada kalma süresi (ms)
         RADIUS: 11,
         TYPES: {
-            SHIELD: { id: 'shield', color: '#00ff88', glow: 'rgba(0, 255, 136, 0.6)', label: 'SHIELD' },
-            SLOWMO: { id: 'slowmo', color: '#ffaa00', glow: 'rgba(255, 170, 0, 0.6)', label: 'SLOW-MO', duration: 2800, factor: 0.55 },
-            EMP:    { id: 'emp',    color: '#ff00aa', glow: 'rgba(255, 0, 170, 0.6)', label: 'EMP' }
+            SHIELD: { id: 'shield', color: '#8E5BE8', glow: 'rgba(142, 91, 232, 0.2)', label: 'KALKAN' },
+            SLOWMO: { id: 'slowmo', color: '#B79BFF', glow: 'rgba(183, 155, 255, 0.25)', label: 'YAVAŞ', duration: 2800, factor: 0.55 },
+            EMP:    { id: 'emp',    color: '#FF6FAE', glow: 'rgba(255, 111, 174, 0.2)', label: 'POP!' }
         }
     },
 
@@ -47,8 +47,8 @@ export const GAME_CONFIG = {
         SPEED_MIN: 110,
         SPEED_MAX: 170,
         RADIUS: 4.5,
-        COLOR: '#ff3366',
-        GLOW: 'rgba(255, 51, 102, 0.5)',
+        COLOR: '#FF6FAE',           // Sakız topu
+        GLOW: 'rgba(255, 111, 174, 0.25)',
         SHAPE: 'circle'
     },
 
@@ -62,8 +62,8 @@ export const GAME_CONFIG = {
         RADIUS: 4,
         ARMS: 3,             // Spiral kol sayısı
         BASE_ROT_SPEED: 2.0, // rad/s
-        COLOR: '#cc33ff',
-        GLOW: 'rgba(204, 51, 255, 0.5)',
+        COLOR: '#B79BFF',           // Lavanta donut
+        GLOW: 'rgba(183, 155, 255, 0.25)',
         SHAPE: 'ring'
     },
 
@@ -75,8 +75,8 @@ export const GAME_CONFIG = {
         MIN_INTERVAL: 260,
         SPEED: 280,
         RADIUS: 4.5,
-        COLOR: '#ffe600',
-        GLOW: 'rgba(255, 230, 0, 0.5)',
+        COLOR: '#8E5BE8',           // Mor şeker kristali
+        GLOW: 'rgba(142, 91, 232, 0.25)',
         TRAIL_LENGTH: 8,
         SHAPE: 'diamond',
         TELEGRAPH_TIME: 380 // Ateşleme öncesi uyarı lazeri süresi (ms)
@@ -91,8 +91,8 @@ export const GAME_CONFIG = {
         SPEED: 320,
         MAX_SPEED: 440,
         RADIUS: 3.5,
-        COLOR: '#00f0ff',
-        GLOW: 'rgba(0, 240, 255, 0.6)',
+        COLOR: '#F0468F',           // Çizgili şeker çubuğu
+        GLOW: 'rgba(240, 70, 143, 0.25)',
         MAX_BOUNCES: 2,
         TRAIL_LENGTH: 14,
         SHAPE: 'capsule',
@@ -115,8 +115,8 @@ export const GAME_CONFIG = {
         DEATH_TIME: 900,      // Ölüm animasyonu (ateş yok)
         STAGE_COOLDOWN: 700,  // Aşama geçişinde ateşkes
         BULLET_RADIUS: 4,
-        COLOR: '#ff7a1a',
-        GLOW: 'rgba(255, 122, 26, 0.55)',
+        COLOR: '#FF6FAE',           // Jöle boss
+        GLOW: 'rgba(255, 111, 174, 0.25)',
         STAGES: [
             { NAME: 'BLOOM', INTERVAL: 900, COUNT: 14, SPEED: 125, ROTATE_STEP: 0.2 },
             { NAME: 'FANG', INTERVAL: 1150, FAN_COUNT: 5, FAN_SPREAD: 0.2, SPEED: 215, TELEGRAPH_TIME: 420,
@@ -133,7 +133,7 @@ export const GAME_CONFIG = {
         PARTICLE_SPEED_MIN: 80,
         PARTICLE_SPEED_MAX: 260,
         PARTICLE_LIFETIME: 550,   // ms
-        COLOR: '#00ffff'
+        COLOR: '#FF6FAE'
     },
 
     // --- DURAKLATMA ---

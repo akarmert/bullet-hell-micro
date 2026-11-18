@@ -113,39 +113,38 @@ export class WaveManager {
         if (this.telegraphs.length === 0) return;
 
         ctx.save();
+        ctx.lineCap = 'round';
         for (let i = 0; i < this.telegraphs.length; i++) {
             const t = this.telegraphs[i];
             const progress = 1 - Math.max(0, t.remaining / t.duration);
-            const alpha = 0.2 + progress * 0.7; // Ateşlemeye yaklaştıkça parlar
-            const pulse = (Math.sin(t.remaining * 0.03) + 1) * 0.5;
 
-            // Dış kesikli uyarı lazeri
+            // Geniş yumuşak şerit: ateşlemeye yaklaştıkça koyulaşır
             ctx.beginPath();
-            ctx.setLineDash([10, 6]);
             ctx.moveTo(t.x1, t.y1);
             ctx.lineTo(t.x2, t.y2);
             ctx.strokeStyle = t.color;
-            ctx.globalAlpha = alpha * 0.5;
-            ctx.lineWidth = 3 + pulse * 2;
-            ctx.shadowColor = t.color;
-            ctx.shadowBlur = 10;
-            ctx.stroke();
-
-            // Keskin merkez uyarı ışını
-            ctx.beginPath();
-            ctx.setLineDash([14, 4]);
-            ctx.moveTo(t.x1, t.y1);
-            ctx.lineTo(t.x2, t.y2);
-            ctx.strokeStyle = '#ffffff';
-            ctx.globalAlpha = alpha;
-            ctx.lineWidth = 1;
-            ctx.stroke();
-
-            // Başlangıç noktasında enerji şarj halkası
-            ctx.beginPath();
+            ctx.globalAlpha = 0.12 + progress * 0.2;
+            ctx.lineWidth = 10;
             ctx.setLineDash([]);
-            ctx.arc(t.x1, t.y1, 4 + (1 - progress) * 8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Noktalı şeker çizgisi
+            ctx.beginPath();
+            ctx.moveTo(t.x1, t.y1);
+            ctx.lineTo(t.x2, t.y2);
+            ctx.globalAlpha = 0.45 + progress * 0.55;
             ctx.strokeStyle = t.color;
+            ctx.lineWidth = 3;
+            ctx.setLineDash([1, 9]);
+            ctx.lineDashOffset = -progress * 40;
+            ctx.stroke();
+
+            // Başlangıçta küçülen halka
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1;
+            ctx.beginPath();
+            ctx.arc(t.x1, t.y1, 4 + (1 - progress) * 10, 0, Math.PI * 2);
+            ctx.strokeStyle = '#4B2A6E';
             ctx.lineWidth = 1.5;
             ctx.stroke();
         }

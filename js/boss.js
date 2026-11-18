@@ -6,6 +6,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { THEME, font } from './theme.js';
 
 export const BOSS_STATE = {
     ENTERING: 'ENTERING',
@@ -308,104 +309,150 @@ export class Boss {
         const c = this.cfg;
         const dying = this.state === BOSS_STATE.DYING;
         const dyingT = dying ? this.stateTimer / c.DEATH_TIME : 0;
-        const r = this.radius * (1 + dyingT * 0.4);
         const t = performance.now() / 1000;
+        const r = this.radius * (1 + dyingT * 0.5);
+        const angry = this.stage >= 1;
 
         ctx.save();
         ctx.translate(this.x, this.y);
-        if (dying) ctx.globalAlpha = 1 - dyingT * 0.6;
+        ctx.lineJoin = 'round';
+        if (dying) ctx.globalAlpha = 1 - dyingT * 0.7;
 
-        // Dış dönen altıgen kabuk
-        ctx.save();
-        ctx.rotate(t * 0.8);
-        ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-            const a = (i * Math.PI) / 3;
-            ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r * 1.25, Math.sin(a) * r * 1.25);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = c.COLOR;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = c.COLOR;
-        ctx.shadowBlur = 18;
-        ctx.stroke();
-        ctx.restore();
-
-        // İç ters dönen üçgen
-        ctx.save();
-        ctx.rotate(-t * 1.6);
-        ctx.beginPath();
-        for (let i = 0; i < 3; i++) {
-            const a = (i * Math.PI * 2) / 3;
-            ctx[i ? 'lineTo' : 'moveTo'](Math.cos(a) * r * 0.85, Math.sin(a) * r * 0.85);
-        }
-        ctx.closePath();
-        ctx.strokeStyle = '#ffffff';
-        ctx.globalAlpha *= 0.7;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.restore();
-
-        // Enerji çekirdeği: kalan enerjiyle küçülür, hasar alınca beyaz parlar
-        const pulse = (Math.sin(t * 6) + 1) * 0.5;
-        const coreR = r * (0.35 + this.hpRatio * 0.3) + pulse * 2;
-        ctx.beginPath();
-        ctx.arc(0, 0, coreR, 0, Math.PI * 2);
-        ctx.fillStyle = this.hitFlash > 0.05 ? '#ffffff' : c.COLOR;
-        ctx.shadowColor = c.COLOR;
-        ctx.shadowBlur = 24 + this.hitFlash * 20;
-        ctx.fill();
-
-        // Ram menzili ipucu (dash hazırken hafif halka)
+        // Ram menzili ipucu
         if (this.state === BOSS_STATE.FIGHTING) {
             ctx.beginPath();
-            ctx.setLineDash([4, 6]);
             ctx.arc(0, 0, r + c.RAM_REACH, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-            ctx.lineWidth = 1;
-            ctx.shadowBlur = 0;
+            ctx.setLineDash([2, 7]);
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = 'rgba(142, 91, 232, 0.45)';
+            ctx.lineWidth = 2;
             ctx.stroke();
             ctx.setLineDash([]);
+        }
+
+        // Gölge
+        ctx.beginPath();
+        ctx.ellipse(0, r * 1.15, r * 1.05, r * 0.28, 0, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.SHADOW;
+        ctx.fill();
+
+        // Titreşen jöle gövde
+        ctx.beginPath();
+        const N = 28;
+        for (let i = 0; i <= N; i++) {
+            const a = (i / N) * Math.PI * 2;
+            const wob = 1 + Math.sin(a * 3 + t * 4) * 0.05 + Math.sin(a * 5 - t * 3) * 0.03 + this.hitFlash * 0.08;
+            const x = Math.cos(a) * r * 1.1 * wob;
+            const y = Math.sin(a) * r * wob * (a > 0 && a < Math.PI ? 1.0 : 0.95);
+            ctx[i ? 'lineTo' : 'moveTo'](x, y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = this.hitFlash > 0.05 ? THEME.WHITE : (this.stage === 2 ? THEME.PINK_DEEP : THEME.PINK);
+        ctx.fill();
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // İç enerji jölesi: kalan enerjiyle küçülen mor çekirdek
+        ctx.beginPath();
+        ctx.arc(0, r * 0.25, r * (0.2 + this.hpRatio * 0.35), 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(142, 91, 232, 0.45)';
+        ctx.fill();
+
+        // Parlama
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.45, -r * 0.5, r * 0.28, r * 0.14, -0.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fill();
+
+        // Yüz
+        ctx.fillStyle = THEME.INK;
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2.5;
+        ctx.lineCap = 'round';
+        const eyeY = -r * 0.1;
+        for (const side of [-1, 1]) {
+            ctx.beginPath();
+            if (dying) {
+                // X gözler
+                const ex = side * r * 0.38;
+                ctx.moveTo(ex - 4, eyeY - 4); ctx.lineTo(ex + 4, eyeY + 4);
+                ctx.moveTo(ex + 4, eyeY - 4); ctx.lineTo(ex - 4, eyeY + 4);
+                ctx.stroke();
+            } else {
+                ctx.ellipse(side * r * 0.38, eyeY, 3.2, 4.5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                if (angry) {
+                    ctx.beginPath();
+                    ctx.moveTo(side * r * 0.6, eyeY - 10);
+                    ctx.lineTo(side * r * 0.2, eyeY - 6);
+                    ctx.stroke();
+                }
+            }
+        }
+        // Ağız
+        ctx.beginPath();
+        if (dying) {
+            ctx.arc(0, r * 0.35, 5, 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (angry) {
+            ctx.moveTo(-r * 0.25, r * 0.38);
+            ctx.quadraticCurveTo(0, r * 0.22, r * 0.25, r * 0.38);
+            ctx.stroke();
+        } else {
+            ctx.moveTo(-r * 0.22, r * 0.25);
+            ctx.quadraticCurveTo(0, r * 0.42, r * 0.22, r * 0.25);
+            ctx.stroke();
         }
 
         ctx.restore();
     }
 
     /**
-     * Üst orta enerji barı
+     * Üst orta enerji barı (şeker çubuğu)
      * @param {number} topOffset Safe-area üst boşluğu
      */
     renderHealthBar(ctx, topOffset = 0) {
         if (this.state === BOSS_STATE.DEAD) return;
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const barW = Math.min(280, w - 80);
-        const barH = 6;
+        const barH = 10;
         const x = (w - barW) / 2;
-        const y = topOffset + 112;
+        const y = topOffset + 110;
         const fill = this.state === BOSS_STATE.ENTERING
             ? Math.min(1, this.stateTimer / this.cfg.ENTRY_TIME)
             : this.hpRatio;
 
         ctx.save();
-        ctx.font = 'bold 10px "JetBrains Mono", monospace';
+        ctx.font = font(11, 700);
         ctx.textAlign = 'left';
-        ctx.fillStyle = this.cfg.COLOR;
-        ctx.fillText(`NEXUS · ${this.stageName}`, x, y - 6);
+        ctx.fillStyle = THEME.PINK_DEEP;
+        ctx.fillText(`JÖLE KRAL · ${this.stageName}`, x, y - 6);
         ctx.textAlign = 'right';
-        ctx.fillStyle = '#9090a8';
-        ctx.fillText('GRAZE + DASH = HASAR', x + barW, y - 6);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.font = font(10, 600);
+        ctx.fillText('graze + dash = hasar', x + barW, y - 6);
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-        ctx.fillRect(x, y, barW, barH);
-        ctx.fillStyle = this.hitFlash > 0.05 ? '#ffffff' : this.cfg.COLOR;
-        ctx.shadowColor = this.cfg.COLOR;
-        ctx.shadowBlur = 8;
-        ctx.fillRect(x, y, barW * fill, barH);
-
-        // Aşama eşikleri
-        ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(8, 8, 17, 0.9)';
-        for (const mark of [0.33, 0.66]) ctx.fillRect(x + barW * mark - 1, y, 2, barH);
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, barH / 2);
+        ctx.fillStyle = THEME.WHITE;
+        ctx.fill();
+        if (fill > 0) {
+            ctx.save();
+            ctx.clip();
+            ctx.fillStyle = this.hitFlash > 0.05 ? THEME.LAVENDER : THEME.PINK;
+            ctx.fillRect(x, y, barW * fill, barH);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fillRect(x, y + 2, barW * fill, 2);
+            ctx.restore();
+        }
+        ctx.fillStyle = THEME.INK_SOFT;
+        for (const mark of [0.33, 0.66]) ctx.fillRect(x + barW * mark - 1, y + 2, 2, barH - 4);
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, barH, barH / 2);
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2;
+        ctx.stroke();
         ctx.restore();
     }
 }
