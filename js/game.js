@@ -13,10 +13,12 @@ import { CollisionSystem } from './collision.js';
 import { EffectsManager } from './effects.js';
 import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
+import { Haptics } from './haptics.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
     PLAYING: 'PLAYING',
+    PAUSED: 'PAUSED',
     DEAD: 'DEAD'
 };
 
@@ -25,9 +27,9 @@ export class Game {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
 
-        // Sabit oyun koordinat sistemi (600x600)
-        this.canvas.width = GAME_CONFIG.CANVAS.WIDTH;
-        this.canvas.height = GAME_CONFIG.CANVAS.HEIGHT;
+        // Sabit mantıksal koordinat sistemi (600x600), fiziksel çözünürlük DPR ile ölçeklenir
+        this.dpr = 1;
+        this.resizeCanvas();
 
         // Aktif mod (varsayılan: Classic)
         this.currentMode = ModeRegistry.get('classic');
@@ -43,8 +45,7 @@ export class Game {
 
         // State & Zamanlama
         this.state = GAME_STATE.MENU;
-        this.startTime = 0;
-        this.elapsedMs = 0;
+        this.elapsedMs = 0;          // Gerçek oynanan süre (dt birikimi; arka planda saymaz)
         this.deathTimestamp = 0;
 
         // Klavye tuş durumu haritası
@@ -54,6 +55,13 @@ export class Game {
         this.lastGamepadDashPressed = false;
         this.lastGamepadStartPressed = false;
 
+        // Dokunmatik (göreli sürükleme) durumu
+        this.activeTouches = new Map();  // pointerId -> {x, y}
+        this.dragPointerId = null;       // Oyuncuyu hareket ettiren parmak
+        this.dragLast = null;            // Sürükleyen parmağın son konumu (canvas uzayında)
+        this.lastTouchUpTime = 0;
+        this.lastGrazeHaptic = 0;
+
         // Faz değişimi geri bildirimi
         this.waveManager.onPhaseChange = (phaseName) => {
             if (this.state === GAME_STATE.PLAYING) {
@@ -61,7 +69,45 @@ export class Game {
             }
         };
 
+        this.pickupManager.onPickupCollect = () => Haptics.pickup();
+
         this.initInputListeners();
+        this.initLifecycleListeners();
+    }
+
+    /**
+     * Canvas'ın fiziksel çözünürlüğünü cihaz piksel oranına göre ayarlar (Retina netliği)
+     */
+    resizeCanvas() {
+        const dpr = Math.min(window.devicePixelRatio || 1, GAME_CONFIG.DISPLAY.MAX_DPR);
+        if (dpr === this.dpr && this.canvas.width === Math.round(GAME_CONFIG.CANVAS.WIDTH * dpr)) return;
+        this.dpr = dpr;
+        this.canvas.width = Math.round(GAME_CONFIG.CANVAS.WIDTH * dpr);
+        this.canvas.height = Math.round(GAME_CONFIG.CANVAS.HEIGHT * dpr);
+    }
+
+    /**
+     * Ekran koordinatlarını 600x600 mantıksal canvas uzayına dönüştürür
+     */
+    getCanvasCoords(clientX, clientY) {
+        const rect = this.canvas.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return { x: 300, y: 300 };
+        return {
+            x: (clientX - rect.left) * (GAME_CONFIG.CANVAS.WIDTH / rect.width),
+            y: (clientY - rect.top) * (GAME_CONFIG.CANVAS.HEIGHT / rect.height)
+        };
+    }
+
+    /**
+     * Oyuncuyu yeni konuma taşır ve duvar temasını denetler
+     */
+    applyPlayerMove(x, y) {
+        if (this.state !== GAME_STATE.PLAYING) return;
+        this.player.moveTo(x, y);
+        this.effects.grid.applyForce(x, y, 8, 35);
+        if (CollisionSystem.checkPlayerArena(this.player)) {
+            this.triggerDeath();
+        }
     }
 
     /**
@@ -71,55 +117,69 @@ export class Game {
         // Sağ tık bağlam menüsünü engelle (Sağ tık Dash için kullanılır)
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-        // Ekran koordinatlarını 600x600 canvas uzayına dönüştürücü
-        const getCanvasCoords = (clientX, clientY) => {
-            const rect = this.canvas.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0) return { x: 300, y: 300 };
-            const scaleX = GAME_CONFIG.CANVAS.WIDTH / rect.width;
-            const scaleY = GAME_CONFIG.CANVAS.HEIGHT / rect.height;
-            return {
-                x: (clientX - rect.left) * scaleX,
-                y: (clientY - rect.top) * scaleY
-            };
-        };
-
-        // Fare Hareketi (1:1 Hassasiyet)
-        const handlePointerMove = (clientX, clientY) => {
-            const coords = getCanvasCoords(clientX, clientY);
-
-            if (this.state === GAME_STATE.PLAYING) {
-                this.player.moveTo(coords.x, coords.y);
-                this.effects.grid.applyForce(coords.x, coords.y, 8, 35);
-
-                // Hareket anında anlık sınır kontrolü
-                if (CollisionSystem.checkPlayerArena(this.player)) {
-                    this.triggerDeath();
-                }
-            }
-        };
-
-        window.addEventListener('mousemove', (e) => {
-            handlePointerMove(e.clientX, e.clientY);
+        // --- FARE: Mutlak 1:1 takip (masaüstü tasarımı korunur) ---
+        window.addEventListener('pointermove', (e) => {
+            if (e.pointerType !== 'mouse') return;
+            const c = this.getCanvasCoords(e.clientX, e.clientY);
+            this.applyPlayerMove(c.x, c.y);
         });
 
-        // Mobil Dokunmatik Desteği (Parmak altında kalmayı önleyen Touch Offset)
-        this.canvas.addEventListener('touchmove', (e) => {
+        // --- DOKUNMATİK: Göreli sürükleme ---
+        // Oyuncu parmağın altına ışınlanmaz; parmak ne kadar kayarsa o kadar hareket eder.
+        // Böylece parmak gemiyi kapatmaz ve parmak kaldırıp başka yere koyarak mermilerin
+        // içinden "ışınlanma" açığı kapanır.
+        this.canvas.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'mouse') return;
             e.preventDefault();
-            if (e.touches.length > 0) {
-                const touch = e.touches[0];
-                const coords = getCanvasCoords(touch.clientX, touch.clientY);
-                // Parmağın 46px yukarısında konumlandır (görüş alanını açar)
-                const touchOffsetY = 46;
-                const targetY = Math.max(this.player.radius, coords.y - touchOffsetY);
-                handlePointerMove(touch.clientX, touch.clientY);
-                this.player.moveTo(coords.x, targetY);
+            if (!this.activeTouches.has(e.pointerId)) return;
+
+            const c = this.getCanvasCoords(e.clientX, e.clientY);
+            this.activeTouches.set(e.pointerId, c);
+
+            if (e.pointerId !== this.dragPointerId || !this.dragLast) return;
+
+            const sens = GAME_CONFIG.TOUCH.SENSITIVITY;
+            const dx = (c.x - this.dragLast.x) * sens;
+            const dy = (c.y - this.dragLast.y) * sens;
+            this.dragLast = c;
+
+            if (dx !== 0 || dy !== 0) {
+                this.applyPlayerMove(this.player.x + dx, this.player.y + dy);
             }
         }, { passive: false });
 
-        // Tıklama Eylemleri (Sol Tık & Sağ Tık)
+        const endTouch = (e) => {
+            if (e.pointerType === 'mouse') return;
+            this.activeTouches.delete(e.pointerId);
+            if (e.pointerId === this.dragPointerId) {
+                this.dragPointerId = null;
+                this.dragLast = null;
+                this.lastTouchUpTime = performance.now();
+
+                // Sürükleyen parmak kalktı ama başka parmak ekrandaysa kontrolü ona devret
+                const next = this.activeTouches.entries().next();
+                if (!next.done) {
+                    this.dragPointerId = next.value[0];
+                    this.dragLast = next.value[1];
+                }
+            }
+        };
+        this.canvas.addEventListener('pointerup', endTouch);
+        this.canvas.addEventListener('pointercancel', endTouch);
+
+        // --- Tıklama / Dokunma Eylemleri ---
         this.canvas.addEventListener('pointerdown', (e) => {
             e.preventDefault();
             this.effects.initAudio();
+
+            const isTouch = e.pointerType !== 'mouse';
+            this.ui.setInputType(isTouch ? 'touch' : 'desktop');
+            const coords = this.getCanvasCoords(e.clientX, e.clientY);
+
+            if (isTouch) {
+                try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* yok say */ }
+                this.activeTouches.set(e.pointerId, coords);
+            }
 
             // Sağ Tık -> Oyun esnasında Dash tetikler
             if (e.button === 2) {
@@ -127,22 +187,39 @@ export class Game {
                 return;
             }
 
-            const coords = getCanvasCoords(e.clientX, e.clientY);
+            switch (this.state) {
+                case GAME_STATE.PLAYING:
+                    if (isTouch) this.handleTouchDownWhilePlaying(e.pointerId, coords);
+                    break;
 
-            if (this.state === GAME_STATE.MENU) {
-                // Menüde buton kontrolü
-                const clickedModeId = this.ui.getClickedMode(coords.x, coords.y);
-                if (clickedModeId) {
-                    this.currentMode = ModeRegistry.get(clickedModeId);
-                    this.ui.setMode(this.currentMode);
-                    this.waveManager.setMode(this.currentMode);
-                    this.effects.sound.playPhase();
-                } else {
-                    this.startGame();
+                case GAME_STATE.PAUSED:
+                    this.resumeGame();
+                    if (isTouch) this.beginDrag(e.pointerId, coords);
+                    break;
+
+                case GAME_STATE.MENU: {
+                    const clickedModeId = this.ui.getClickedMode(coords.x, coords.y);
+                    if (clickedModeId) {
+                        this.selectMode(clickedModeId);
+                    } else {
+                        this.startGame();
+                        if (isTouch) this.beginDrag(e.pointerId, coords);
+                    }
+                    break;
                 }
-            } else if (this.state === GAME_STATE.DEAD) {
-                if (performance.now() - this.deathTimestamp > 80) {
-                    this.restartGame();
+
+                case GAME_STATE.DEAD: {
+                    const guard = isTouch ? GAME_CONFIG.TOUCH.RESTART_GUARD_MS : 80;
+                    if (performance.now() - this.deathTimestamp <= guard) break;
+
+                    const action = this.ui.getDeadAction(coords.x, coords.y);
+                    if (action === 'menu') {
+                        this.goToMenu();
+                    } else {
+                        this.restartGame();
+                        if (isTouch) this.beginDrag(e.pointerId, coords);
+                    }
+                    break;
                 }
             }
         });
@@ -151,12 +228,17 @@ export class Game {
         window.addEventListener('keydown', (e) => {
             this.effects.initAudio();
             this.keys[e.code] = true;
+            if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) {
+                this.ui.setInputType('desktop');
+            }
 
             // Space veya Enter
             if (e.code === 'Space' || e.code === 'Enter') {
                 e.preventDefault();
                 if (this.state === GAME_STATE.MENU) {
                     this.startGame();
+                } else if (this.state === GAME_STATE.PAUSED) {
+                    this.resumeGame();
                 } else if (this.state === GAME_STATE.DEAD) {
                     if (performance.now() - this.deathTimestamp > 80) {
                         this.restartGame();
@@ -175,14 +257,15 @@ export class Game {
                 // 'B' tuşu: Synth Müziği Aç / Kapat
                 const isBgmOn = this.effects.sound.toggleBGM();
                 this.effects.triggerBanner(isBgmOn ? 'SYNTH MÜZİK: AÇIK' : 'SYNTH MÜZİK: KAPALI', '#00ffff');
+            } else if (e.code === 'KeyP') {
+                if (this.state === GAME_STATE.PLAYING) this.pauseGame();
+                else if (this.state === GAME_STATE.PAUSED) this.resumeGame();
             } else if (e.code === 'KeyM' || e.code === 'Escape') {
                 // Mod değiştirmek veya ana menüye dönmek için
-                if (this.state === GAME_STATE.DEAD) {
-                    this.state = GAME_STATE.MENU;
-                    this.bulletManager.clear();
-                    this.pickupManager.reset();
-                    this.effects.reset();
-                    this.effects.sound.stopBGM();
+                if (this.state === GAME_STATE.DEAD || this.state === GAME_STATE.PAUSED) {
+                    this.goToMenu();
+                } else if (this.state === GAME_STATE.PLAYING && e.code === 'Escape') {
+                    this.pauseGame();
                 }
             }
         });
@@ -193,6 +276,53 @@ export class Game {
     }
 
     /**
+     * Uygulama arka plana alınınca otomatik duraklatma ve ekran döndürme/yeniden boyutlandırma
+     */
+    initLifecycleListeners() {
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden && this.state === GAME_STATE.PLAYING) {
+                this.pauseGame();
+            }
+        });
+        window.addEventListener('blur', () => {
+            if (this.state === GAME_STATE.PLAYING && this.ui.inputType === 'touch') {
+                this.pauseGame();
+            }
+        });
+        window.addEventListener('resize', () => this.resizeCanvas());
+    }
+
+    /**
+     * Oyun sırasında yeni bir parmak ekrana değdiğinde:
+     *  - Zaten sürükleyen bir parmak varsa -> ikinci parmak dokunuşu = DASH
+     *  - Sürükleyen parmak yoksa -> bu parmak sürüklemeyi devralır;
+     *    kısa süre önce kaldırılmışsa (çift dokunma) aynı zamanda DASH
+     */
+    handleTouchDownWhilePlaying(pointerId, coords) {
+        if (this.dragPointerId !== null && this.dragPointerId !== pointerId) {
+            this.tryDash();
+            return;
+        }
+        const sinceUp = performance.now() - this.lastTouchUpTime;
+        this.beginDrag(pointerId, coords);
+        if (sinceUp < GAME_CONFIG.TOUCH.DOUBLE_TAP_MS) {
+            this.tryDash();
+        }
+    }
+
+    beginDrag(pointerId, coords) {
+        this.dragPointerId = pointerId;
+        this.dragLast = coords;
+    }
+
+    selectMode(modeId) {
+        this.currentMode = ModeRegistry.get(modeId);
+        this.ui.setMode(this.currentMode);
+        this.waveManager.setMode(this.currentMode);
+        this.effects.sound.playPhase();
+    }
+
+    /**
      * Dash (I-Frame) eylemini dener
      */
     tryDash() {
@@ -200,6 +330,11 @@ export class Game {
         const success = this.player.triggerDash();
         if (success) {
             this.effects.triggerDash(this.player.x, this.player.y);
+            Haptics.dash();
+            // Dash itmesi oyuncuyu duvara yapıştırmışsa ölüm kuralı geçerli
+            if (CollisionSystem.checkPlayerArena(this.player)) {
+                this.triggerDeath();
+            }
         }
     }
 
@@ -241,6 +376,8 @@ export class Game {
                 if (dashPressed && !this.lastGamepadDashPressed) {
                     if (this.state === GAME_STATE.PLAYING) {
                         this.tryDash();
+                    } else if (this.state === GAME_STATE.PAUSED) {
+                        this.resumeGame();
                     } else if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
                         this.startGame();
                     }
@@ -252,6 +389,10 @@ export class Game {
                 if (startPressed && !this.lastGamepadStartPressed) {
                     if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
                         this.startGame();
+                    } else if (this.state === GAME_STATE.PLAYING) {
+                        this.pauseGame();
+                    } else if (this.state === GAME_STATE.PAUSED) {
+                        this.resumeGame();
                     }
                 }
                 this.lastGamepadStartPressed = startPressed;
@@ -274,8 +415,9 @@ export class Game {
         this.ui.resetGameSession();
         this.ui.setMode(this.currentMode);
 
-        this.startTime = performance.now();
         this.elapsedMs = 0;
+        this.dragPointerId = null;
+        this.dragLast = null;
 
         this.effects.sound.playStart();
         this.effects.sound.startBGM();
@@ -283,6 +425,32 @@ export class Game {
 
     restartGame() {
         this.startGame();
+    }
+
+    pauseGame() {
+        if (this.state !== GAME_STATE.PLAYING) return;
+        this.state = GAME_STATE.PAUSED;
+        this.dragPointerId = null;
+        this.dragLast = null;
+        this.activeTouches.clear();
+        this.effects.sound.stopBGM();
+    }
+
+    resumeGame() {
+        if (this.state !== GAME_STATE.PAUSED) return;
+        this.state = GAME_STATE.PLAYING;
+        this.effects.sound.startBGM();
+    }
+
+    goToMenu() {
+        this.state = GAME_STATE.MENU;
+        this.bulletManager.clear();
+        this.pickupManager.reset();
+        this.waveManager.reset();
+        this.effects.reset();
+        this.effects.sound.stopBGM();
+        this.dragPointerId = null;
+        this.dragLast = null;
     }
 
     /**
@@ -294,9 +462,12 @@ export class Game {
         this.state = GAME_STATE.DEAD;
         this.player.alive = false;
         this.deathTimestamp = performance.now();
+        this.dragPointerId = null;
+        this.dragLast = null;
 
         // Efektleri ateşle & BGM'yi sönümle
         this.effects.triggerDeath(this.player.x, this.player.y);
+        Haptics.death();
 
         // Rekor kontrolü ve kayıt
         const isRecord = this.ui.checkAndSaveHighScore(this.elapsedMs, this.currentMode);
@@ -315,6 +486,9 @@ export class Game {
         // Kontrolcüleri tara (WASD & Gamepad)
         this.pollKeyboardAndGamepad();
 
+        // Duraklatıldığında dünya donar
+        if (this.state === GAME_STATE.PAUSED) return;
+
         // Oyuncu mantığı (Dash, Afterimages, Klavye hareketi)
         this.player.update(dt);
 
@@ -322,7 +496,9 @@ export class Game {
         this.effects.update(dt, this.elapsedMs);
 
         if (this.state === GAME_STATE.PLAYING) {
-            this.elapsedMs = performance.now() - this.startTime;
+            // Süre, kare süresinin birikimiyle hesaplanır: uygulama arka plandayken
+            // (requestAnimationFrame durur) süre saymaz, skor şişirilemez.
+            this.elapsedMs += dt * 1000;
 
             // Klavye/Gamepad hareketi sonrasında duvar kontrolü
             if (CollisionSystem.checkPlayerArena(this.player)) {
@@ -355,11 +531,17 @@ export class Game {
                 // onGraze
                 (bullet) => {
                     this.effects.triggerGraze(this.player.x, this.player.y);
+                    const now = performance.now();
+                    if (now - this.lastGrazeHaptic > GAME_CONFIG.TOUCH.GRAZE_HAPTIC_GAP_MS) {
+                        this.lastGrazeHaptic = now;
+                        Haptics.graze();
+                    }
                 },
                 // onShieldBreak
                 (bullet) => {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
                     this.effects.triggerBanner('KALKAN KIRILDI!', '#00ff88');
+                    Haptics.shieldBreak();
                 }
             );
 
@@ -377,6 +559,9 @@ export class Game {
         const ctx = this.ctx;
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
+
+        // Mantıksal 600x600 uzayı fiziksel piksellere ölçekle
+        ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
 
         // Ekran sarsıntısı varsa canvas matrisine uygula
         this.effects.preRender(ctx);
@@ -408,6 +593,9 @@ export class Game {
             this.ui.renderMenu(ctx, this.currentMode.id);
         } else if (this.state === GAME_STATE.PLAYING) {
             this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager);
+        } else if (this.state === GAME_STATE.PAUSED) {
+            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager);
+            this.ui.renderPaused(ctx);
         } else if (this.state === GAME_STATE.DEAD) {
             this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player);
         }

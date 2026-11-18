@@ -25,6 +25,18 @@ export const GAME_CONFIG = {
         }
     },
 
+    // --- MOBİL / DOKUNMATİK ---
+    TOUCH: {
+        SENSITIVITY: 1.3,        // Göreli sürüklemede parmak hareketi çarpanı
+        DOUBLE_TAP_MS: 260,      // Parmağı kaldırıp bu sürede tekrar dokunmak = Dash
+        RESTART_GUARD_MS: 450,   // Ölümden sonra yanlışlıkla yeniden başlatmayı önler
+        GRAZE_HAPTIC_GAP_MS: 120 // Graze titreşimleri arasındaki min. süre
+    },
+
+    DISPLAY: {
+        MAX_DPR: 2               // Retina netliği; 3x ekranlarda performans için 2'de sınırlanır
+    },
+
     // --- GÜÇLENDİRMELER (PICK-UPS) ---
     PICKUPS: {
         SPAWN_INTERVAL: 9000,  // Ortalama beliriş periyodu (ms)

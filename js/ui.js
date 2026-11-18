@@ -23,6 +23,42 @@ export class UIManager {
 
         // Başlat Butonu Koordinatları
         this.playButton = { x: 170, y: 440, w: 260, h: 50 };
+
+        // Ölüm Ekranı Butonları (dokunmatik için büyük hedefler)
+        this.deadButtons = [
+            { id: 'retry', label: 'TEKRAR OYNA', x: 130, y: 408, w: 170, h: 50, primary: true },
+            { id: 'menu',  label: 'MENÜ',        x: 312, y: 408, w: 158, h: 50, primary: false }
+        ];
+
+        // Girdi tipi: ipucu metinleri buna göre değişir ('touch' | 'desktop')
+        this.inputType = UIManager.detectInputType();
+    }
+
+    static detectInputType() {
+        try {
+            if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return 'touch';
+        } catch (e) { /* yok say */ }
+        return 'desktop';
+    }
+
+    setInputType(type) {
+        this.inputType = type;
+    }
+
+    get isTouch() {
+        return this.inputType === 'touch';
+    }
+
+    /**
+     * Ölüm ekranında dokunulan butonu döner ('retry' | 'menu' | null)
+     */
+    getDeadAction(x, y) {
+        for (const btn of this.deadButtons) {
+            if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                return btn.id;
+            }
+        }
+        return null;
     }
 
     setMode(mode) {
@@ -181,11 +217,19 @@ export class UIManager {
         // Kontrol ve Mekanik İpuçları
         ctx.font = '11px "JetBrains Mono", monospace';
         ctx.fillStyle = '#00ffff';
-        ctx.fillText('[ Fare / WASD / Gamepad ] Hareket', w / 2, 370);
-
-        ctx.fillStyle = '#8e8ea8';
-        ctx.fillText('[ Sağ Tık / Shift / Space ] Dash (Dokunulmazlık)', w / 2, 390);
-        ctx.fillText('[ B ] Synth Müzik Aç/Kapat', w / 2, 410);
+        if (this.isTouch) {
+            ctx.font = '13px "JetBrains Mono", monospace';
+            ctx.fillText('[ Parmağını Sürükle ] Hareket', w / 2, 372);
+            ctx.fillStyle = '#8e8ea8';
+            ctx.fillText('[ 2. Parmakla Dokun / Çift Dokun ] Dash', w / 2, 396);
+            ctx.font = '11px "JetBrains Mono", monospace';
+            ctx.fillText('Duvara değmek de öldürür!', w / 2, 418);
+        } else {
+            ctx.fillText('[ Fare / WASD / Gamepad ] Hareket', w / 2, 370);
+            ctx.fillStyle = '#8e8ea8';
+            ctx.fillText('[ Sağ Tık / Shift / Space ] Dash (Dokunulmazlık)', w / 2, 390);
+            ctx.fillText('[ B ] Synth Müzik  ·  [ P / ESC ] Duraklat', w / 2, 410);
+        }
 
         // PLAY Butonu
         const pb = this.playButton;
@@ -294,7 +338,8 @@ export class UIManager {
             ctx.textAlign = 'center';
             ctx.font = 'bold 10px "JetBrains Mono", monospace';
             ctx.fillStyle = isReady ? '#00ffff' : '#686880';
-            ctx.fillText(isReady ? 'DASH HAZIR (Sağ Tık / Space / Shift)' : 'DASH DOLUYOR...', w / 2, barY - 6);
+            const readyHint = this.isTouch ? 'DASH HAZIR (2. Parmak / Çift Dokun)' : 'DASH HAZIR (Sağ Tık / Space / Shift)';
+            ctx.fillText(isReady ? readyHint : 'DASH DOLUYOR...', w / 2, barY - 6);
         }
 
         ctx.restore();
@@ -360,16 +405,67 @@ export class UIManager {
         ctx.fillStyle = '#00ffff';
         ctx.fillText(UIManager.formatTime(this.getHighScore(mode.id)), w / 2, h / 2 + 82);
 
-        // Hızlı Yeniden Başlatma & Menü Seçenekleri
+        // Hızlı Yeniden Başlatma & Menü Butonları
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
-        ctx.font = '13px "JetBrains Mono", monospace';
-        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + pulse * 0.4})`;
-        ctx.fillText('[ Tıkla / Space / Enter ] Tekrar Oyna', w / 2, h / 2 + 130);
+        ctx.textBaseline = 'middle';
+        for (const btn of this.deadButtons) {
+            ctx.save();
+            if (btn.primary) {
+                ctx.fillStyle = `rgba(0, 255, 255, ${0.12 + pulse * 0.08})`;
+                ctx.strokeStyle = '#00ffff';
+                ctx.lineWidth = 2;
+                ctx.shadowColor = '#00ffff';
+                ctx.shadowBlur = 8 + pulse * 6;
+            } else {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+                ctx.lineWidth = 1;
+            }
+            ctx.beginPath();
+            ctx.roundRect(btn.x, btn.y, btn.w, btn.h, 8);
+            ctx.fill();
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+            ctx.font = btn.primary ? 'bold 15px "JetBrains Mono", monospace' : '14px "JetBrains Mono", monospace';
+            ctx.fillStyle = btn.primary ? '#ffffff' : '#a0a0b8';
+            ctx.fillText(btn.label, btn.x + btn.w / 2, btn.y + btn.h / 2 + 1);
+            ctx.restore();
+        }
+        ctx.textBaseline = 'alphabetic';
 
         ctx.font = '11px "JetBrains Mono", monospace';
         ctx.fillStyle = '#7a7a92';
-        ctx.fillText('[ M / ESC ] Ana Menü / Mod Değiştir', w / 2, h / 2 + 158);
+        const hint = this.isTouch
+            ? 'Ekranın herhangi bir yerine dokun = Tekrar Oyna'
+            : '[ Tıkla / Space / Enter ] Tekrar  ·  [ M / ESC ] Menü';
+        ctx.fillText(hint, w / 2, h / 2 + 192);
 
+        ctx.restore();
+    }
+
+    /**
+     * Duraklatma Ekranı (uygulama arka plana alındığında otomatik açılır)
+     */
+    renderPaused(ctx) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(8, 8, 15, 0.72)';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.textAlign = 'center';
+        ctx.font = '900 28px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#ffffff';
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 15;
+        ctx.fillText('DURAKLATILDI', w / 2, h / 2 - 10);
+        ctx.shadowBlur = 0;
+
+        const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
+        ctx.font = '13px "JetBrains Mono", monospace';
+        ctx.fillStyle = `rgba(0, 255, 255, ${0.6 + pulse * 0.4})`;
+        ctx.fillText(this.isTouch ? 'Devam etmek için dokun' : '[ Tıkla / Space / P ] Devam  ·  [ ESC ] Menü', w / 2, h / 2 + 28);
         ctx.restore();
     }
 }
