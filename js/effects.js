@@ -236,15 +236,27 @@ export class EffectsManager {
         this.flashAlpha = 0.45;
 
         this.particles = [];
-        const count = GAME_CONFIG.EFFECTS.PARTICLE_COUNT;
+        const count = GAME_CONFIG.EFFECTS.PARTICLE_COUNT * 2;
         const colors = THEME.SPRINKLES;
 
+        // Geniş saçılan şeker serpintisi
         for (let i = 0; i < count; i++) {
             const color = colors[i % colors.length];
-            this.particles.push(new Particle(x, y, color));
+            this.particles.push(new Particle(x, y, color, 1.6, 1.6));
+        }
+        // Marşmelovdan kopan beyaz ponponlar
+        for (let i = 0; i < 10; i++) {
+            const puff = new Particle(x, y, THEME.WHITE, 1.1, 1.8);
+            puff.round = true;
+            puff.width = 4 + Math.random() * 3;
+            this.particles.push(puff);
         }
 
-        this.grid.applyForce(x, y, 220, 180);
+        // Çift pembe şok dalgası
+        this.shockwaves.push({ x, y, radius: 6, maxRadius: 240, color: THEME.PINK, alpha: 1.0 });
+        this.shockwaves.push({ x, y, radius: 2, maxRadius: 150, color: THEME.PURPLE, alpha: 1.0 });
+
+        this.grid.applyForce(x, y, 260, 220);
         this.sound.playDeath(x);
     }
 

@@ -40,6 +40,8 @@ const STRINGS = {
         'settings.tutorial': 'ipuçlarını tekrar göster',
         'settings.close': 'kapat ✕',
         'settings.help': '↑ ↓ seç · ← → değiştir · ESC kapat',
+        'settings.mutedSfx': 'sessiz · N',
+        'settings.mutedMusic': 'sessiz · B',
         'settings.on': 'açık',
         'settings.off': 'kapalı',
 
@@ -163,6 +165,8 @@ const STRINGS = {
         'settings.tutorial': 'show tips again',
         'settings.close': 'close ✕',
         'settings.help': '↑ ↓ select · ← → change · ESC close',
+        'settings.mutedSfx': 'muted · N',
+        'settings.mutedMusic': 'muted · B',
         'settings.on': 'on',
         'settings.off': 'off',
 

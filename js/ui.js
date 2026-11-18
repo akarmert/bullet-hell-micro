@@ -397,7 +397,14 @@ export class UIManager {
                 ctx.fillText('‹', vx - 46, cy);
                 ctx.fillText('›', vx + 46, cy);
                 ctx.fillStyle = THEME.PURPLE;
-                ctx.fillText(S.display(row.id), vx, cy);
+                const snd = this.sound;
+                const muted = snd && ((row.id === 'sfxVolume' && !snd.enabled) || (row.id === 'musicVolume' && !snd.bgmEnabled));
+                if (muted) {
+                    ctx.fillStyle = THEME.PINK_DEEP;
+                    ctx.fillText(t(row.id === 'sfxVolume' ? 'settings.mutedSfx' : 'settings.mutedMusic'), vx, cy);
+                } else {
+                    ctx.fillText(S.display(row.id), vx, cy);
+                }
             } else {
                 const on = S.get(row.id);
                 UIManager.pill(ctx, S.display(row.id), vx, cy, on ? THEME.PINK : THEME.WHITE, on ? THEME.WHITE : THEME.INK, 'center', 12);
@@ -596,15 +603,18 @@ export class UIManager {
      * @param {object} info { score, waves, unlocked: Skin[] }
      */
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, info = {}) {
-        const { score = null, waves = null, unlocked = [] } = info;
+        const { score = null, waves = null, unlocked = [], reveal = 1 } = info;
+        if (reveal <= 0) return; // Önce ölüm patlaması görünsün
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
         const cx = w / 2;
         const cy = h / 2;
 
         ctx.save();
+        ctx.globalAlpha = reveal;
         ctx.fillStyle = 'rgba(255, 246, 250, 0.82)';
         ctx.fillRect(0, 0, w, h);
+        ctx.translate(0, (1 - reveal) * 24); // Kart hafifçe yukarı kayarak gelir
 
         const cw = Math.min(360, w - 32);
         candyPanel(ctx, cx - cw / 2, cy - 160, cw, 350, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
@@ -670,10 +680,10 @@ export class UIManager {
 
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
         ctx.font = font(15, 700);
-        ctx.globalAlpha = 0.7 + pulse * 0.3;
+        ctx.globalAlpha = (0.7 + pulse * 0.3) * reveal;
         ctx.fillStyle = THEME.INK;
         ctx.fillText(t('dead.retry'), cx, cy + 146);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = reveal;
         ctx.font = font(12, 600);
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText(t('dead.menu'), cx, cy + 168, cw - 20);

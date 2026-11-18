@@ -64,6 +64,7 @@ export class Game {
         this.ghostPassed = false;
         this.ui.progress = this.progress;
         this.ui.settings = this.settings;
+        this.ui.sound = this.effects.sound;
         this.ui.skinIndex = Math.max(0, SKINS.findIndex(s => s.id === this.progress.selected));
         this.player.skin = this.progress.skin;
         this.settings.onChange((v) => {
@@ -201,7 +202,7 @@ export class Game {
             } else if (this.state === GAME_STATE.PAUSED) {
                 this.resumeGame();
             } else if (this.state === GAME_STATE.DEAD) {
-                if (performance.now() - this.deathTimestamp > 80) {
+                if (this.deathScreenReady()) {
                     this.restartGame();
                 }
             }
@@ -247,7 +248,7 @@ export class Game {
                 if (this.state === GAME_STATE.MENU) {
                     this.startGame();
                 } else if (this.state === GAME_STATE.DEAD) {
-                    if (performance.now() - this.deathTimestamp > 80) {
+                    if (this.deathScreenReady()) {
                         this.restartGame();
                     }
                 } else if (this.state === GAME_STATE.PLAYING && e.code === 'Space') {
@@ -313,6 +314,12 @@ export class Game {
                 this.tutorial.resetProgress();
                 this.effects.triggerBanner(t('banner.tipsReset'), THEME.LAVENDER);
             }
+        } else if (item.id === 'sfxVolume' && !this.effects.sound.enabled) {
+            this.effects.sound.toggleSFX();
+            this.effects.triggerBanner(t('banner.sfxOn'), THEME.LAVENDER);
+        } else if (item.id === 'musicVolume' && !this.effects.sound.bgmEnabled) {
+            this.effects.sound.toggleBGM();
+            this.effects.triggerBanner(t('banner.musicOn'), THEME.LAVENDER);
         } else {
             this.settings.adjust(item.id, dir);
         }
@@ -383,7 +390,7 @@ export class Game {
                         this.tryDash();
                     } else if (this.state === GAME_STATE.PAUSED) {
                         this.resumeGame();
-                    } else if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
+                    } else if (this.state === GAME_STATE.MENU || (this.state === GAME_STATE.DEAD && this.deathScreenReady())) {
                         this.startGame();
                     }
                 }
@@ -528,8 +535,9 @@ export class Game {
         this.pollKeyboardAndGamepad();
 
         this.touchControls.update(this.state === GAME_STATE.PLAYING, this.player);
-        this.menuButton.hidden = !(this.state === GAME_STATE.DEAD || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
-        this.shareButton.hidden = this.state !== GAME_STATE.DEAD;
+        const deadReady = this.state === GAME_STATE.DEAD && this.deathScreenReady();
+        this.menuButton.hidden = !(deadReady || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
+        this.shareButton.hidden = !deadReady;
         this.pauseButton.hidden = !(this.state === GAME_STATE.PLAYING && this.touchControls.touchDevice);
 
         // Müzik: menüde sakin tema, oyunda faz müziği, duraklatma/ölümde sessiz
@@ -696,6 +704,7 @@ export class Game {
             }
         } else if (this.state === GAME_STATE.DEAD) {
             this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player, {
+                reveal: this.deathReveal(),
                 score: this.score,
                 waves: this.waveManager,
                 unlocked: this.lastUnlocked
@@ -704,6 +713,17 @@ export class Game {
 
         // Arena sınır çerçevesi
         this.renderArenaBorder(ctx, w, h);
+    }
+
+    /** Ölüm patlaması bitti mi? (yeniden başlatma ve butonlar bundan sonra) */
+    deathScreenReady() {
+        return performance.now() - this.deathTimestamp >= GAME_CONFIG.EFFECTS.DEATH_REVEAL;
+    }
+
+    /** Ölüm ekranının belirme oranı (0 = sadece patlama, 1 = tam ekran) */
+    deathReveal() {
+        const age = performance.now() - this.deathTimestamp - GAME_CONFIG.EFFECTS.DEATH_REVEAL;
+        return Math.max(0, Math.min(1, age / GAME_CONFIG.EFFECTS.DEATH_FADE));
     }
 
     /** HTML butonları ve erişilebilirlik etiketlerini seçili dile çevirir */

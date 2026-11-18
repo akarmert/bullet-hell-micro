@@ -166,6 +166,8 @@ export const GAME_CONFIG = {
         PARTICLE_SPEED_MIN: 80,
         PARTICLE_SPEED_MAX: 260,
         PARTICLE_LIFETIME: 550,   // ms
+        DEATH_REVEAL: 650,        // ms: ölüm patlaması görünsün, sonra "oyun bitti" ekranı gelsin
+        DEATH_FADE: 300,          // ms: ölüm ekranının belirme süresi
         COLOR: '#FF6FAE'
     },
 
