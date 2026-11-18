@@ -193,7 +193,7 @@ export class UIManager {
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText('Joystick · Fare · WASD · Gamepad  →  hareket', w / 2, 356);
         ctx.fillText('DASH · Sağ tık · Shift · Space  →  dokunulmazlık', w / 2, 378);
-        ctx.fillText('P / ESC  →  duraklat      B  →  müzik', w / 2, 400);
+        ctx.fillText('P / ESC  →  duraklat     B  →  müzik     N  →  efektler', w / 2, 400);
 
         // OYNA butonu: yavaşça süzülen mor şeker
         const pb = this.playButton;

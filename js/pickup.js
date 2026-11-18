@@ -217,7 +217,8 @@ export class PickupManager {
      * Güçlendirme etkisini oyuncuya / sahaya uygular
      */
     applyPickup(pickup, player, effects, bulletManager) {
-        effects.sound.playPickup();
+        effects.sound.playPickup(pickup.x);
+        if (pickup.type === 'slowmo') effects.sound.playSlowmo();
         effects.triggerPickupEffect(pickup.x, pickup.y, pickup.color);
 
         switch (pickup.type) {

@@ -33,6 +33,7 @@ export class WaveManager {
         this.chaosStartMs = GAME_CONFIG.BOSS.START_TIME;
         this.onBossStageChange = null;
         this.onBossDefeated = null;
+        this.onBossRam = null;
     }
 
     /**
@@ -457,6 +458,9 @@ export class WaveManager {
             this.boss = new Boss(this, elapsedMs);
             this.boss.onStageChange = (boss) => {
                 if (this.onBossStageChange) this.onBossStageChange(boss);
+            };
+            this.boss.onRam = (boss) => {
+                if (this.onBossRam) this.onBossRam(boss);
             };
             this.boss.onDefeated = (boss) => {
                 this.bossDefeatedAt = this.lastElapsedMs;

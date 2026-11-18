@@ -68,6 +68,9 @@ export class Game {
         this.waveManager.onBossStageChange = (boss) => {
             this.effects.triggerBossStage(boss.x, boss.y, boss.stageName);
         };
+        this.waveManager.onBossRam = (boss) => {
+            this.effects.triggerBossRam(boss.x, boss.y);
+        };
         this.waveManager.onBossDefeated = (boss) => {
             const destroyed = this.bulletManager.destroyAll();
             this.effects.triggerBossDefeated(boss.x, boss.y, destroyed);
@@ -200,8 +203,11 @@ export class Game {
             } else if (e.code === 'KeyB') {
                 // 'B' tuşu: Synth Müziği Aç / Kapat
                 const isBgmOn = this.effects.sound.toggleBGM();
-                if (isBgmOn && this.state === GAME_STATE.PLAYING) this.effects.sound.startBGM();
                 this.effects.triggerBanner(isBgmOn ? '♪ müzik açık' : '♪ müzik kapalı', THEME.LAVENDER);
+            } else if (e.code === 'KeyN') {
+                // 'N' tuşu: Ses efektlerini Aç / Kapat
+                const isSfxOn = this.effects.sound.toggleSFX();
+                this.effects.triggerBanner(isSfxOn ? '♫ efektler açık' : '♫ efektler kapalı', THEME.LAVENDER);
             } else if (e.code === 'KeyM' || e.code === 'Escape') {
                 // Mod değiştirmek veya ana menüye dönmek için
                 if (this.state === GAME_STATE.DEAD) {
@@ -306,7 +312,6 @@ export class Game {
         this.keys = {};
         this.touchControls.reset();
         this.player.setMoveInput(0, 0);
-        this.effects.sound.stopBGM();
     }
 
     /**
@@ -324,7 +329,6 @@ export class Game {
         this.bulletManager.clear();
         this.pickupManager.reset();
         this.effects.reset();
-        this.effects.sound.stopBGM();
     }
 
     startGame() {
@@ -342,8 +346,8 @@ export class Game {
         this.resumeCountdown = 0;
         this.effects.sound.bossMode = false;
 
+        this.dashWasReady = true;
         this.effects.sound.playStart();
-        this.effects.sound.startBGM();
     }
 
     restartGame() {
@@ -386,6 +390,11 @@ export class Game {
         this.menuButton.hidden = !(this.state === GAME_STATE.DEAD || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
         this.pauseButton.hidden = !(this.state === GAME_STATE.PLAYING && this.touchControls.touchDevice);
 
+        // Müzik: menüde sakin tema, oyunda faz müziği, duraklatma/ölümde sessiz
+        const sound = this.effects.sound;
+        sound.setMusicMode(this.state === GAME_STATE.MENU ? 'menu' : this.state === GAME_STATE.PLAYING ? 'game' : 'none');
+        sound.slowmo = this.state === GAME_STATE.PLAYING && this.pickupManager.isSlowmoActive();
+
         // Duraklatılmışken dünya donar; sadece devam geri sayımı işler
         if (this.state === GAME_STATE.PAUSED) {
             if (this.resumeCountdown > 0) {
@@ -393,14 +402,19 @@ export class Game {
                 if (this.resumeCountdown <= 0) {
                     this.resumeCountdown = 0;
                     this.state = GAME_STATE.PLAYING;
-                    this.effects.sound.startBGM();
                 }
             }
             return;
         }
 
         // Oyuncu mantığı (Dash, Afterimages, Klavye hareketi)
-        if (this.state === GAME_STATE.PLAYING) this.player.update(dt);
+        if (this.state === GAME_STATE.PLAYING) {
+            this.player.update(dt);
+            // Dash yeniden dolunca küçük çan
+            const dashReady = this.player.getDashReadyRatio() >= 1;
+            if (dashReady && !this.dashWasReady) sound.playDashReady();
+            this.dashWasReady = dashReady;
+        }
 
         // Efektler ve Reaktif Izgara fiziği
         this.effects.update(dt, this.elapsedMs);
@@ -443,7 +457,10 @@ export class Game {
                 (bullet) => {
                     this.effects.triggerGraze(this.player.x, this.player.y);
                     const boss = this.waveManager.boss;
-                    if (boss && boss.alive) boss.onGraze();
+                    if (boss && boss.alive) {
+                        boss.onGraze();
+                        sound.playBossHit(boss.x, boss.hpRatio);
+                    }
                 },
                 // onShieldBreak
                 (bullet) => {

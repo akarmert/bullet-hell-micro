@@ -49,6 +49,7 @@ export class Boss {
         // Olay geri bildirimleri (WaveManager → Game)
         this.onStageChange = null;
         this.onDefeated = null;
+        this.onRam = null;
     }
 
     get alive() {
@@ -113,6 +114,7 @@ export class Boss {
         } else if (!this.ramLocked && this.touches(player, this.cfg.RAM_REACH)) {
             this.ramLocked = true;
             this.damage(this.cfg.RAM_DAMAGE);
+            if (this.onRam) this.onRam(this);
         }
 
         // Aşama geçişi
