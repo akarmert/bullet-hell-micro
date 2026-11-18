@@ -37,6 +37,21 @@ export class WaveManager {
     }
 
     /**
+     * Mod aralık çarpanı × arena yoğunluk telafisi.
+     * Yatay telefonda arena genişler; aynı mermi sıklığı daha seyrek hissettirir.
+     * Alan oranının karekökü kadar sık mermi üretilerek zorluk kare arenaya yakın tutulur.
+     */
+    getIntervalMult(elapsedMs) {
+        let mult = this.mode.getIntervalMultiplier(elapsedMs);
+        if (GAME_CONFIG.LAYOUT.DENSITY_COMPENSATION) {
+            const base = GAME_CONFIG.CANVAS.BASE_SIZE;
+            const areaRatio = (base * base) / (GAME_CONFIG.CANVAS.WIDTH * GAME_CONFIG.CANVAS.HEIGHT);
+            if (areaRatio < 1) mult *= Math.sqrt(areaRatio);
+        }
+        return mult;
+    }
+
+    /**
      * Tüm zamanlayıcıları, telegraf çizgilerini ve faz durumunu sıfırlar
      */
     reset() {
@@ -224,7 +239,7 @@ export class WaveManager {
         const cfg = GAME_CONFIG.PHASE_1;
         const progress = Math.min(1, elapsedMs / cfg.END_TIME);
 
-        const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+        const intervalMult = this.getIntervalMult(elapsedMs);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.warmup += dtMs;
@@ -300,7 +315,7 @@ export class WaveManager {
         const rotSpeed = (cfg.BASE_ROT_SPEED + progress * 0.8) * rotMult;
         this.spiralAngle += rotSpeed * dt;
 
-        const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+        const intervalMult = this.getIntervalMult(elapsedMs);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.spiral += dtMs;
@@ -342,7 +357,7 @@ export class WaveManager {
         const phaseDuration = cfg.END_TIME - cfg.START_TIME;
         const progress = Math.min(1, (elapsedMs - cfg.START_TIME) / phaseDuration);
 
-        const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+        const intervalMult = this.getIntervalMult(elapsedMs);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.aim += dtMs;
@@ -429,7 +444,7 @@ export class WaveManager {
         const chaosTime = elapsedMs - cfg.START_TIME;
         const progress = Math.min(1, chaosTime / 20000);
 
-        const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+        const intervalMult = this.getIntervalMult(elapsedMs);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.chaos += dtMs;
@@ -549,7 +564,7 @@ export class WaveManager {
     // CHAOS MODU: Tüm mermi türleri eşzamanlı aktif (Kontrollü & Adil)
     // ------------------------------------------------------------
     updateSimultaneousChaos(elapsedMs, dt, dtMs, player) {
-        const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+        const intervalMult = this.getIntervalMult(elapsedMs);
 
         // 1. Kenar mermileri (Her 500ms)
         this.timers.warmup += dtMs;

@@ -4,9 +4,24 @@
 // ============================================================
 
 export const GAME_CONFIG = {
+    // WIDTH/HEIGHT çalışma anında layout.js tarafından güncellenir
+    // (yatay telefonda genişlik 600–1200 arası olur). BASE_SIZE referans kare boyuttur.
     CANVAS: {
         WIDTH: 600,
-        HEIGHT: 600
+        HEIGHT: 600,
+        BASE_SIZE: 600
+    },
+
+    // --- EKRAN YERLEŞİMİ ---
+    LAYOUT: {
+        PADDING: 8,              // Kenar boşluğu (CSS px)
+        MAX_CSS_SIZE: 900,       // Kare arenanın en büyük ekran boyutu
+        LANDSCAPE_MIN_RATIO: 1.15, // Dokunmatik cihazda en/boy bu oranı aşarsa yatay yerleşim
+        GUTTER_RATIO: 0.17,      // Yatayda her iki yandaki başparmak bölgesi (ekran genişliği oranı)
+        GUTTER_MIN: 110,
+        GUTTER_MAX: 170,
+        MAX_ARENA_W: 1200,       // Mantıksal arena genişliği üst sınırı
+        DENSITY_COMPENSATION: true // Geniş arenada mermi sıklığını alanla orantılı artır (adil zorluk)
     },
 
     PLAYER: {
@@ -15,8 +30,7 @@ export const GAME_CONFIG = {
         GRAZE_RADIUS: 16,     // Teğet geçme (Graze) algılama yarıçapı
         COLOR: '#00ffff',
         GLOW: 'rgba(0, 255, 255, 0.6)',
-        START_X: 300,
-        START_Y: 300,
+        // Başlangıç konumu: arenanın merkezi (bkz. Player.reset)
         KEYBOARD_SPEED: 360,  // Klavye / Gamepad hareket hızı (px/s)
         DASH: {
             DURATION: 160,     // Dokunulmazlık ve atılma süresi (ms)

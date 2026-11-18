@@ -8,6 +8,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { getSafeInsets } from './layout.js';
 
 export class TouchControls {
     /**
@@ -46,6 +47,8 @@ export class TouchControls {
         document.body.appendChild(this.overlay);
         this.octx = this.overlay.getContext('2d');
         this.dpr = 1;
+        this.layout = null; // Game.applyLayout tarafından atanır (yatay/dikey, gutter)
+        this.insets = { top: 0, right: 0, bottom: 0, left: 0 };
         this.resize();
         window.addEventListener('resize', () => this.resize());
     }
@@ -85,15 +88,46 @@ export class TouchControls {
         this.vh = window.innerHeight;
         this.overlay.width = Math.round(this.vw * this.dpr);
         this.overlay.height = Math.round(this.vh * this.dpr);
+        this.insets = getSafeInsets();
+    }
+
+    setLayout(layout) {
+        this.layout = layout;
+        this.resize();
+    }
+
+    get isLandscape() {
+        return !!(this.layout && this.layout.landscape);
     }
 
     getDashButton() {
         const J = GAME_CONFIG.JOYSTICK;
+        const ins = this.insets;
+        if (this.isLandscape) {
+            // Yatay: sağ başparmak bölgesinin ortası, alt üçte birlik kısım
+            const g = this.layout.gutter;
+            const r = Math.min(J.DASH_BUTTON_RADIUS, g / 2 - 10);
+            return { x: this.vw - ins.right - g / 2, y: this.vh * 0.66, r };
+        }
         const r = J.DASH_BUTTON_RADIUS;
         return {
-            x: this.vw - J.DASH_BUTTON_MARGIN - r,
-            y: this.vh - J.DASH_BUTTON_MARGIN - r - 16,
+            x: this.vw - ins.right - J.DASH_BUTTON_MARGIN - r,
+            y: this.vh - ins.bottom - J.DASH_BUTTON_MARGIN - r - 16,
             r
+        };
+    }
+
+    getJoystickHint() {
+        const J = GAME_CONFIG.JOYSTICK;
+        const ins = this.insets;
+        if (this.isLandscape) {
+            const g = this.layout.gutter;
+            return { x: ins.left + g / 2, y: this.vh * 0.66, r: Math.min(J.BASE_RADIUS, g / 2 - 8) };
+        }
+        return {
+            x: ins.left + J.DASH_BUTTON_MARGIN + J.BASE_RADIUS,
+            y: this.vh - ins.bottom - J.DASH_BUTTON_MARGIN - J.BASE_RADIUS - 16,
+            r: J.BASE_RADIUS
         };
     }
 
@@ -311,11 +345,11 @@ export class TouchControls {
             ctx.stroke();
         } else {
             // Boşta: sol altta silik ipucu halkası
-            const hx = J.DASH_BUTTON_MARGIN + J.BASE_RADIUS;
-            const hy = this.vh - J.DASH_BUTTON_MARGIN - J.BASE_RADIUS - 16;
+            const hint = this.getJoystickHint();
+            const hx = hint.x, hy = hint.y;
             ctx.setLineDash([6, 6]);
             ctx.beginPath();
-            ctx.arc(hx, hy, J.BASE_RADIUS, 0, Math.PI * 2);
+            ctx.arc(hx, hy, hint.r, 0, Math.PI * 2);
             ctx.lineWidth = 1.5;
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.18)';
             ctx.stroke();

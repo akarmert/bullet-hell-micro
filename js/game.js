@@ -15,6 +15,7 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { Haptics } from './haptics.js';
 import { TouchControls } from './touchControls.js';
+import { computeLayout } from './layout.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -28,9 +29,10 @@ export class Game {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
 
-        // Sabit mantıksal koordinat sistemi (600x600), fiziksel çözünürlük DPR ile ölçeklenir
-        this.dpr = 1;
-        this.resizeCanvas();
+        // Mantıksal arena (kare 600x600 ya da yatay telefonda geniş) + DPR ölçekli çizim
+        this.renderScale = 1;
+        this.layout = null;
+        this.applyLayout(true);
 
         // Aktif mod (varsayılan: Classic)
         this.currentMode = ModeRegistry.get('classic');
@@ -63,6 +65,7 @@ export class Game {
             onDragDelta: (dx, dy) => this.applyPlayerMove(this.player.x + dx, this.player.y + dy)
         });
         this.ui.touchScheme = this.touch.scheme;
+        this.touch.setLayout(this.layout);
         this.lastGrazeHaptic = 0;
 
         // Faz değişimi geri bildirimi
@@ -79,14 +82,44 @@ export class Game {
     }
 
     /**
-     * Canvas'ın fiziksel çözünürlüğünü cihaz piksel oranına göre ayarlar (Retina netliği)
+     * Ekran boyutuna/yönüne göre arena boyutunu, canvas ekran boyutunu ve
+     * fiziksel çözünürlüğü (DPR) ayarlar. Ekran döndürülürse çağrılır.
      */
-    resizeCanvas() {
+    applyLayout(initial = false) {
+        const L = computeLayout();
+        const prev = this.layout;
+        const arenaChanged = !prev || prev.arenaW !== L.arenaW || prev.arenaH !== L.arenaH;
+        this.layout = L;
+
+        // Arena boyutu: tüm alt sistemler GAME_CONFIG.CANVAS'ı anlık okur
+        GAME_CONFIG.CANVAS.WIDTH = L.arenaW;
+        GAME_CONFIG.CANVAS.HEIGHT = L.arenaH;
+
+        // Ekran (CSS) boyutu ve fiziksel çözünürlük
         const dpr = Math.min(window.devicePixelRatio || 1, GAME_CONFIG.DISPLAY.MAX_DPR);
-        if (dpr === this.dpr && this.canvas.width === Math.round(GAME_CONFIG.CANVAS.WIDTH * dpr)) return;
-        this.dpr = dpr;
-        this.canvas.width = Math.round(GAME_CONFIG.CANVAS.WIDTH * dpr);
-        this.canvas.height = Math.round(GAME_CONFIG.CANVAS.HEIGHT * dpr);
+        this.canvas.style.width = `${L.cssW}px`;
+        this.canvas.style.height = `${L.cssH}px`;
+        const bw = Math.max(1, Math.round(L.cssW * dpr));
+        const bh = Math.max(1, Math.round(L.cssH * dpr));
+        if (this.canvas.width !== bw) this.canvas.width = bw;
+        if (this.canvas.height !== bh) this.canvas.height = bh;
+        this.renderScale = bw / L.arenaW;
+        document.body.classList.toggle('landscape', L.landscape);
+        if (this.touch) this.touch.setLayout(L);
+
+        if (initial || !arenaChanged) return;
+
+        // Oyun sırasında döndürme: duraklat, oyuncuyu yeni arenaya sığdır
+        if (this.state === GAME_STATE.PLAYING) this.pauseGame();
+        if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
+            this.player.reset();
+        } else {
+            this.player.x = Math.min(this.player.x, L.arenaW - 30);
+            this.player.y = Math.min(this.player.y, L.arenaH - 30);
+            this.player.x = Math.max(30, this.player.x);
+            this.player.y = Math.max(30, this.player.y);
+        }
+        this.effects.resizeArena(L.arenaW, L.arenaH);
     }
 
     /**
@@ -243,7 +276,9 @@ export class Game {
                 this.pauseGame();
             }
         });
-        window.addEventListener('resize', () => this.resizeCanvas());
+        const relayout = () => this.applyLayout();
+        window.addEventListener('resize', relayout);
+        window.addEventListener('orientationchange', () => setTimeout(relayout, 120));
     }
 
     /**
@@ -543,8 +578,8 @@ export class Game {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
-        // Mantıksal 600x600 uzayı fiziksel piksellere ölçekle
-        ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+        // Mantıksal arena uzayını fiziksel piksellere ölçekle
+        ctx.setTransform(this.renderScale, 0, 0, this.renderScale, 0, 0);
 
         // Ekran sarsıntısı varsa canvas matrisine uygula
         this.effects.preRender(ctx);

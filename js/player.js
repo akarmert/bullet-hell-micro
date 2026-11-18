@@ -13,8 +13,8 @@ export class Player {
         this.color = GAME_CONFIG.PLAYER.COLOR;
         this.glow = GAME_CONFIG.PLAYER.GLOW;
 
-        this.x = GAME_CONFIG.PLAYER.START_X;
-        this.y = GAME_CONFIG.PLAYER.START_Y;
+        this.x = GAME_CONFIG.CANVAS.WIDTH / 2;
+        this.y = GAME_CONFIG.CANVAS.HEIGHT / 2;
         this.prevX = this.x;
         this.prevY = this.y;
         this.vx = 0;
@@ -109,8 +109,8 @@ export class Player {
      * Oyuncuyu başlangıç durumuna döndürür
      */
     reset() {
-        this.x = GAME_CONFIG.PLAYER.START_X;
-        this.y = GAME_CONFIG.PLAYER.START_Y;
+        this.x = GAME_CONFIG.CANVAS.WIDTH / 2;
+        this.y = GAME_CONFIG.CANVAS.HEIGHT / 2;
         this.prevX = this.x;
         this.prevY = this.y;
         this.vx = 0;

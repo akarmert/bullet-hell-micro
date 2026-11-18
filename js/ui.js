@@ -39,6 +39,7 @@ export class UIManager {
     }
 
     isSchemeToggleClicked(x, y) {
+        x -= this.offsetX;
         if (!this.isTouch) return false;
         const b = this.schemeButton;
         return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
@@ -49,6 +50,14 @@ export class UIManager {
             if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) return 'touch';
         } catch (e) { /* yok say */ }
         return 'desktop';
+    }
+
+    /**
+     * Menü / ölüm / duraklatma ekranları 600 genişliğinde bir kutuda çizilir;
+     * geniş (yatay) arenada bu kutu yatayda ortalanır.
+     */
+    get offsetX() {
+        return (GAME_CONFIG.CANVAS.WIDTH - GAME_CONFIG.CANVAS.BASE_SIZE) / 2;
     }
 
     setInputType(type) {
@@ -63,6 +72,7 @@ export class UIManager {
      * Ölüm ekranında dokunulan butonu döner ('retry' | 'menu' | null)
      */
     getDeadAction(x, y) {
+        x -= this.offsetX;
         for (const btn of this.deadButtons) {
             if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                 return btn.id;
@@ -134,6 +144,7 @@ export class UIManager {
     }
 
     getClickedMode(x, y) {
+        x -= this.offsetX;
         for (const btn of this.modeButtons) {
             if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                 return btn.id;
@@ -143,6 +154,7 @@ export class UIManager {
     }
 
     isPlayButtonClicked(x, y) {
+        x -= this.offsetX;
         const btn = this.playButton;
         return x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h;
     }
@@ -151,10 +163,10 @@ export class UIManager {
      * Menü Ekranı (Mod Seçimi ve Klavye/Fare/Gamepad İpuçları)
      */
     renderMenu(ctx, activeModeId = this.currentMode.id) {
-        const w = GAME_CONFIG.CANVAS.WIDTH;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const w = GAME_CONFIG.CANVAS.BASE_SIZE;
 
         ctx.save();
+        ctx.translate(this.offsetX, 0);
 
         // Başlık
         ctx.textAlign = 'center';
@@ -232,7 +244,8 @@ export class UIManager {
             if (this.touchScheme === 'joystick') {
                 ctx.fillText('[ Ekrana Bas & Kaydır ] Joystick', w / 2, 372);
                 ctx.fillStyle = '#8e8ea8';
-                ctx.fillText('[ Sağ Alt DASH / 2. Parmak ] Dash', w / 2, 396);
+                const dashWhere = GAME_CONFIG.CANVAS.WIDTH > GAME_CONFIG.CANVAS.BASE_SIZE ? 'Sağdaki' : 'Sağ Alt';
+                ctx.fillText(`[ ${dashWhere} DASH / 2. Parmak ] Dash`, w / 2, 396);
                 ctx.font = '11px "JetBrains Mono", monospace';
                 ctx.fillText('Az it = yavaş & hassas · Tam it = hızlı', w / 2, 418);
             } else {
@@ -386,13 +399,14 @@ export class UIManager {
      * Ölüm Ekranı
      */
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null) {
-        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const w = GAME_CONFIG.CANVAS.BASE_SIZE;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
         ctx.save();
 
         ctx.fillStyle = 'rgba(8, 8, 15, 0.84)';
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, h);
+        ctx.translate(this.offsetX, 0);
 
         ctx.textAlign = 'center';
 
@@ -484,12 +498,13 @@ export class UIManager {
      * Duraklatma Ekranı (uygulama arka plana alındığında otomatik açılır)
      */
     renderPaused(ctx) {
-        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const w = GAME_CONFIG.CANVAS.BASE_SIZE;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
         ctx.save();
         ctx.fillStyle = 'rgba(8, 8, 15, 0.72)';
-        ctx.fillRect(0, 0, w, h);
+        ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, h);
+        ctx.translate(this.offsetX, 0);
 
         ctx.textAlign = 'center';
         ctx.font = '900 28px "JetBrains Mono", monospace';

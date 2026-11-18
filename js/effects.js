@@ -405,8 +405,9 @@ class SpringGrid {
         this.width = width;
         this.height = height;
         this.step = step;
-        this.cols = Math.floor(width / step) + 1;
-        this.rows = Math.floor(height / step) + 1;
+        // ceil: arena genişliği adımın katı değilse (yatay ekran) ızgara kenara kadar uzansın
+        this.cols = Math.ceil(width / step) + 1;
+        this.rows = Math.ceil(height / step) + 1;
 
         this.points = [];
         for (let c = 0; c < this.cols; c++) {
@@ -541,6 +542,13 @@ export class EffectsManager {
 
     initAudio() {
         this.sound.init();
+    }
+
+    /**
+     * Arena boyutu değiştiğinde (ekran döndürme) reaktif ızgarayı yeniden kurar
+     */
+    resizeArena(width, height) {
+        this.grid = new SpringGrid(width, height, 50);
     }
 
     /**
