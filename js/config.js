@@ -99,6 +99,32 @@ export const GAME_CONFIG = {
         TELEGRAPH_TIME: 320
     },
 
+    // --- BOSS: NEXUS (30s, AIM ile CHAOS arası) ---
+    // Oyuncu ateş etmez: enerji zamanla söner, Graze ve Dash-Ram hızlandırır.
+    BOSS: {
+        NAME: 'BOSS',
+        START_TIME: 30000,
+        DURATION: 18000,      // Hiç hasar verilmezse boss'un sönme süresi (ms)
+        MAX_HP: 100,
+        GRAZE_DAMAGE: 1.5,    // Her teğet geçiş
+        RAM_DAMAGE: 7,        // Dash ile gövdeden geçiş (dash başına 1 kez)
+        RAM_REACH: 14,        // Ram için gövdeye ek tolerans (px)
+        RADIUS: 24,
+        HOVER_Y: 185,
+        ENTRY_TIME: 1800,     // Giriş animasyonu (ateş yok)
+        DEATH_TIME: 900,      // Ölüm animasyonu (ateş yok)
+        STAGE_COOLDOWN: 700,  // Aşama geçişinde ateşkes
+        BULLET_RADIUS: 4,
+        COLOR: '#ff7a1a',
+        GLOW: 'rgba(255, 122, 26, 0.55)',
+        STAGES: [
+            { NAME: 'BLOOM', INTERVAL: 900, COUNT: 14, SPEED: 125, ROTATE_STEP: 0.2 },
+            { NAME: 'FANG', INTERVAL: 1150, FAN_COUNT: 5, FAN_SPREAD: 0.2, SPEED: 215, TELEGRAPH_TIME: 420,
+              RING_INTERVAL: 1800, RING_COUNT: 10, RING_SPEED: 95 },
+            { NAME: 'VORTEX', INTERVAL: 150, ARMS: 2, SPEED: 140, ROT_SPEED: 2.2 }
+        ]
+    },
+
     // --- EFEKTLER ---
     EFFECTS: {
         SHAKE_DURATION: 300,      // ms
@@ -108,6 +134,11 @@ export const GAME_CONFIG = {
         PARTICLE_SPEED_MAX: 260,
         PARTICLE_LIFETIME: 550,   // ms
         COLOR: '#00ffff'
+    },
+
+    // --- DURAKLATMA ---
+    PAUSE: {
+        RESUME_COUNTDOWN: 1500 // Devam etmeden önceki geri sayım (ms)
     },
 
     // --- SES AYARLARI (Web Audio API) ---

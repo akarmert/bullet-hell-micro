@@ -15,14 +15,21 @@ export class UIManager {
 
         // Menü Buton Koordinatları (2x2 Izgara)
         this.modeButtons = [
-            { id: 'classic', label: 'CLASSIC', x: 90, y: 175, w: 200, h: 44 },
-            { id: 'endless', label: 'ENDLESS', x: 310, y: 175, w: 200, h: 44 },
-            { id: 'hardcore', label: 'HARDCORE', x: 90, y: 230, w: 200, h: 44 },
-            { id: 'chaos', label: 'CHAOS', x: 310, y: 230, w: 200, h: 44 }
+            { id: 'classic', label: 'CLASSIC', x: 90, y: 140, w: 200, h: 68 },
+            { id: 'endless', label: 'ENDLESS', x: 310, y: 140, w: 200, h: 68 },
+            { id: 'hardcore', label: 'HARDCORE', x: 90, y: 218, w: 200, h: 68 },
+            { id: 'chaos', label: 'CHAOS', x: 310, y: 218, w: 200, h: 68 }
         ];
 
         // Başlat Butonu Koordinatları
-        this.playButton = { x: 170, y: 440, w: 260, h: 50 };
+        this.playButton = { x: 170, y: 440, w: 260, h: 74 };
+    }
+
+    setLayout(width, height, safe = { left: 0, right: 0, top: 0, bottom: 0 }) {
+        this.safe = safe;
+        this.menuScale = Math.min(1, (width - safe.left - safe.right) / 600, (height - safe.top - safe.bottom) / 600);
+        this.menuOffsetX = safe.left + (width - safe.left - safe.right - 600 * this.menuScale) / 2;
+        this.menuOffsetY = safe.top + (height - safe.top - safe.bottom - 600 * this.menuScale) / 2;
     }
 
     setMode(mode) {
@@ -88,6 +95,8 @@ export class UIManager {
     }
 
     getClickedMode(x, y) {
+        x = (x - this.menuOffsetX) / this.menuScale;
+        y = (y - this.menuOffsetY) / this.menuScale;
         for (const btn of this.modeButtons) {
             if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                 return btn.id;
@@ -97,6 +106,8 @@ export class UIManager {
     }
 
     isPlayButtonClicked(x, y) {
+        x = (x - this.menuOffsetX) / this.menuScale;
+        y = (y - this.menuOffsetY) / this.menuScale;
         const btn = this.playButton;
         return x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h;
     }
@@ -105,10 +116,11 @@ export class UIManager {
      * Menü Ekranı (Mod Seçimi ve Klavye/Fare/Gamepad İpuçları)
      */
     renderMenu(ctx, activeModeId = this.currentMode.id) {
-        const w = GAME_CONFIG.CANVAS.WIDTH;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const w = 600;
 
         ctx.save();
+        ctx.translate(this.menuOffsetX, this.menuOffsetY);
+        ctx.scale(this.menuScale, this.menuScale);
 
         // Başlık
         ctx.textAlign = 'center';
@@ -181,11 +193,11 @@ export class UIManager {
         // Kontrol ve Mekanik İpuçları
         ctx.font = '11px "JetBrains Mono", monospace';
         ctx.fillStyle = '#00ffff';
-        ctx.fillText('[ Fare / WASD / Gamepad ] Hareket', w / 2, 370);
+        ctx.fillText('[ Joystick / Fare / WASD / Gamepad ] Hareket', w / 2, 370);
 
         ctx.fillStyle = '#8e8ea8';
-        ctx.fillText('[ Sağ Tık / Shift / Space ] Dash (Dokunulmazlık)', w / 2, 390);
-        ctx.fillText('[ B ] Synth Müzik Aç/Kapat', w / 2, 410);
+        ctx.fillText('[ DASH / Sağ Tık / Shift / Space ] Dokunulmazlık', w / 2, 390);
+        ctx.fillText('[ P / ESC ] Duraklat   [ B ] Synth Müzik', w / 2, 410);
 
         // PLAY Butonu
         const pb = this.playButton;
@@ -204,7 +216,8 @@ export class UIManager {
 
         ctx.font = 'bold 15px "JetBrains Mono", monospace';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(`OYNA: ${activeMode.label}`, w / 2, pb.y + 31);
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`OYNA: ${activeMode.label}`, w / 2, pb.y + pb.h / 2);
 
         ctx.restore();
     }
@@ -214,17 +227,20 @@ export class UIManager {
      */
     renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
+        const left = 18 + this.safe.left;
+        const right = w - 18 - this.safe.right;
 
         ctx.save();
+        ctx.translate(0, this.safe.top);
 
         // 1. Sol Üst: Graze (Teğet Geçme) Sayacı
-        ctx.textAlign = 'left';
+        ctx.textAlign = 'right';
         ctx.font = 'bold 13px "JetBrains Mono", monospace';
         ctx.fillStyle = '#ffe600';
         ctx.shadowColor = '#ffe600';
         ctx.shadowBlur = 6;
         const graze = player ? player.grazeCount : 0;
-        ctx.fillText(`GRAZE: ${graze}`, 18, 28);
+        ctx.fillText(`GRAZE: ${graze}`, right, 28);
         ctx.shadowBlur = 0;
 
         // Kalkan aktifse sol üstte yeşil kalkan ikonu/metni
@@ -233,7 +249,7 @@ export class UIManager {
             ctx.fillStyle = '#00ff88';
             ctx.shadowColor = '#00ff88';
             ctx.shadowBlur = 6;
-            ctx.fillText('🛡 KALKAN AKTİF', 18, 48);
+            ctx.fillText('KALKAN AKTİF', right, 48);
             ctx.shadowBlur = 0;
         }
 
@@ -244,7 +260,7 @@ export class UIManager {
             ctx.shadowColor = '#ffaa00';
             ctx.shadowBlur = 8;
             const remaining = (pickupManager.slowmoTimer / 1000).toFixed(1);
-            ctx.fillText(`⏳ SLOW-MO: ${remaining}s`, 18, player && player.hasShield ? 68 : 48);
+            ctx.fillText(`SLOW-MO: ${remaining}s`, right, player && player.hasShield ? 68 : 48);
             ctx.shadowBlur = 0;
         }
 
@@ -254,7 +270,9 @@ export class UIManager {
         ctx.fillStyle = '#00ffff';
         ctx.shadowColor = '#00ffff';
         ctx.shadowBlur = 6;
-        ctx.fillText(mode.label, w / 2, 26);
+        ctx.textAlign = 'left';
+        ctx.fillText(mode.label, left, 26);
+        ctx.textAlign = 'center';
 
         ctx.font = 'bold 34px "JetBrains Mono", monospace';
         ctx.fillStyle = '#ffffff';
@@ -263,13 +281,13 @@ export class UIManager {
         ctx.shadowBlur = 0;
 
         // 3. Sağ Üst: Modun Rekoru
-        ctx.textAlign = 'right';
+        ctx.textAlign = 'left';
         ctx.font = '12px "JetBrains Mono", monospace';
         ctx.fillStyle = '#808098';
-        ctx.fillText(`REKOR: ${UIManager.formatTime(this.getHighScore(mode.id))}`, w - 18, 26);
+        ctx.fillText(`REKOR: ${UIManager.formatTime(this.getHighScore(mode.id))}`, left, 46);
 
         // 4. Alt Orta: Dash (I-Frame) Şarj Göstergesi
-        if (player) {
+        if (player && !matchMedia('(any-pointer: coarse)').matches) {
             const barW = 120;
             const barH = 5;
             const barX = (w - barW) / 2;
@@ -301,9 +319,57 @@ export class UIManager {
     }
 
     /**
+     * Duraklatma Ekranı ve Devam Geri Sayımı
+     */
+    renderPaused(ctx, countdownMs = 0, touch = false) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        if (countdownMs > 0) {
+            const step = Math.ceil(countdownMs / 500);
+            const frac = (countdownMs % 500) / 500;
+            ctx.fillStyle = 'rgba(8, 8, 15, 0.35)';
+            ctx.fillRect(0, 0, w, h);
+            ctx.font = `900 ${48 + frac * 22}px "JetBrains Mono", monospace`;
+            ctx.fillStyle = `rgba(255, 255, 255, ${0.45 + frac * 0.55})`;
+            ctx.shadowColor = '#00ffff';
+            ctx.shadowBlur = 20;
+            ctx.fillText(String(step), w / 2, h / 2);
+            ctx.restore();
+            return;
+        }
+
+        ctx.fillStyle = 'rgba(8, 8, 15, 0.72)';
+        ctx.fillRect(0, 0, w, h);
+
+        ctx.font = '900 30px "JetBrains Mono", monospace';
+        ctx.fillStyle = '#00ffff';
+        ctx.shadowColor = '#00ffff';
+        ctx.shadowBlur = 16;
+        ctx.fillText('DURAKLATILDI', w / 2, h / 2 - 30);
+        ctx.shadowBlur = 0;
+
+        const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
+        ctx.font = '13px "JetBrains Mono", monospace';
+        ctx.fillStyle = `rgba(255, 255, 255, ${0.6 + pulse * 0.4})`;
+        ctx.fillText(touch ? 'Devam etmek için dokun' : '[ Tıkla / Space / P / ESC ] Devam Et', w / 2, h / 2 + 18);
+
+        if (!touch) {
+            ctx.font = '11px "JetBrains Mono", monospace';
+            ctx.fillStyle = '#7a7a92';
+            ctx.fillText('[ M ] Ana Menü', w / 2, h / 2 + 44);
+        }
+        ctx.restore();
+    }
+
+    /**
      * Ölüm Ekranı
      */
-    renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null) {
+    renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, waves = null) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
@@ -359,6 +425,18 @@ export class UIManager {
         ctx.font = 'bold 17px "JetBrains Mono", monospace';
         ctx.fillStyle = '#00ffff';
         ctx.fillText(UIManager.formatTime(this.getHighScore(mode.id)), w / 2, h / 2 + 82);
+
+        // Boss sonucu
+        if (waves && waves.boss) {
+            ctx.font = 'bold 11px "JetBrains Mono", monospace';
+            if (waves.bossDefeatedAt !== null) {
+                ctx.fillStyle = '#ffe600';
+                ctx.fillText(`✓ NEXUS YENİLDİ (${UIManager.formatTime(waves.bossDefeatedAt)})`, w / 2, h / 2 + 106);
+            } else {
+                ctx.fillStyle = '#ff7a1a';
+                ctx.fillText(`NEXUS ENERJİSİ: %${Math.ceil(waves.boss.hpRatio * 100)}`, w / 2, h / 2 + 106);
+            }
+        }
 
         // Hızlı Yeniden Başlatma & Menü Seçenekleri
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;

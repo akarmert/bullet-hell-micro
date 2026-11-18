@@ -2,14 +2,24 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
     <title>Bullet Hell Micro – 30 Saniyelik Kaçış</title>
     <meta name="description" content="Minimalist, hızlı ve yüksek tekrar oynanabilirliğe sahip 30 saniyelik Bullet Hell mini web oyunu.">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <main class="game-container">
-        <canvas id="gameCanvas" width="600" height="600"></canvas>
+        <canvas id="gameCanvas" aria-label="Bullet Hell Micro oyun alanı"></canvas>
+        <div id="touchControls" hidden>
+            <div id="joystick" aria-label="Hareket joystick'i"><span id="joystickKnob"></span></div>
+            <button id="dashButton" type="button" aria-label="Dash">
+                <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="dash-track" cx="50" cy="50" r="45"/><circle id="dashRing" cx="50" cy="50" r="45" pathLength="1"/></svg>
+                <span>DASH</span>
+            </button>
+        </div>
+        <button id="pauseButton" type="button" aria-label="Duraklat" hidden><span></span><span></span></button>
+        <button id="menuButton" type="button" hidden>ANA MENÜ</button>
+        <p id="rotateHint">Yatay oynamak için cihazı çevir.</p>
     </main>
     <script type="module" src="js/main.js"></script>
 </body>

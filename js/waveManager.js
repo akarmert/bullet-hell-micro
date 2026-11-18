@@ -5,6 +5,7 @@
 
 import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
+import { Boss, BOSS_STATE } from './boss.js';
 
 export class WaveManager {
     constructor(bulletManager, mode = null) {
@@ -25,6 +26,27 @@ export class WaveManager {
         };
 
         this.onPhaseChange = null; // Faz geçişlerinde tetiklenecek callback
+
+        // Boss durumu
+        this.boss = null;
+        this.bossDefeatedAt = null;            // Boss'un yenildiği simülasyon zamanı (ms)
+        this.chaosStartMs = GAME_CONFIG.BOSS.START_TIME;
+        this.onBossStageChange = null;
+        this.onBossDefeated = null;
+    }
+
+    /**
+     * Bu mod boss içeriyor mu? (CHAOS modu tüm sistemleri baştan açtığı için boss'suz)
+     */
+    hasBoss() {
+        return !(this.mode && this.mode.isSimultaneous());
+    }
+
+    /**
+     * Boss fazında mıyız? (giriş, savaş veya ölüm animasyonu)
+     */
+    isBossPhase(elapsedMs) {
+        return this.hasBoss() && elapsedMs >= GAME_CONFIG.BOSS.START_TIME && this.bossDefeatedAt === null;
     }
 
     /**
@@ -47,6 +69,9 @@ export class WaveManager {
         this.timers.spiral = 0;
         this.timers.aim = 0;
         this.timers.chaos = 0;
+        this.boss = null;
+        this.bossDefeatedAt = null;
+        this.chaosStartMs = GAME_CONFIG.BOSS.START_TIME;
     }
 
     /**
@@ -164,6 +189,9 @@ export class WaveManager {
         } else if (elapsedMs < GAME_CONFIG.PHASE_3.END_TIME) {
             // --- FAZ 3: AIM (20 - 30s) ---
             this.updateAim(elapsedMs, dtMs, player);
+        } else if (this.isBossPhase(elapsedMs)) {
+            // --- BOSS: NEXUS (30s - yenilene kadar) ---
+            this.updateBoss(elapsedMs, dt, player);
         } else {
             // --- FAZ 4: CHAOS (30s+) / ENDLESS ---
             this.updateChaos(elapsedMs, dt, dtMs, player);
@@ -178,6 +206,7 @@ export class WaveManager {
         if (elapsedMs < GAME_CONFIG.PHASE_1.END_TIME) return GAME_CONFIG.PHASE_1.NAME;
         if (elapsedMs < GAME_CONFIG.PHASE_2.END_TIME) return GAME_CONFIG.PHASE_2.NAME;
         if (elapsedMs < GAME_CONFIG.PHASE_3.END_TIME) return GAME_CONFIG.PHASE_3.NAME;
+        if (this.isBossPhase(elapsedMs)) return GAME_CONFIG.BOSS.NAME;
         return GAME_CONFIG.PHASE_4.NAME;
     }
 
@@ -387,7 +416,7 @@ export class WaveManager {
         const uy = dy / dist;
 
         // Ekran sonuna uzanan telegraf çizgisi
-        const rayLen = 950;
+        const rayLen = Math.hypot(w, h) + 24;
         const ex = sx + ux * rayLen;
         const ey = sy + uy * rayLen;
 
@@ -422,11 +451,41 @@ export class WaveManager {
     }
 
     // ------------------------------------------------------------
+    // BOSS: NEXUS — Boss kendi desenlerini ateşler
+    // ------------------------------------------------------------
+    updateBoss(elapsedMs, dt, player) {
+        if (!this.boss) {
+            this.boss = new Boss(this, elapsedMs);
+            this.boss.onStageChange = (boss) => {
+                if (this.onBossStageChange) this.onBossStageChange(boss);
+            };
+            this.boss.onDefeated = (boss) => {
+                this.bossDefeatedAt = this.lastElapsedMs;
+                this.chaosStartMs = this.lastElapsedMs;
+                this.telegraphs.length = 0; // Bekleyen boss atışları iptal
+                this.timers.chaos = 0;
+                this.timers.aim = 0;
+                this.timers.spiral = 0;
+                if (this.onBossDefeated) this.onBossDefeated(boss);
+            };
+        }
+        this.lastElapsedMs = elapsedMs;
+        this.boss.update(dt, player);
+    }
+
+    /**
+     * Boss'u çizer (yenildiyse hiçbir şey çizmez)
+     */
+    renderBoss(ctx) {
+        if (this.boss && this.boss.state !== BOSS_STATE.DEAD) this.boss.render(ctx);
+    }
+
+    // ------------------------------------------------------------
     // FAZ 4: CHAOS & ENDLESS — Duvarlardan seken telegraflı lazer kapsüller
     // ------------------------------------------------------------
     updateChaos(elapsedMs, dt, dtMs, player) {
         const cfg = GAME_CONFIG.PHASE_4;
-        const chaosTime = elapsedMs - cfg.START_TIME;
+        const chaosTime = elapsedMs - this.chaosStartMs;
         const progress = Math.min(1, chaosTime / 20000);
 
         const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
@@ -446,7 +505,7 @@ export class WaveManager {
         }
 
         // ENDLESS Modu: Süre uzadıkça periyodik spiral dalgası da eklenir
-        if (this.mode.id === 'endless' && elapsedMs > 35000) {
+        if (this.mode.id === 'endless' && chaosTime > 5000) {
             this.spiralAngle += (GAME_CONFIG.PHASE_2.BASE_ROT_SPEED * 1.2) * dt;
             this.timers.spiral += dtMs;
             if (this.timers.spiral >= 1400 * intervalMult) {
@@ -495,8 +554,8 @@ export class WaveManager {
         this.addTelegraph({
             x1: x,
             y1: y,
-            x2: x + Math.cos(angle) * 700,
-            y2: y + Math.sin(angle) * 700,
+            x2: x + Math.cos(angle) * Math.hypot(w, h),
+            y2: y + Math.sin(angle) * Math.hypot(w, h),
             color: cfg.COLOR,
             duration: cfg.TELEGRAPH_TIME || 300,
             onFire: () => {

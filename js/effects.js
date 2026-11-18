@@ -332,6 +332,25 @@ class SoundSystem {
         });
     }
 
+    playBossAlarm() {
+        if (!this.ctx || !this.enabled) return;
+        const now = this.ctx.currentTime;
+        for (let i = 0; i < 3; i++) {
+            const t = now + i * 0.32;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(220, t);
+            osc.frequency.linearRampToValueAtTime(160, t + 0.24);
+            gain.gain.setValueAtTime(GAME_CONFIG.AUDIO.MASTER_VOLUME * 0.45, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.26);
+        }
+    }
+
     playPhase() {
         if (!this.ctx || !this.enabled) return;
         const now = this.ctx.currentTime;
@@ -405,7 +424,7 @@ class SpringGrid {
         this.width = width;
         this.height = height;
         this.step = step;
-        this.cols = Math.floor(width / step) + 1;
+        this.cols = Math.ceil(width / step) + 1;
         this.rows = Math.floor(height / step) + 1;
 
         this.points = [];
@@ -539,6 +558,10 @@ export class EffectsManager {
         this.shockwaves = [];
     }
 
+    resize(width, height) {
+        this.grid = new SpringGrid(width, height, 50);
+    }
+
     initAudio() {
         this.sound.init();
     }
@@ -656,6 +679,51 @@ export class EffectsManager {
         }
 
         this.grid.applyForce(x, y, 280, 250);
+    }
+
+    /**
+     * Boss geliyor uyarısı
+     */
+    triggerBossIncoming() {
+        this.triggerBanner('⚠ BOSS YAKLAŞIYOR: NEXUS', '#ff7a1a');
+        this.bannerTimer = 2200;
+        this.shakeTimer = 600;
+        this.shakeIntensity = 4;
+        this.sound.playBossAlarm();
+    }
+
+    /**
+     * Boss aşama değişimi: turuncu şok dalgası
+     */
+    triggerBossStage(x, y, stageName) {
+        this.triggerBanner(`NEXUS: ${stageName}`, '#ff7a1a');
+        this.sound.playPhase();
+        this.shakeTimer = 220;
+        this.shakeIntensity = 6;
+        this.shockwaves.push({ x, y, radius: 10, maxRadius: 220, color: '#ff7a1a', alpha: 1.0 });
+        for (let i = 0; i < 16; i++) {
+            this.particles.push(new Particle(x, y, i % 2 ? '#ffffff' : '#ff7a1a', 0.8, 0.7));
+        }
+        this.grid.applyForce(x, y, 200, 160);
+    }
+
+    /**
+     * Boss yenildi: büyük patlama ve ekran temizliği
+     */
+    triggerBossDefeated(x, y, destroyedBullets) {
+        this.triggerEMP(x, y, destroyedBullets);
+        this.shockwaves[this.shockwaves.length - 1].color = '#ff7a1a';
+        this.shockwaves.push({ x, y, radius: 4, maxRadius: 700, color: '#ffffff', alpha: 1.0 });
+        this.shakeTimer = 500;
+        this.shakeIntensity = 14;
+        this.flashAlpha = 0.6;
+        const colors = ['#ff7a1a', '#ffffff', '#ffe600'];
+        for (let i = 0; i < 48; i++) {
+            this.particles.push(new Particle(x, y, colors[i % 3], 1.3, 1.4));
+        }
+        this.triggerBanner('★ NEXUS YENİLDİ! ★', '#ffe600');
+        this.bannerTimer = 2200;
+        this.sound.playRecord();
     }
 
     /**

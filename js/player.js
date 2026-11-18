@@ -171,7 +171,7 @@ export class Player {
 
         // Klavye / Gamepad hareketi
         if (this.inputMode === 'keyboard' && (this.moveInput.x !== 0 || this.moveInput.y !== 0)) {
-            const mag = Math.hypot(this.moveInput.x, this.moveInput.y) || 1;
+            const mag = Math.max(1, Math.hypot(this.moveInput.x, this.moveInput.y));
             const normX = this.moveInput.x / mag;
             const normY = this.moveInput.y / mag;
 
