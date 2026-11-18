@@ -58,9 +58,10 @@ export class Player {
     /**
      * Klavye / Gamepad yön vektörünü ayarlar
      */
-    setMoveInput(x, y) {
+    setMoveInput(x, y, speed = null) {
         this.moveInput.x = x;
         this.moveInput.y = y;
+        this.moveSpeed = speed; // null = varsayılan klavye hızı (joystick kendi hızını verir)
         if (x !== 0 || y !== 0) {
             this.inputMode = 'keyboard';
         }
@@ -124,6 +125,7 @@ export class Player {
         this.moveInput.x = 0;
         this.moveInput.y = 0;
         this.inputMode = 'mouse';
+        this.moveSpeed = null;
     }
 
     /**
@@ -171,11 +173,14 @@ export class Player {
 
         // Klavye / Gamepad hareketi
         if (this.inputMode === 'keyboard' && (this.moveInput.x !== 0 || this.moveInput.y !== 0)) {
+            // Analog girdi (joystick / gamepad): büyüklük <= 1 ise korunur (yarım itiş = yarım hız).
+            // Klavye çaprazı gibi 1'i aşan vektörler normalize edilir.
             const mag = Math.hypot(this.moveInput.x, this.moveInput.y) || 1;
-            const normX = this.moveInput.x / mag;
-            const normY = this.moveInput.y / mag;
+            const div = mag > 1 ? mag : 1;
+            const normX = this.moveInput.x / div;
+            const normY = this.moveInput.y / div;
 
-            const baseSpeed = GAME_CONFIG.PLAYER.KEYBOARD_SPEED;
+            const baseSpeed = this.moveSpeed || GAME_CONFIG.PLAYER.KEYBOARD_SPEED;
             const speed = this.isDashing ? baseSpeed * GAME_CONFIG.PLAYER.DASH.SPEED_MULT : baseSpeed;
 
             this.prevX = this.x;

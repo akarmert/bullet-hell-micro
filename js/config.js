@@ -30,7 +30,22 @@ export const GAME_CONFIG = {
         SENSITIVITY: 1.3,        // Göreli sürüklemede parmak hareketi çarpanı
         DOUBLE_TAP_MS: 260,      // Parmağı kaldırıp bu sürede tekrar dokunmak = Dash
         RESTART_GUARD_MS: 450,   // Ölümden sonra yanlışlıkla yeniden başlatmayı önler
-        GRAZE_HAPTIC_GAP_MS: 120 // Graze titreşimleri arasındaki min. süre
+        GRAZE_HAPTIC_GAP_MS: 120, // Graze titreşimleri arasındaki min. süre
+        DEFAULT_SCHEME: 'joystick', // 'joystick' | 'drag'
+        SCHEME_STORAGE_KEY: 'bulletHell_touchScheme'
+    },
+
+    // --- SANAL JOYSTICK (PUBG / FIFA tarzı yüzen joystick) ---
+    // Ölçüler ekran (CSS) pikseli cinsindendir; arena ölçeğinden bağımsızdır.
+    JOYSTICK: {
+        SPEED: 400,          // Tam itişte oyuncu hızı (mantıksal px/s)
+        BASE_RADIUS: 62,     // Joystick tabanı yarıçapı
+        KNOB_RADIUS: 26,     // Topuz yarıçapı
+        DEADZONE: 0.12,      // Bu oranın altındaki itişler yok sayılır
+        CURVE: 1.35,         // >1: küçük itişlerde hassas, büyüklerde hızlı (ince ayar)
+        FOLLOW: true,        // Parmak tabanın dışına çıkınca taban parmağı takip eder
+        DASH_BUTTON_RADIUS: 44,
+        DASH_BUTTON_MARGIN: 34 // Sağ alt köşeden uzaklık
     },
 
     DISPLAY: {

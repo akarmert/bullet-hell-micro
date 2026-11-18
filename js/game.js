@@ -14,6 +14,7 @@ import { EffectsManager } from './effects.js';
 import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { Haptics } from './haptics.js';
+import { TouchControls } from './touchControls.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -55,11 +56,13 @@ export class Game {
         this.lastGamepadDashPressed = false;
         this.lastGamepadStartPressed = false;
 
-        // Dokunmatik (göreli sürükleme) durumu
-        this.activeTouches = new Map();  // pointerId -> {x, y}
-        this.dragPointerId = null;       // Oyuncuyu hareket ettiren parmak
-        this.dragLast = null;            // Sürükleyen parmağın son konumu (canvas uzayında)
-        this.lastTouchUpTime = 0;
+        // Dokunmatik kontroller (joystick veya göreli sürükleme)
+        this.touch = new TouchControls({
+            toCanvas: (cx, cy) => this.getCanvasCoords(cx, cy),
+            onDash: () => this.tryDash(),
+            onDragDelta: (dx, dy) => this.applyPlayerMove(this.player.x + dx, this.player.y + dy)
+        });
+        this.ui.touchScheme = this.touch.scheme;
         this.lastGrazeHaptic = 0;
 
         // Faz değişimi geri bildirimi
@@ -124,62 +127,31 @@ export class Game {
             this.applyPlayerMove(c.x, c.y);
         });
 
-        // --- DOKUNMATİK: Göreli sürükleme ---
-        // Oyuncu parmağın altına ışınlanmaz; parmak ne kadar kayarsa o kadar hareket eder.
-        // Böylece parmak gemiyi kapatmaz ve parmak kaldırıp başka yere koyarak mermilerin
-        // içinden "ışınlanma" açığı kapanır.
-        this.canvas.addEventListener('pointermove', (e) => {
+        // --- DOKUNMATİK: window seviyesinde dinlenir; böylece arenanın dışındaki
+        // boş ekran alanı da (dikey telefonda alt kısım) joystick bölgesi olur.
+        window.addEventListener('pointerdown', (e) => {
             if (e.pointerType === 'mouse') return;
             e.preventDefault();
-            if (!this.activeTouches.has(e.pointerId)) return;
-
-            const c = this.getCanvasCoords(e.clientX, e.clientY);
-            this.activeTouches.set(e.pointerId, c);
-
-            if (e.pointerId !== this.dragPointerId || !this.dragLast) return;
-
-            const sens = GAME_CONFIG.TOUCH.SENSITIVITY;
-            const dx = (c.x - this.dragLast.x) * sens;
-            const dy = (c.y - this.dragLast.y) * sens;
-            this.dragLast = c;
-
-            if (dx !== 0 || dy !== 0) {
-                this.applyPlayerMove(this.player.x + dx, this.player.y + dy);
-            }
+            this.handleTouchDown(e);
         }, { passive: false });
-
+        window.addEventListener('pointermove', (e) => {
+            if (e.pointerType === 'mouse') return;
+            e.preventDefault();
+            this.touch.move(e);
+        }, { passive: false });
         const endTouch = (e) => {
             if (e.pointerType === 'mouse') return;
-            this.activeTouches.delete(e.pointerId);
-            if (e.pointerId === this.dragPointerId) {
-                this.dragPointerId = null;
-                this.dragLast = null;
-                this.lastTouchUpTime = performance.now();
-
-                // Sürükleyen parmak kalktı ama başka parmak ekrandaysa kontrolü ona devret
-                const next = this.activeTouches.entries().next();
-                if (!next.done) {
-                    this.dragPointerId = next.value[0];
-                    this.dragLast = next.value[1];
-                }
-            }
+            this.touch.up(e);
         };
-        this.canvas.addEventListener('pointerup', endTouch);
-        this.canvas.addEventListener('pointercancel', endTouch);
+        window.addEventListener('pointerup', endTouch);
+        window.addEventListener('pointercancel', endTouch);
 
-        // --- Tıklama / Dokunma Eylemleri ---
+        // --- FARE: Tıklama Eylemleri (Sol Tık & Sağ Tık) ---
         this.canvas.addEventListener('pointerdown', (e) => {
+            if (e.pointerType !== 'mouse') return;
             e.preventDefault();
             this.effects.initAudio();
-
-            const isTouch = e.pointerType !== 'mouse';
-            this.ui.setInputType(isTouch ? 'touch' : 'desktop');
-            const coords = this.getCanvasCoords(e.clientX, e.clientY);
-
-            if (isTouch) {
-                try { this.canvas.setPointerCapture(e.pointerId); } catch (err) { /* yok say */ }
-                this.activeTouches.set(e.pointerId, coords);
-            }
+            this.ui.setInputType('desktop');
 
             // Sağ Tık -> Oyun esnasında Dash tetikler
             if (e.button === 2) {
@@ -187,40 +159,22 @@ export class Game {
                 return;
             }
 
+            const coords = this.getCanvasCoords(e.clientX, e.clientY);
             switch (this.state) {
-                case GAME_STATE.PLAYING:
-                    if (isTouch) this.handleTouchDownWhilePlaying(e.pointerId, coords);
-                    break;
-
                 case GAME_STATE.PAUSED:
                     this.resumeGame();
-                    if (isTouch) this.beginDrag(e.pointerId, coords);
                     break;
-
                 case GAME_STATE.MENU: {
                     const clickedModeId = this.ui.getClickedMode(coords.x, coords.y);
-                    if (clickedModeId) {
-                        this.selectMode(clickedModeId);
-                    } else {
-                        this.startGame();
-                        if (isTouch) this.beginDrag(e.pointerId, coords);
-                    }
+                    if (clickedModeId) this.selectMode(clickedModeId);
+                    else this.startGame();
                     break;
                 }
-
-                case GAME_STATE.DEAD: {
-                    const guard = isTouch ? GAME_CONFIG.TOUCH.RESTART_GUARD_MS : 80;
-                    if (performance.now() - this.deathTimestamp <= guard) break;
-
-                    const action = this.ui.getDeadAction(coords.x, coords.y);
-                    if (action === 'menu') {
-                        this.goToMenu();
-                    } else {
-                        this.restartGame();
-                        if (isTouch) this.beginDrag(e.pointerId, coords);
-                    }
+                case GAME_STATE.DEAD:
+                    if (performance.now() - this.deathTimestamp <= 80) break;
+                    if (this.ui.getDeadAction(coords.x, coords.y) === 'menu') this.goToMenu();
+                    else this.restartGame();
                     break;
-                }
             }
         });
 
@@ -293,26 +247,51 @@ export class Game {
     }
 
     /**
-     * Oyun sırasında yeni bir parmak ekrana değdiğinde:
-     *  - Zaten sürükleyen bir parmak varsa -> ikinci parmak dokunuşu = DASH
-     *  - Sürükleyen parmak yoksa -> bu parmak sürüklemeyi devralır;
-     *    kısa süre önce kaldırılmışsa (çift dokunma) aynı zamanda DASH
+     * Dokunmatik basış: oyun durumuna göre yönlendirilir.
+     * Menü/ölüm ekranında butonlara bakılır; oyunu başlatan dokunuş aynı zamanda
+     * joystick'i (veya sürüklemeyi) o noktada başlatır — tek hareketle oyuna girilir.
      */
-    handleTouchDownWhilePlaying(pointerId, coords) {
-        if (this.dragPointerId !== null && this.dragPointerId !== pointerId) {
-            this.tryDash();
-            return;
-        }
-        const sinceUp = performance.now() - this.lastTouchUpTime;
-        this.beginDrag(pointerId, coords);
-        if (sinceUp < GAME_CONFIG.TOUCH.DOUBLE_TAP_MS) {
-            this.tryDash();
-        }
-    }
+    handleTouchDown(e) {
+        this.effects.initAudio();
+        this.ui.setInputType('touch');
+        const coords = this.getCanvasCoords(e.clientX, e.clientY);
 
-    beginDrag(pointerId, coords) {
-        this.dragPointerId = pointerId;
-        this.dragLast = coords;
+        switch (this.state) {
+            case GAME_STATE.PLAYING:
+                this.touch.down(e);
+                break;
+
+            case GAME_STATE.PAUSED:
+                this.resumeGame();
+                this.touch.down(e);
+                break;
+
+            case GAME_STATE.MENU: {
+                const clickedModeId = this.ui.getClickedMode(coords.x, coords.y);
+                if (clickedModeId) {
+                    this.selectMode(clickedModeId);
+                } else if (this.ui.isSchemeToggleClicked(coords.x, coords.y)) {
+                    this.ui.touchScheme = this.touch.toggleScheme();
+                    this.effects.sound.playPhase();
+                    Haptics.pickup();
+                } else {
+                    this.startGame();
+                    this.touch.down(e);
+                }
+                break;
+            }
+
+            case GAME_STATE.DEAD: {
+                if (performance.now() - this.deathTimestamp <= GAME_CONFIG.TOUCH.RESTART_GUARD_MS) break;
+                if (this.ui.getDeadAction(coords.x, coords.y) === 'menu') {
+                    this.goToMenu();
+                } else {
+                    this.restartGame();
+                    this.touch.down(e);
+                }
+                break;
+            }
+        }
     }
 
     selectMode(modeId) {
@@ -399,7 +378,16 @@ export class Game {
             }
         }
 
-        this.player.setMoveInput(inputX, inputY);
+        // 3. Sanal Joystick (analog, kendi hız ayarıyla)
+        let speed = null;
+        if (this.touch.isJoystick && this.touch.joystickActive) {
+            const v = this.touch.getVector();
+            inputX += v.x;
+            inputY += v.y;
+            speed = GAME_CONFIG.JOYSTICK.SPEED;
+        }
+
+        this.player.setMoveInput(inputX, inputY, speed);
     }
 
     /**
@@ -416,8 +404,7 @@ export class Game {
         this.ui.setMode(this.currentMode);
 
         this.elapsedMs = 0;
-        this.dragPointerId = null;
-        this.dragLast = null;
+        this.touch.reset();
 
         this.effects.sound.playStart();
         this.effects.sound.startBGM();
@@ -430,9 +417,7 @@ export class Game {
     pauseGame() {
         if (this.state !== GAME_STATE.PLAYING) return;
         this.state = GAME_STATE.PAUSED;
-        this.dragPointerId = null;
-        this.dragLast = null;
-        this.activeTouches.clear();
+        this.touch.reset();
         this.effects.sound.stopBGM();
     }
 
@@ -449,8 +434,7 @@ export class Game {
         this.waveManager.reset();
         this.effects.reset();
         this.effects.sound.stopBGM();
-        this.dragPointerId = null;
-        this.dragLast = null;
+        this.touch.reset();
     }
 
     /**
@@ -462,8 +446,7 @@ export class Game {
         this.state = GAME_STATE.DEAD;
         this.player.alive = false;
         this.deathTimestamp = performance.now();
-        this.dragPointerId = null;
-        this.dragLast = null;
+        this.touch.reset();
 
         // Efektleri ateşle & BGM'yi sönümle
         this.effects.triggerDeath(this.player.x, this.player.y);
@@ -602,6 +585,10 @@ export class Game {
 
         // Arena sınır çerçevesi
         this.renderArenaBorder(ctx, w, h);
+
+        // Dokunmatik kontrol overlay'i (joystick + DASH butonu)
+        const showControls = this.ui.isTouch && this.state === GAME_STATE.PLAYING;
+        this.touch.render(showControls, this.player.getDashReadyRatio());
     }
 
     /**

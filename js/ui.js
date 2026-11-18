@@ -32,6 +32,16 @@ export class UIManager {
 
         // Girdi tipi: ipucu metinleri buna göre değişir ('touch' | 'desktop')
         this.inputType = UIManager.detectInputType();
+
+        // Dokunmatik kontrol şeması ('joystick' | 'drag') ve menüdeki değiştirme butonu
+        this.touchScheme = 'joystick';
+        this.schemeButton = { x: 180, y: 508, w: 240, h: 42 };
+    }
+
+    isSchemeToggleClicked(x, y) {
+        if (!this.isTouch) return false;
+        const b = this.schemeButton;
+        return x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
     }
 
     static detectInputType() {
@@ -219,11 +229,19 @@ export class UIManager {
         ctx.fillStyle = '#00ffff';
         if (this.isTouch) {
             ctx.font = '13px "JetBrains Mono", monospace';
-            ctx.fillText('[ Parmağını Sürükle ] Hareket', w / 2, 372);
-            ctx.fillStyle = '#8e8ea8';
-            ctx.fillText('[ 2. Parmakla Dokun / Çift Dokun ] Dash', w / 2, 396);
-            ctx.font = '11px "JetBrains Mono", monospace';
-            ctx.fillText('Duvara değmek de öldürür!', w / 2, 418);
+            if (this.touchScheme === 'joystick') {
+                ctx.fillText('[ Ekrana Bas & Kaydır ] Joystick', w / 2, 372);
+                ctx.fillStyle = '#8e8ea8';
+                ctx.fillText('[ Sağ Alt DASH / 2. Parmak ] Dash', w / 2, 396);
+                ctx.font = '11px "JetBrains Mono", monospace';
+                ctx.fillText('Az it = yavaş & hassas · Tam it = hızlı', w / 2, 418);
+            } else {
+                ctx.fillText('[ Parmağını Sürükle ] Hareket', w / 2, 372);
+                ctx.fillStyle = '#8e8ea8';
+                ctx.fillText('[ 2. Parmakla Dokun / Çift Dokun ] Dash', w / 2, 396);
+                ctx.font = '11px "JetBrains Mono", monospace';
+                ctx.fillText('Duvara değmek de öldürür!', w / 2, 418);
+            }
         } else {
             ctx.fillText('[ Fare / WASD / Gamepad ] Hareket', w / 2, 370);
             ctx.fillStyle = '#8e8ea8';
@@ -249,6 +267,23 @@ export class UIManager {
         ctx.font = 'bold 15px "JetBrains Mono", monospace';
         ctx.fillStyle = '#ffffff';
         ctx.fillText(`OYNA: ${activeMode.label}`, w / 2, pb.y + 31);
+
+        // Dokunmatik kontrol şeması seçici
+        if (this.isTouch) {
+            const sb = this.schemeButton;
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+            ctx.strokeStyle = 'rgba(255, 230, 0, 0.55)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(sb.x, sb.y, sb.w, sb.h, 8);
+            ctx.fill();
+            ctx.stroke();
+            ctx.font = 'bold 13px "JetBrains Mono", monospace';
+            ctx.fillStyle = '#ffe600';
+            const label = this.touchScheme === 'joystick' ? 'KONTROL: JOYSTICK  ⇄' : 'KONTROL: SÜRÜKLE  ⇄';
+            ctx.fillText(label, w / 2, sb.y + 26);
+        }
 
         ctx.restore();
     }
@@ -338,7 +373,9 @@ export class UIManager {
             ctx.textAlign = 'center';
             ctx.font = 'bold 10px "JetBrains Mono", monospace';
             ctx.fillStyle = isReady ? '#00ffff' : '#686880';
-            const readyHint = this.isTouch ? 'DASH HAZIR (2. Parmak / Çift Dokun)' : 'DASH HAZIR (Sağ Tık / Space / Shift)';
+            const readyHint = !this.isTouch
+                ? 'DASH HAZIR (Sağ Tık / Space / Shift)'
+                : (this.touchScheme === 'joystick' ? 'DASH HAZIR' : 'DASH HAZIR (2. Parmak / Çift Dokun)');
             ctx.fillText(isReady ? readyHint : 'DASH DOLUYOR...', w / 2, barY - 6);
         }
 
