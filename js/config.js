@@ -99,7 +99,7 @@ export const GAME_CONFIG = {
         TELEGRAPH_TIME: 320
     },
 
-    // --- BOSS: NEXUS (30s, AIM ile CHAOS arası) ---
+    // --- BOSS 1: JÖLE KRAL (30s, AIM ile CHAOS arası) ---
     // Oyuncu ateş etmez: enerji zamanla söner, Graze ve Dash-Ram hızlandırır.
     BOSS: {
         NAME: 'BOSS',
@@ -193,7 +193,7 @@ export const MODES_CONFIG = {
         LEGACY_KEY: 'bullet_hell_micro_highscore', // Geriye dönük uyumluluk için
         SPEED_MULT: 1.0,
         INTERVAL_MULT: 1.0,
-        DESCRIPTION: '30 saniyelik klasik kaçış deneyimi'
+        DESCRIPTION: 'fazlar, bosslar ve kaos · ne kadar dayanabilirsin?'
     },
     endless: {
         ID: 'endless',
@@ -202,7 +202,7 @@ export const MODES_CONFIG = {
         SPEED_MULT: 1.0,
         INTERVAL_MULT: 1.0,
         SCALING_RATE: 0.025, // 30s sonrası her saniye hız %2.5 artar, aralık daralır
-        DESCRIPTION: '30s sınırı yok, sonsuza kadar artan kaos'
+        DESCRIPTION: 'mermiler durmadan hızlanır ve sıklaşır · sınır yok'
     },
     hardcore: {
         ID: 'hardcore',

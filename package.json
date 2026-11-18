@@ -1,7 +1,7 @@
 {
   "name": "bullet-hell-micro",
   "version": "1.0.0",
-  "description": "Bullet Hell Micro – 30 Saniyelik Kaçış",
+  "description": "Bullet Hell Micro – şeker temalı minik bullet hell web oyunu",
   "type": "module",
   "main": "server.js",
   "scripts": {

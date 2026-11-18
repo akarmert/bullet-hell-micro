@@ -19,9 +19,9 @@ const STRINGS = {
 
         // Modlar
         'mode.classic.label': 'CLASSIC',
-        'mode.classic.desc': '30 saniyelik klasik kaçış deneyimi',
+        'mode.classic.desc': 'fazlar, bosslar ve kaos · ne kadar dayanabilirsin?',
         'mode.endless.label': 'ENDLESS',
-        'mode.endless.desc': '30s sınırı yok, sonsuza kadar artan kaos',
+        'mode.endless.desc': 'mermiler durmadan hızlanır ve sıklaşır · sınır yok',
         'mode.hardcore.label': 'HARDCORE',
         'mode.hardcore.desc': 'yüksek hız, yoğun mermi yağmuru ve agresif nişan',
         'mode.chaos.label': 'CHAOS',
@@ -148,8 +148,8 @@ const STRINGS = {
         'menu.locked': 'locked · {hint}',
         'menu.costumes': 'costume {count}',
 
-        'mode.classic.desc': 'the classic 30-second escape',
-        'mode.endless.desc': 'no 30s limit, chaos that never stops growing',
+        'mode.classic.desc': 'phases, bosses and chaos · how long can you last?',
+        'mode.endless.desc': 'bullets keep getting faster and denser · no limit',
         'mode.hardcore.desc': 'fast bullets, dense waves and aggressive aim',
         'mode.chaos.desc': 'edge, spiral, aimed and bouncing shots all at once',
         'mode.daily.label': 'DAILY',
