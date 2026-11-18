@@ -3,6 +3,8 @@
 // Ses seviyeleri, ekran sarsıntısı/flaş, yüksek kontrast
 // ============================================================
 
+import { t, detectLang, getLang, LANGS, LANG_NAMES } from './i18n.js';
+
 const KEY = 'bulletHellMicro_settings';
 
 export const SETTING_ROWS = [
@@ -10,13 +12,15 @@ export const SETTING_ROWS = [
     { id: 'sfxVolume', label: 'efekt sesi', type: 'volume' },
     { id: 'shake', label: 'sarsıntı ve flaş', type: 'toggle' },
     { id: 'contrast', label: 'yüksek kontrast', type: 'toggle' },
+    { id: 'ghost', label: 'hayalet (en iyi tur)', type: 'toggle' },
+    { id: 'lang', label: 'dil', type: 'choice' },
     { id: 'tutorial', label: 'ipuçlarını tekrar göster', type: 'action' },
     { id: 'close', label: 'kapat', type: 'action' }
 ];
 
 export class Settings {
     constructor() {
-        this.values = { musicVolume: 0.8, sfxVolume: 0.9, shake: true, contrast: false };
+        this.values = { musicVolume: 0.8, sfxVolume: 0.9, shake: true, contrast: false, ghost: true, lang: detectLang() };
         this.listeners = [];
         this.load();
     }
@@ -60,6 +64,8 @@ export class Settings {
             this.values[id] = Math.round(Math.max(0, Math.min(1, v + dir * 0.1)) * 10) / 10;
         } else if (typeof v === 'boolean') {
             this.values[id] = !v;
+        } else if (id === 'lang') {
+            this.values[id] = LANGS[(LANGS.indexOf(v) + (dir < 0 ? LANGS.length - 1 : 1)) % LANGS.length];
         } else {
             return;
         }
@@ -70,8 +76,9 @@ export class Settings {
     /** Satırın görünen değeri */
     display(id) {
         const v = this.values[id];
-        if (typeof v === 'number') return `%${Math.round(v * 100)}`;
-        if (typeof v === 'boolean') return v ? 'açık' : 'kapalı';
+        if (typeof v === 'number') return getLang() === 'en' ? `${Math.round(v * 100)}%` : `%${Math.round(v * 100)}`;
+        if (typeof v === 'boolean') return v ? t('settings.on') : t('settings.off');
+        if (id === 'lang') return LANG_NAMES[v] || v;
         return '';
     }
 }

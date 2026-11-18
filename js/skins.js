@@ -18,6 +18,8 @@ export const SKINS = [
       hint: "20'lik graze serisi yap", test: (s) => s.bestCombo >= 20 },
     { id: 'bow', name: 'Fiyonk', body: '#FFF1F8', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'bow',
       hint: '3 farklı gün günlük meydan okuma oyna', test: (s) => (s.dailyDays || []).length >= 3 },
+    { id: 'cotton', name: 'Pamuk', body: '#F7F0FF', cheek: 'rgba(183, 155, 255, 0.6)', accessory: 'puff',
+      hint: "Pamuk Bulut'u dağıt", test: (s) => (s.bossesBeaten || []).includes('cloud') },
     { id: 'royal', name: 'Kraliyet', body: '#F3EBFF', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'crown',
       hint: "HARDCORE'da 30 saniye dayan", test: (s) => s.hardcoreBest >= 30000 }
 ];
@@ -151,6 +153,20 @@ export function drawMarshmallow(ctx, x, y, r, skin, { squash = 1, blink = 1, loc
         ctx.arc(x + r * 0.35, top + r * 0.05, r * 0.12, 0, Math.PI * 2);
         ctx.fillStyle = THEME.PINK_DEEP;
         ctx.fill();
+    } else if (skin.accessory === 'puff') {
+        const puffs = [[-0.35, 0.05, 0.3], [0.05, -0.15, 0.36], [0.42, 0.05, 0.28]];
+        ctx.lineWidth = Math.max(1.5, r * 0.16);
+        for (const [px, py, pr] of puffs) {
+            ctx.beginPath();
+            ctx.arc(x + px * r, top + py * r, pr * r, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.fillStyle = THEME.LAVENDER;
+        for (const [px, py, pr] of puffs) {
+            ctx.beginPath();
+            ctx.arc(x + px * r, top + py * r, pr * r, 0, Math.PI * 2);
+            ctx.fill();
+        }
     } else if (skin.accessory === 'leaf') {
         ctx.beginPath();
         ctx.moveTo(x, top + r * 0.05);

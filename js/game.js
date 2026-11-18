@@ -20,8 +20,11 @@ import { ScoreSystem } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
 import { Settings, SETTING_ROWS } from './settings.js';
-import { SKINS } from './skins.js';
-import { seedRandom, dateKey } from './rng.js';
+import { SKINS, getSkin, drawMarshmallow } from './skins.js';
+import { seedRandom, dateKey, dateLabel } from './rng.js';
+import { GhostRecorder, loadGhost, saveGhost } from './ghost.js';
+import { buildShareText, shareText } from './share.js';
+import { t, setLang } from './i18n.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -56,6 +59,9 @@ export class Game {
         this.settings = new Settings();
         this.currentHint = null;
         this.lastUnlocked = [];
+        this.ghostRecorder = new GhostRecorder();
+        this.ghost = null;
+        this.ghostPassed = false;
         this.ui.progress = this.progress;
         this.ui.settings = this.settings;
         this.ui.skinIndex = Math.max(0, SKINS.findIndex(s => s.id === this.progress.selected));
@@ -64,6 +70,8 @@ export class Game {
             this.effects.sound.setVolumes(v.musicVolume, v.sfxVolume);
             this.effects.motionEnabled = v.shake;
             setHighContrast(v.contrast);
+            setLang(v.lang);
+            this.applyDomText();
         });
 
         // State & Zamanlama
@@ -83,13 +91,13 @@ export class Game {
         this.waveManager.onPhaseChange = (phaseName) => {
             if (this.state !== GAME_STATE.PLAYING) return;
             if (phaseName === GAME_CONFIG.BOSS.NAME) {
-                this.effects.triggerBossIncoming();
+                this.effects.triggerBossIncoming(this.waveManager.nextBossDef().TITLE);
             } else {
                 this.effects.triggerPhase(phaseName);
             }
         };
         this.waveManager.onBossStageChange = (boss) => {
-            this.effects.triggerBossStage(boss.x, boss.y, boss.stageName);
+            this.effects.triggerBossStage(boss.x, boss.y, boss.stageName, boss.title);
         };
         this.waveManager.onBossRam = (boss) => {
             this.effects.triggerBossRam(boss.x, boss.y);
@@ -97,7 +105,7 @@ export class Game {
         this.waveManager.onBossDefeated = (boss) => {
             this.score.onBossDefeat(boss.x, boss.y);
             const destroyed = this.bulletManager.destroyAll();
-            this.effects.triggerBossDefeated(boss.x, boss.y, destroyed);
+            this.effects.triggerBossDefeated(boss.x, boss.y, destroyed, boss.title);
         };
 
         this.touchControls = new TouchControls(() => {
@@ -107,6 +115,8 @@ export class Game {
         });
         this.menuButton = document.getElementById('menuButton');
         this.menuButton.addEventListener('click', () => this.returnToMenu());
+        this.shareButton = document.getElementById('shareButton');
+        this.shareButton.addEventListener('click', () => this.shareResult());
         this.pauseButton = document.getElementById('pauseButton');
         this.pauseButton.addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); this.pauseGame(); });
         this.initInputListeners();
@@ -253,11 +263,13 @@ export class Game {
             } else if (e.code === 'KeyB') {
                 // 'B' tuşu: Synth Müziği Aç / Kapat
                 const isBgmOn = this.effects.sound.toggleBGM();
-                this.effects.triggerBanner(isBgmOn ? '♪ müzik açık' : '♪ müzik kapalı', THEME.LAVENDER);
+                this.effects.triggerBanner(isBgmOn ? t('banner.musicOn') : t('banner.musicOff'), THEME.LAVENDER);
             } else if (e.code === 'KeyN') {
                 // 'N' tuşu: Ses efektlerini Aç / Kapat
                 const isSfxOn = this.effects.sound.toggleSFX();
-                this.effects.triggerBanner(isSfxOn ? '♫ efektler açık' : '♫ efektler kapalı', THEME.LAVENDER);
+                this.effects.triggerBanner(isSfxOn ? t('banner.sfxOn') : t('banner.sfxOff'), THEME.LAVENDER);
+            } else if (e.code === 'KeyC' && this.state === GAME_STATE.DEAD) {
+                this.shareResult();
             } else if (e.code === 'KeyM' || e.code === 'Escape') {
                 // Mod değiştirmek veya ana menüye dönmek için
                 if (this.state === GAME_STATE.DEAD) {
@@ -299,7 +311,7 @@ export class Game {
                 this.ui.settingsOpen = false;
             } else if (item.id === 'tutorial') {
                 this.tutorial.resetProgress();
-                this.effects.triggerBanner('ipuçları sıfırlandı', THEME.LAVENDER);
+                this.effects.triggerBanner(t('banner.tipsReset'), THEME.LAVENDER);
             }
         } else {
             this.settings.adjust(item.id, dir);
@@ -454,6 +466,11 @@ export class Game {
         this.ui.settingsOpen = false;
         this.player.skin = this.progress.skin;
 
+        // Hayalet: bu modun en iyi turu
+        this.ghostRecorder.reset();
+        this.ghost = this.settings.get('ghost') ? loadGhost(this.currentMode.storageKey) : null;
+        this.ghostPassed = false;
+
         this.dashWasReady = true;
         this.effects.sound.playStart();
     }
@@ -480,6 +497,9 @@ export class Game {
         // Rekorlar: süre ve skor ayrı tutulur; "yeni rekor" skoru gösterir
         this.ui.checkAndSaveHighScore(this.elapsedMs, this.currentMode);
         const isRecord = this.ui.checkAndSaveBestScore(this.score.total, this.currentMode);
+        if (isRecord) {
+            saveGhost(this.currentMode.storageKey, this.ghostRecorder, { score: this.score.total, skin: this.progress.selected });
+        }
 
         // İstatistikler ve kostüm başarımları
         this.lastUnlocked = this.progress.recordRun({
@@ -487,7 +507,8 @@ export class Game {
             timeMs: this.elapsedMs,
             graze: this.player.grazeCount,
             bestCombo: this.score.bestCombo,
-            bossDefeated: this.waveManager.bossDefeatedAt !== null,
+            bossKills: this.waveManager.bossKills,
+            bossesBeaten: this.waveManager.bossesBeaten,
             dateKey: dateKey()
         });
 
@@ -508,6 +529,7 @@ export class Game {
 
         this.touchControls.update(this.state === GAME_STATE.PLAYING, this.player);
         this.menuButton.hidden = !(this.state === GAME_STATE.DEAD || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
+        this.shareButton.hidden = this.state !== GAME_STATE.DEAD;
         this.pauseButton.hidden = !(this.state === GAME_STATE.PLAYING && this.touchControls.touchDevice);
 
         // Müzik: menüde sakin tema, oyunda faz müziği, duraklatma/ölümde sessiz
@@ -540,8 +562,13 @@ export class Game {
         this.effects.update(dt, this.elapsedMs);
 
         if (this.state === GAME_STATE.PLAYING) {
+            this.ghostRecorder.sample(this.elapsedMs, this.player.x, this.player.y, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
             this.elapsedMs += dt * 1000;
             this.score.update(dt * 1000);
+            if (this.ghost && !this.ghostPassed && this.elapsedMs > this.ghost.durationMs && this.ghost.durationMs > 3000) {
+                this.ghostPassed = true;
+                this.effects.triggerBanner(t('banner.ghostPassed'), THEME.LAVENDER);
+            }
             this.currentHint = this.tutorial.update(this.elapsedMs, this.waveManager.isBossPhase(this.elapsedMs));
 
             // Klavye/Gamepad hareketi sonrasında duvar kontrolü
@@ -588,7 +615,7 @@ export class Game {
                 // onShieldBreak
                 (bullet) => {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
-                    this.effects.triggerBanner('KALKAN PATLADI!', THEME.PURPLE);
+                    this.effects.triggerBanner(t('banner.shieldBroken'), THEME.PURPLE);
                 }
             );
 
@@ -603,7 +630,7 @@ export class Game {
                 const contact = boss.resolveBodyContact(this.player);
                 if (contact === 'shield') {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
-                    this.effects.triggerBanner('KALKAN PATLADI!', THEME.PURPLE);
+                    this.effects.triggerBanner(t('banner.shieldBroken'), THEME.PURPLE);
                 } else if (contact === 'fatal') {
                     this.triggerDeath();
                     return;
@@ -639,6 +666,11 @@ export class Game {
         // Boss
         if (this.state !== GAME_STATE.MENU) this.waveManager.renderBoss(ctx);
 
+        // Hayalet (en iyi tur), mermilerin altında
+        if (this.ghost && (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
+            this.renderGhost(ctx, w, h);
+        }
+
         // Mermiler ve Oyuncu
         this.bulletManager.render(ctx);
         if (this.state !== GAME_STATE.MENU) {
@@ -672,6 +704,55 @@ export class Game {
 
         // Arena sınır çerçevesi
         this.renderArenaBorder(ctx, w, h);
+    }
+
+    /** HTML butonları ve erişilebilirlik etiketlerini seçili dile çevirir */
+    applyDomText() {
+        if (typeof document === 'undefined') return;
+        document.documentElement.lang = this.settings.get('lang');
+        const set = (id, text) => { const el = document.getElementById(id); if (el) el.textContent = text; };
+        const aria = (id, text) => { const el = document.getElementById(id); if (el) el.setAttribute('aria-label', text); };
+        set('menuButton', t('dom.menu'));
+        set('shareButton', t('dom.share'));
+        set('rotateHint', t('dom.rotate'));
+        aria('pauseButton', t('dom.pause'));
+        aria('joystick', t('dom.joystick'));
+        aria('gameCanvas', t('dom.canvas'));
+    }
+
+    renderGhost(ctx, w, h) {
+        const pos = this.ghost.positionAt(this.elapsedMs, w, h);
+        if (!pos) return;
+        ctx.save();
+        ctx.globalAlpha = 0.32;
+        drawMarshmallow(ctx, pos.x, pos.y, this.player.radius * 1.9, getSkin(this.ghost.skin));
+        ctx.globalAlpha = 0.6;
+        ctx.font = '700 9px "Fredoka", system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = THEME.PURPLE;
+        ctx.fillText(t('hud.ghost'), pos.x, pos.y - 16);
+        ctx.restore();
+    }
+
+    /** Ölüm ekranından sonucu paylaşır / kopyalar */
+    async shareResult() {
+        if (this.state !== GAME_STATE.DEAD) return;
+        const mode = this.currentMode;
+        const isWeb = location.protocol.startsWith('http') && !/^(localhost|127\.|\[::1\])/.test(location.hostname);
+        const text = buildShareText({
+            modeLabel: mode.label,
+            dateText: mode.id === 'daily' ? dateLabel() : '',
+            score: this.score.total,
+            timeText: UIManager.formatTime(this.elapsedMs),
+            timeMs: this.elapsedMs,
+            graze: this.player.grazeCount,
+            bestCombo: this.score.bestCombo,
+            bossKills: this.waveManager.bossKills,
+            url: isWeb ? location.origin + location.pathname : ''
+        });
+        const result = await shareText(text, this.touchControls.touchDevice);
+        if (result === 'copied') this.effects.triggerBanner(t('banner.copied'), THEME.PURPLE);
+        else if (result === 'failed') this.effects.triggerBanner(t('banner.copyFailed'), THEME.PINK);
     }
 
     /**

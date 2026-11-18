@@ -6,6 +6,70 @@
 import { GAME_CONFIG } from './config.js';
 import { THEME } from './theme.js';
 
+/**
+ * Çizgili şeker çubuğu (merkez orijinde, x ekseni boyunca)
+ */
+function drawCapsule(ctx, color, radius) {
+    const length = radius * 3.6;
+    const width = radius * 1.9;
+    const x = -length / 2;
+    const y = -width / 2;
+
+    ctx.beginPath();
+    ctx.roundRect(x, y, length, width, width / 2);
+    ctx.fillStyle = THEME.WHITE;
+    ctx.fill();
+
+    // Çapraz şeker şeritleri
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = color;
+    for (let sx = x - width; sx < length / 2 + width; sx += width * 0.9) {
+        ctx.beginPath();
+        ctx.moveTo(sx, y + width);
+        ctx.lineTo(sx + width * 0.45, y + width);
+        ctx.lineTo(sx + width * 0.45 + width, y);
+        ctx.lineTo(sx + width, y);
+        ctx.closePath();
+        ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.roundRect(x, y, length, width, width / 2);
+    ctx.stroke();
+}
+
+const capsuleCache = new Map();
+const SPRITE_SCALE = 3; // Yüksek DPI ekranlarda da keskin kalsın
+
+/** Önbellekli şeker çubuğu görseli; DOM yoksa (testler) null */
+function capsuleSprite(color, radius, outline) {
+    const key = `${color}|${radius}|${outline}`;
+    const cached = capsuleCache.get(key);
+    if (cached) return cached;
+    if (typeof document === 'undefined') return null;
+
+    const pad = outline + 1;
+    const w = radius * 3.6 + pad * 2;
+    const h = radius * 1.9 + pad * 2;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(w * SPRITE_SCALE);
+    canvas.height = Math.ceil(h * SPRITE_SCALE);
+    const c = canvas.getContext('2d');
+    c.scale(SPRITE_SCALE, SPRITE_SCALE);
+    c.translate(w / 2, h / 2);
+    c.lineWidth = outline;
+    c.strokeStyle = THEME.INK;
+    c.lineJoin = 'round';
+    drawCapsule(c, color, radius);
+
+    const sprite = { canvas, w, h };
+    if (capsuleCache.size > 32) capsuleCache.clear();
+    capsuleCache.set(key, sprite);
+    return sprite;
+}
+
 export class Bullet {
     constructor(params = {}) {
         this.trail = [];
@@ -207,34 +271,13 @@ export class Bullet {
     renderCapsule(ctx) {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.rotation);
-        const length = this.radius * 3.6;
-        const width = this.radius * 1.9;
-        const x = -length / 2;
-        const y = -width / 2;
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, length, width, width / 2);
-        ctx.fillStyle = THEME.WHITE;
-        ctx.fill();
-
-        // Çapraz şeker şeritleri
-        ctx.save();
-        ctx.clip();
-        ctx.fillStyle = this.color;
-        for (let sx = x - width; sx < length / 2 + width; sx += width * 0.9) {
-            ctx.beginPath();
-            ctx.moveTo(sx, y + width);
-            ctx.lineTo(sx + width * 0.45, y + width);
-            ctx.lineTo(sx + width * 0.45 + width, y);
-            ctx.lineTo(sx + width, y);
-            ctx.closePath();
-            ctx.fill();
+        // Kırpma + şeritler pahalı: her renk/boyut için bir kez çizilen hazır görsel kullan
+        const sprite = capsuleSprite(this.color, this.radius, THEME.BULLET_OUTLINE);
+        if (sprite) {
+            ctx.drawImage(sprite.canvas, -sprite.w / 2, -sprite.h / 2, sprite.w, sprite.h);
+            return;
         }
-        ctx.restore();
-
-        ctx.beginPath();
-        ctx.roundRect(x, y, length, width, width / 2);
-        ctx.stroke();
+        drawCapsule(ctx, this.color, this.radius);
     }
 
     /**

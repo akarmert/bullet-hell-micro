@@ -30,7 +30,12 @@ export class WaveManager {
 
         // Boss durumu
         this.boss = null;
-        this.bossDefeatedAt = null;            // Boss'un yenildiği simülasyon zamanı (ms)
+        this.bossActive = false;
+        this.bossCount = 0;                    // Bu turda gelen boss sayısı
+        this.bossKills = 0;
+        this.bossesBeaten = [];                // Yenilen boss türleri ('jelly', 'cloud')
+        this.bossDefeatedAt = null;            // Son boss'un yenildiği simülasyon zamanı (ms)
+        this.nextBossAt = GAME_CONFIG.BOSS.START_TIME;
         this.chaosStartMs = GAME_CONFIG.BOSS.START_TIME;
         this.onBossStageChange = null;
         this.onBossDefeated = null;
@@ -48,7 +53,15 @@ export class WaveManager {
      * Boss fazında mıyız? (giriş, savaş veya ölüm animasyonu)
      */
     isBossPhase(elapsedMs) {
-        return this.hasBoss() && elapsedMs >= GAME_CONFIG.BOSS.START_TIME && this.bossDefeatedAt === null;
+        if (!this.hasBoss()) return false;
+        return this.bossActive || (elapsedMs >= this.nextBossAt && elapsedMs >= GAME_CONFIG.PHASE_3.END_TIME);
+    }
+
+    /** Sıradaki (veya sahnedeki) boss'un tanımı */
+    nextBossDef() {
+        if (this.bossActive && this.boss) return this.boss.cfg;
+        const rotation = GAME_CONFIG.BOSS_ROTATION;
+        return GAME_CONFIG[rotation[this.bossCount % rotation.length]];
     }
 
     /**
@@ -72,7 +85,12 @@ export class WaveManager {
         this.timers.aim = 0;
         this.timers.chaos = 0;
         this.boss = null;
+        this.bossActive = false;
+        this.bossCount = 0;
+        this.bossKills = 0;
+        this.bossesBeaten = [];
         this.bossDefeatedAt = null;
+        this.nextBossAt = GAME_CONFIG.BOSS.START_TIME;
         this.chaosStartMs = GAME_CONFIG.BOSS.START_TIME;
     }
 
@@ -455,8 +473,13 @@ export class WaveManager {
     // BOSS: NEXUS — Boss kendi desenlerini ateşler
     // ------------------------------------------------------------
     updateBoss(elapsedMs, dt, player) {
-        if (!this.boss) {
-            this.boss = new Boss(this, elapsedMs);
+        if (!this.bossActive) {
+            const rotation = GAME_CONFIG.BOSS_ROTATION;
+            const def = GAME_CONFIG[rotation[this.bossCount % rotation.length]];
+            const level = Math.floor(this.bossCount / rotation.length);
+            this.boss = new Boss(this, elapsedMs, def, level);
+            this.bossActive = true;
+            this.bossCount++;
             this.boss.onStageChange = (boss) => {
                 if (this.onBossStageChange) this.onBossStageChange(boss);
             };
@@ -464,8 +487,12 @@ export class WaveManager {
                 if (this.onBossRam) this.onBossRam(boss);
             };
             this.boss.onDefeated = (boss) => {
+                if (this.bossKills === 0) this.chaosStartMs = this.lastElapsedMs; // Kaos rampası ilk zaferde başlar
+                this.bossActive = false;
+                this.bossKills++;
+                if (!this.bossesBeaten.includes(boss.kind)) this.bossesBeaten.push(boss.kind);
                 this.bossDefeatedAt = this.lastElapsedMs;
-                this.chaosStartMs = this.lastElapsedMs;
+                this.nextBossAt = this.lastElapsedMs + GAME_CONFIG.BOSS_INTERVAL;
                 this.telegraphs.length = 0; // Bekleyen boss atışları iptal
                 this.timers.chaos = 0;
                 this.timers.aim = 0;

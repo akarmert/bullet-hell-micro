@@ -6,6 +6,7 @@
 import { GAME_CONFIG } from './config.js';
 import { THEME, font } from './theme.js';
 import { random } from './rng.js';
+import { t } from './i18n.js';
 
 export class Pickup {
     constructor({ x, y, typeConfig }) {
@@ -118,9 +119,10 @@ export class Pickup {
         ctx.textAlign = 'center';
         ctx.lineWidth = 3;
         ctx.strokeStyle = THEME.WHITE;
-        ctx.strokeText(this.label, 0, -r * 1.55);
+        const label = t(`pickup.${this.type}`, null, this.label);
+        ctx.strokeText(label, 0, -r * 1.55);
         ctx.fillStyle = THEME.INK;
-        ctx.fillText(this.label, 0, -r * 1.55);
+        ctx.fillText(label, 0, -r * 1.55);
 
         ctx.restore();
     }
@@ -225,18 +227,18 @@ export class PickupManager {
         switch (pickup.type) {
             case 'shield':
                 player.hasShield = true;
-                effects.triggerBanner('KALKAN ALINDI (+1 CAN)', pickup.color);
+                effects.triggerBanner(t('banner.shieldPicked'), pickup.color);
                 break;
 
             case 'slowmo':
                 this.slowmoTimer = GAME_CONFIG.PICKUPS.TYPES.SLOWMO.duration;
-                effects.triggerBanner('SLOW-MO AKTİF!', pickup.color);
+                effects.triggerBanner(t('banner.slowmo'), pickup.color);
                 break;
 
             case 'emp': {
                 const destroyedBullets = bulletManager.destroyAll();
                 effects.triggerEMP(player.x, player.y, destroyedBullets);
-                effects.triggerBanner(`EMP PATLAMASI! (${destroyedBullets.length} MERMİ)`, pickup.color);
+                effects.triggerBanner(t('banner.emp', { n: destroyedBullets.length }), pickup.color);
                 break;
             }
         }

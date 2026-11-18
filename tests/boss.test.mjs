@@ -125,3 +125,74 @@ test('CHAOS modunda boss yok; reset boss durumunu temizler', () => {
     assert.equal(other.boss, null);
     assert.equal(other.bossDefeatedAt, null);
 });
+
+test('Boss rotasyonu: Jöle Kral yenilince 30 sn sonra Pamuk Bulut gelir, sonra Jöle Kral daha zor döner', () => {
+    const { waves } = bossWaves();
+    const player = new Player();
+    const titles = [];
+    waves.onBossDefeated = (b) => titles.push(b.title);
+    let t = run(waves, player, 30000, 30000 + B.ENTRY_TIME + 100);
+    assert.equal(waves.boss.kind, 'jelly');
+    waves.boss.damage(1000);
+    t = run(waves, player, t, t + B.DEATH_TIME + 100);
+    assert.equal(waves.bossActive, false);
+    assert.equal(waves.getPhaseName(t), 'CHAOS');
+    assert.equal(waves.nextBossDef().KIND, 'cloud');
+
+    t = run(waves, player, t, waves.nextBossAt + 50);
+    assert.equal(waves.boss.kind, 'cloud');
+    assert.equal(waves.getPhaseName(t), 'BOSS');
+    const C = GAME_CONFIG.BOSS_CLOUD;
+    t = run(waves, player, t, t + C.ENTRY_TIME + 200);
+    waves.boss.damage(1000);
+    t = run(waves, player, t, t + C.DEATH_TIME + 100);
+    assert.deepEqual(titles, ['Jöle Kral', 'Pamuk Bulut']);
+    assert.equal(waves.bossKills, 2);
+    assert.deepEqual(waves.bossesBeaten, ['jelly', 'cloud']);
+
+    run(waves, player, t, waves.nextBossAt + 50);
+    assert.equal(waves.boss.kind, 'jelly');
+    assert.equal(waves.boss.level, 1);
+    assert.ok(waves.boss.speedMult > 1, 'ikinci turda mermiler hızlanır');
+});
+
+test('Pamuk Bulut: yağmurda güvenli koridor, duvarda tek geçit, girdapta çekim (dash çekimi kırar)', () => {
+    const { bullets, waves } = bossWaves();
+    const player = new Player();
+    waves.nextBossAt = 30000;
+    waves.bossCount = 1; // Rotasyonda sıradaki: Pamuk Bulut
+    const C = GAME_CONFIG.BOSS_CLOUD;
+    let t = run(waves, player, 30000, 30000 + C.ENTRY_TIME + 32);
+    const boss = waves.boss;
+    assert.equal(boss.kind, 'cloud');
+
+    // YAĞMUR
+    bullets.clear();
+    boss.age = 0;
+    boss.patternRain(C.STAGES[0], 3000);
+    const gapHalf = C.STAGES[0].GAP / 2;
+    assert.ok(bullets.count > 10);
+    assert.ok(bullets.getActiveBullets().every(b => Math.abs(b.x - boss.rainGap) >= gapHalf));
+
+    // DUVAR: uyarı → ateş, tek boşluk
+    bullets.clear();
+    waves.telegraphs.length = 0;
+    boss.wallDir = 0;
+    boss.patternWalls(C.STAGES[1], C.STAGES[1].INTERVAL * 2);
+    assert.equal(waves.telegraphs.length, 1);
+    const gapX = waves.telegraphs[0].x1;
+    waves.updateTelegraphs(C.STAGES[1].TELEGRAPH_TIME + 1);
+    const xs = bullets.getActiveBullets().map(b => b.x).sort((a, b) => a - b);
+    assert.ok(xs.length > 10);
+    assert.ok(xs.every(x => Math.abs(x - gapX) >= C.STAGES[1].GAP / 2));
+
+    // GİRDAP
+    player.x = boss.x; player.y = boss.y + 250;
+    const before = Math.hypot(player.x - boss.x, player.y - boss.y);
+    boss.patternPull(C.STAGES[2], 0.5, 500, player);
+    assert.ok(Math.hypot(player.x - boss.x, player.y - boss.y) < before);
+    const y = player.y;
+    player.isDashing = true;
+    boss.patternPull(C.STAGES[2], 0.5, 500, player);
+    assert.equal(player.y, y);
+});

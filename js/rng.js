@@ -40,9 +40,13 @@ export function hashSeed(text) {
     return h >>> 0;
 }
 
+import { getLang } from './i18n.js';
+
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 
 /** "18 Kasım" */
 export function dateLabel(date = new Date()) {
+    if (getLang() === 'en') return `${MONTHS_EN[date.getMonth()]} ${date.getDate()}`;
     return `${date.getDate()} ${MONTHS[date.getMonth()]}`;
 }

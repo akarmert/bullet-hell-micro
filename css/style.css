@@ -29,7 +29,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 #dashButton.ready { background: rgba(255, 196, 222, .8); opacity: .75; }
 
 #menuButton { position: absolute; left: calc(16px + var(--safe-left)); bottom: calc(16px + var(--safe-bottom)); padding: 12px 20px; min-height: 44px; color: var(--white); background: var(--purple); border: 2.5px solid var(--ink); border-radius: 999px; box-shadow: 0 4px 0 var(--ink); font: 700 14px 'Fredoka', system-ui, sans-serif; touch-action: manipulation; }
-#menuButton:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+#menuButton:active, #shareButton:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+#shareButton { position: absolute; right: calc(16px + var(--safe-right)); bottom: calc(16px + var(--safe-bottom)); padding: 12px 20px; min-height: 44px; color: var(--white); background: var(--pink); border: 2.5px solid var(--ink); border-radius: 999px; box-shadow: 0 4px 0 var(--ink); font: 700 14px 'Fredoka', system-ui, sans-serif; touch-action: manipulation; }
 #pauseButton { position: absolute; left: 50%; bottom: calc(18px + var(--safe-bottom)); transform: translateX(-50%); width: 50px; height: 50px; display: flex; gap: 6px; align-items: center; justify-content: center; border: 2.5px solid var(--ink); border-radius: 50%; background: rgba(255, 255, 255, .7); box-shadow: 0 4px 0 rgba(75, 42, 110, .35); opacity: .7; touch-action: none; -webkit-tap-highlight-color: transparent; }
 #pauseButton span { width: 6px; height: 17px; background: var(--ink); border-radius: 3px; }
 button:focus-visible { outline: 3px solid var(--pink); outline-offset: 4px; }

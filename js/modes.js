@@ -5,14 +5,13 @@
 
 import { MODES_CONFIG } from './config.js';
 import { dateKey, hashSeed } from './rng.js';
+import { t } from './i18n.js';
 
 export class BaseMode {
     constructor(config) {
         this.id = config.ID;
-        this.label = config.LABEL;
         this.storageKey = config.STORAGE_KEY;
         this.legacyKey = config.LEGACY_KEY || null;
-        this.description = config.DESCRIPTION;
         this.config = config;
     }
 
@@ -42,6 +41,14 @@ export class BaseMode {
      */
     isSimultaneous() {
         return !!this.config.SIMULTANEOUS;
+    }
+
+    get label() {
+        return t(`mode.${this.id}.label`, null, this.config.LABEL);
+    }
+
+    get description() {
+        return t(`mode.${this.id}.desc`, null, this.config.DESCRIPTION);
     }
 
     /** En iyi skorun saklandığı anahtar */

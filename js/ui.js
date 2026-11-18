@@ -11,8 +11,9 @@ import { formatScore } from './score.js';
 import { SKINS, drawMarshmallow } from './skins.js';
 import { SETTING_ROWS } from './settings.js';
 import { dateLabel } from './rng.js';
+import { t } from './i18n.js';
 
-const SETTINGS_LAYOUT = { x: 110, y: 112, w: 380, rowTop: 170, rowH: 46 };
+const SETTINGS_LAYOUT = { x: 110, y: 104, w: 380, rowTop: 160, rowH: 42 };
 
 export class UIManager {
     constructor() {
@@ -218,7 +219,7 @@ export class UIManager {
 
     renderMenu(ctx, activeModeId = this.currentMode.id) {
         const w = 600;
-        const t = performance.now() / 1000;
+        const now = performance.now() / 1000;
 
         ctx.save();
         ctx.translate(this.menuOffsetX, this.menuOffsetY);
@@ -232,12 +233,12 @@ export class UIManager {
         ctx.font = font(14, 700);
         ctx.fillStyle = THEME.INK;
         ctx.textBaseline = 'middle';
-        ctx.fillText('⚙ ayarlar', sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
+        ctx.fillText(t('menu.settings'), sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
         ctx.textBaseline = 'alphabetic';
 
         // Başlık
         ctx.font = font(42, 700);
-        const titleY = 70 + Math.sin(t * 2) * 2;
+        const titleY = 70 + Math.sin(now * 2) * 2;
         ctx.lineJoin = 'round';
         ctx.fillStyle = THEME.PINK;
         ctx.fillText('BULLET HELL', w / 2 + 3, titleY + 4);
@@ -250,7 +251,7 @@ export class UIManager {
 
         ctx.font = font(13, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('mod seç', w / 2, 108);
+        ctx.fillText(t('menu.pickMode'), w / 2, 108);
 
         // Mod butonları
         for (const btn of this.modeButtons) {
@@ -259,13 +260,14 @@ export class UIManager {
             const y = btn.y + lift;
             candyPanel(ctx, btn.x, y, btn.w, btn.h, 18, isSelected ? THEME.PINK : THEME.WHITE,
                 { depth: isSelected ? 6 : 4, lineWidth: 2 });
-            const best = `en iyi ★ ${formatScore(this.getBestScore(btn.id))}`;
+            const best = t('menu.best', { score: formatScore(this.getBestScore(btn.id)) });
+            const label = ModeRegistry.get(btn.id).label;
             ctx.textBaseline = 'middle';
             if (btn.wide) {
                 ctx.textAlign = 'left';
                 ctx.font = font(17, 700);
                 ctx.fillStyle = isSelected ? THEME.WHITE : THEME.INK;
-                ctx.fillText(`☀ ${btn.label} · ${dateLabel()}`, btn.x + 20, y + btn.h / 2 + 1);
+                ctx.fillText(`☀ ${label} · ${dateLabel()}`, btn.x + 20, y + btn.h / 2 + 1);
                 ctx.textAlign = 'right';
                 ctx.font = font(12, 600);
                 ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.9)' : THEME.MUTED;
@@ -274,7 +276,7 @@ export class UIManager {
                 ctx.textAlign = 'center';
                 ctx.font = font(18, 700);
                 ctx.fillStyle = isSelected ? THEME.WHITE : THEME.INK;
-                ctx.fillText(btn.label, btn.x + btn.w / 2, y + btn.h / 2 - 8);
+                ctx.fillText(label, btn.x + btn.w / 2, y + btn.h / 2 - 8);
                 ctx.font = font(11, 600);
                 ctx.fillStyle = isSelected ? 'rgba(255, 255, 255, 0.9)' : THEME.MUTED;
                 ctx.fillText(best, btn.x + btn.w / 2, y + btn.h / 2 + 13);
@@ -290,12 +292,12 @@ export class UIManager {
         ctx.fillText(activeMode.description, w / 2, 334);
         ctx.font = font(12, 500);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('fare · WASD · joystick → hareket     DASH · sağ tık · shift → dokunulmazlık', w / 2, 360);
-        ctx.fillText('P / ESC duraklat · B müzik · N efektler · ← → kostüm', w / 2, 380);
+        ctx.fillText(t('menu.controls1'), w / 2, 360, 580);
+        ctx.fillText(t('menu.controls2'), w / 2, 380, 580);
 
         // OYNA
         const pb = this.playButton;
-        const bob = Math.sin(t * 3) * 2;
+        const bob = Math.sin(now * 3) * 2;
         candyPanel(ctx, pb.x, pb.y + bob, pb.w, pb.h, pb.h / 2, THEME.PURPLE, { depth: 6, lineWidth: 2.5 });
         ctx.beginPath();
         ctx.roundRect(pb.x + 18, pb.y + bob + 8, pb.w - 36, 8, 4);
@@ -304,17 +306,17 @@ export class UIManager {
         ctx.font = font(22, 700);
         ctx.fillStyle = THEME.WHITE;
         ctx.textBaseline = 'middle';
-        ctx.fillText(`OYNA ▶ ${activeMode.label}`, w / 2, pb.y + bob + pb.h / 2 + 2);
+        ctx.fillText(t('menu.play', { mode: activeMode.label }), w / 2, pb.y + bob + pb.h / 2 + 2);
 
         // Kostüm seçici
-        this.renderSkinPicker(ctx, t);
+        this.renderSkinPicker(ctx, now);
 
         ctx.restore();
 
         if (this.settingsOpen) this.renderSettings(ctx);
     }
 
-    renderSkinPicker(ctx, t) {
+    renderSkinPicker(ctx, time) {
         if (!this.progress) return;
         const skin = SKINS[this.skinIndex] || SKINS[0];
         const locked = !this.progress.isUnlocked(skin.id);
@@ -324,19 +326,19 @@ export class UIManager {
         UIManager.roundButton(ctx, this.skinPrev.x, cy, this.skinPrev.r, '‹');
         UIManager.roundButton(ctx, this.skinNext.x, cy, this.skinNext.r, '›');
 
-        const bob = Math.sin(t * 2.4) * 2;
-        const blink = (t % 3.2) < 0.12 ? 0.25 : 1;
-        drawMarshmallow(ctx, cx, cy - 4 + bob, 22, skin, { locked, blink, squash: 1 + Math.sin(t * 5) * 0.03 });
+        const bob = Math.sin(time * 2.4) * 2;
+        const blink = (time % 3.2) < 0.12 ? 0.25 : 1;
+        drawMarshmallow(ctx, cx, cy - 4 + bob, 22, skin, { locked, blink, squash: 1 + Math.sin(time * 5) * 0.03 });
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'alphabetic';
         ctx.font = font(15, 700);
         ctx.fillStyle = locked ? THEME.MUTED : THEME.INK;
         const count = `${this.progress.unlocked.length}/${SKINS.length}`;
-        ctx.fillText(`${skin.name}${this.progress.selected === skin.id ? ' ✓' : ''}`, cx, cy + 44);
+        ctx.fillText(`${t(`skin.${skin.id}.name`, null, skin.name)}${this.progress.selected === skin.id ? ' ✓' : ''}`, cx, cy + 44);
         ctx.font = font(11, 600);
         ctx.fillStyle = locked ? THEME.PINK_DEEP : THEME.MUTED;
-        ctx.fillText(locked ? `kilitli · ${skin.hint}` : `kostüm ${count}`, cx, cy + 62);
+        ctx.fillText(locked ? t('menu.locked', { hint: t(`skin.${skin.id}.hint`, null, skin.hint) }) : t('menu.costumes', { count }), cx, cy + 62);
     }
 
     // ------------------------------------------------------------
@@ -363,7 +365,7 @@ export class UIManager {
         ctx.textBaseline = 'middle';
         ctx.font = font(26, 700);
         ctx.fillStyle = THEME.PURPLE;
-        ctx.fillText('ayarlar', 300, L.y + 30);
+        ctx.fillText(t('settings.title'), 300, L.y + 30);
 
         SETTING_ROWS.forEach((row, i) => {
             const y = L.rowTop + i * L.rowH;
@@ -379,16 +381,16 @@ export class UIManager {
                 ctx.textAlign = 'center';
                 ctx.font = font(15, 700);
                 ctx.fillStyle = row.id === 'close' ? THEME.PINK_DEEP : THEME.INK;
-                ctx.fillText(row.id === 'close' ? 'kapat ✕' : row.label, 300, cy);
+                ctx.fillText(t(`settings.${row.id}`), 300, cy);
                 return;
             }
             ctx.textAlign = 'left';
             ctx.font = font(15, 600);
             ctx.fillStyle = THEME.INK;
-            ctx.fillText(row.label, L.x + 30, cy);
+            ctx.fillText(t(`settings.${row.id}`), L.x + 30, cy);
 
             const vx = L.x + L.w - 70;
-            if (row.type === 'volume') {
+            if (row.type === 'volume' || row.type === 'choice') {
                 ctx.textAlign = 'center';
                 ctx.font = font(16, 700);
                 ctx.fillStyle = THEME.MUTED;
@@ -405,7 +407,7 @@ export class UIManager {
         ctx.font = font(11, 600);
         ctx.fillStyle = THEME.MUTED;
         ctx.textAlign = 'center';
-        ctx.fillText('↑ ↓ seç · ← → değiştir · ESC kapat', 300, L.y + height - 14);
+        ctx.fillText(t('settings.help'), 300, L.y + height - 14);
         ctx.restore();
     }
 
@@ -431,7 +433,7 @@ export class UIManager {
         ctx.font = font(12, 600);
         ctx.textAlign = 'left';
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(`graze ${player ? player.grazeCount : 0}`, left + 2, 50);
+        ctx.fillText(t('hud.graze', { n: player ? player.grazeCount : 0 }), left + 2, 50);
 
         // Orta: süre ve rekor
         ctx.textAlign = 'center';
@@ -439,18 +441,18 @@ export class UIManager {
         outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.INK, THEME.WHITE, 6);
         ctx.font = font(11, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(`en iyi ★ ${formatScore(this.getBestScore(mode.id))}`, w / 2, 70);
+        ctx.fillText(t('hud.best', { score: formatScore(this.getBestScore(mode.id)) }), w / 2, 70);
 
         // Sağ üst: skor ve aktif güçlendirmeler
         UIManager.pill(ctx, `★ ${formatScore(score ? score.total : 0)}`, right, 24, THEME.PINK, THEME.WHITE, 'right', 13);
         let rowY = 54;
         if (player && player.hasShield) {
-            UIManager.pill(ctx, 'kalkan', right, rowY, THEME.PURPLE, THEME.WHITE, 'right', 10);
+            UIManager.pill(ctx, t('hud.shield'), right, rowY, THEME.PURPLE, THEME.WHITE, 'right', 10);
             rowY += 24;
         }
         if (pickupManager && pickupManager.isSlowmoActive()) {
             const remaining = (pickupManager.slowmoTimer / 1000).toFixed(1);
-            UIManager.pill(ctx, `yavaş ${remaining}s`, right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
+            UIManager.pill(ctx, t('hud.slowmo', { s: remaining }), right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
         }
 
         // Alt orta: dash çubuğu (dokunmatikte buton halkası gösterir)
@@ -482,7 +484,7 @@ export class UIManager {
             ctx.textAlign = 'center';
             ctx.font = font(11, 700);
             ctx.fillStyle = isReady ? THEME.PINK_DEEP : THEME.MUTED;
-            ctx.fillText(isReady ? 'DASH hazır · sağ tık / space / shift' : 'dash doluyor…', w / 2, barY - 11);
+            ctx.fillText(isReady ? t('hud.dashReady') : t('hud.dashCharging'), w / 2, barY - 11);
         }
 
         ctx.restore();
@@ -508,7 +510,7 @@ export class UIManager {
         if (player && player.alive && score.combo >= 2) {
             const x = player.x;
             const y = player.y - 30;
-            const label = score.multiplier > 1 ? `x${score.multiplier} · ${score.combo}` : `seri ${score.combo}`;
+            const label = score.multiplier > 1 ? `x${score.multiplier} · ${score.combo}` : t('hud.combo', { n: score.combo });
             ctx.font = font(11, 700);
             const tw = ctx.measureText(label).width + 16;
             candyPanel(ctx, x - tw / 2, y - 9, tw, 18, 9, score.multiplier > 1 ? THEME.PINK : THEME.WHITE, { lineWidth: 1.5, depth: 2 });
@@ -572,19 +574,19 @@ export class UIManager {
 
         ctx.font = font(28, 700);
         ctx.fillStyle = THEME.PURPLE;
-        ctx.fillText('duraklatıldı', w / 2, h / 2 - 36);
+        ctx.fillText(t('pause.title'), w / 2, h / 2 - 36);
 
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
         ctx.font = font(14, 600);
         ctx.globalAlpha = 0.65 + pulse * 0.35;
         ctx.fillStyle = THEME.INK;
-        ctx.fillText(touch ? 'devam etmek için dokun' : 'tıkla · space · P · ESC → devam', w / 2, h / 2 + 2);
+        ctx.fillText(touch ? t('pause.resumeTouch') : t('pause.resume'), w / 2, h / 2 + 2);
         ctx.globalAlpha = 1;
 
         if (!touch) {
             ctx.font = font(12, 600);
             ctx.fillStyle = THEME.MUTED;
-            ctx.fillText('M → ana menü', w / 2, h / 2 + 28);
+            ctx.fillText(t('pause.menu'), w / 2, h / 2 + 28);
         }
         ctx.restore();
     }
@@ -612,30 +614,30 @@ export class UIManager {
 
         ctx.font = font(30, 700);
         ctx.fillStyle = THEME.PINK_SOFT;
-        ctx.fillText('OYUN BİTTİ', cx + 2, cy - 122 + 3);
+        ctx.fillText(t('dead.title'), cx + 2, cy - 122 + 3);
         ctx.fillStyle = THEME.PINK_DEEP;
-        ctx.fillText('OYUN BİTTİ', cx, cy - 122);
+        ctx.fillText(t('dead.title'), cx, cy - 122);
 
         const modeLabel = mode.id === 'daily' ? `${mode.label} · ${dateLabel()}` : mode.label;
         UIManager.pill(ctx, modeLabel, cx, cy - 90, THEME.LAVENDER, THEME.INK, 'center', 11);
 
         if (this.isNewRecord) {
             const bounce = Math.abs(Math.sin(performance.now() * 0.005)) * 3;
-            UIManager.pill(ctx, '★ yeni rekor! ★', cx, cy - 62 - bounce, THEME.PURPLE, THEME.WHITE, 'center', 13);
+            UIManager.pill(ctx, t('dead.newRecord'), cx, cy - 62 - bounce, THEME.PURPLE, THEME.WHITE, 'center', 13);
         }
 
         // Skor
         ctx.font = font(12, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('skor', cx, cy - 36);
+        ctx.fillText(t('dead.score'), cx, cy - 36);
         ctx.font = font(36, 700);
         outlinedText(ctx, formatScore(score ? score.total : 0), cx, cy - 8, THEME.PINK_DEEP, THEME.WHITE, 5);
 
         // Süre · graze · seri
         const cols = [
-            ['süre', UIManager.formatTime(finalTimeMs)],
-            ['graze', player ? String(player.grazeCount) : '0'],
-            ['en uzun seri', score ? String(score.bestCombo) : '0']
+            [t('dead.time'), UIManager.formatTime(finalTimeMs)],
+            [t('dead.graze'), player ? String(player.grazeCount) : '0'],
+            [t('dead.combo'), score ? String(score.bestCombo) : '0']
         ];
         const colW = Math.min(110, (cw - 20) / 3);
         cols.forEach(([label, value], i) => {
@@ -650,33 +652,31 @@ export class UIManager {
 
         ctx.font = font(12, 600);
         ctx.fillStyle = THEME.PURPLE;
-        ctx.fillText(`en iyi ★ ${formatScore(this.getBestScore(mode.id))} · ${UIManager.formatTime(this.getHighScore(mode.id))}`, cx, cy + 74);
+        ctx.fillText(t('dead.best', { score: formatScore(this.getBestScore(mode.id)), time: UIManager.formatTime(this.getHighScore(mode.id)) }), cx, cy + 74);
 
         let lineY = cy + 96;
         if (waves && waves.boss) {
             ctx.font = font(12, 700);
-            if (waves.bossDefeatedAt !== null) {
-                ctx.fillStyle = THEME.PURPLE_DEEP;
-                ctx.fillText(`✓ Jöle Kral eridi (${UIManager.formatTime(waves.bossDefeatedAt)})`, cx, lineY);
-            } else {
-                ctx.fillStyle = THEME.PINK_DEEP;
-                ctx.fillText(`Jöle Kral enerjisi: %${Math.ceil(waves.boss.hpRatio * 100)}`, cx, lineY);
-            }
+            const parts = [];
+            if (waves.bossKills > 0) parts.push(t('dead.bossKills', { n: waves.bossKills }));
+            if (waves.bossActive) parts.push(t('dead.bossHp', { title: waves.boss.title, hp: Math.ceil(waves.boss.hpRatio * 100) }));
+            ctx.fillStyle = waves.bossActive ? THEME.PINK_DEEP : THEME.PURPLE_DEEP;
+            ctx.fillText(parts.join(' · '), cx, lineY);
             lineY += 20;
         }
         if (unlocked.length) {
-            UIManager.pill(ctx, `🎁 yeni kostüm: ${unlocked.map(s => s.name).join(', ')}`, cx, lineY + 2, THEME.PINK, THEME.WHITE, 'center', 12);
+            UIManager.pill(ctx, t('dead.unlocked', { names: unlocked.map(s => t(`skin.${s.id}.name`, null, s.name)).join(', ') }), cx, lineY + 2, THEME.PINK, THEME.WHITE, 'center', 12);
         }
 
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
         ctx.font = font(15, 700);
         ctx.globalAlpha = 0.7 + pulse * 0.3;
         ctx.fillStyle = THEME.INK;
-        ctx.fillText('tıkla · space · enter → tekrar oyna', cx, cy + 146);
+        ctx.fillText(t('dead.retry'), cx, cy + 146);
         ctx.globalAlpha = 1;
         ctx.font = font(12, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText('M / ESC → ana menü', cx, cy + 168);
+        ctx.fillText(t('dead.menu'), cx, cy + 168, cw - 20);
 
         ctx.restore();
     }

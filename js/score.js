@@ -3,6 +3,8 @@
 // Skor = hayatta kalınan süre + seri çarpanlı graze puanları + boss bonusu
 // ============================================================
 
+import { getLang } from './i18n.js';
+
 export const SCORE = {
     POINTS_PER_SECOND: 100,
     GRAZE_POINTS: 25,
@@ -75,7 +77,8 @@ export class ScoreSystem {
     }
 }
 
-/** 12345 → "12.345" */
+/** 12345 → "12.345" (EN: "12,345") */
 export function formatScore(n) {
-    return Math.floor(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const sep = getLang() === 'en' ? ',' : '.';
+    return Math.floor(n || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, sep);
 }

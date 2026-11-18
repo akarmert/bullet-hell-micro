@@ -12,13 +12,14 @@ const DEFAULT_STATS = {
     bestGrazeRun: 0,
     bestCombo: 0,
     bossKills: 0,
+    bossesBeaten: [],
     hardcoreBest: 0,
     dailyDays: []
 };
 
 export class Progress {
     constructor() {
-        this.stats = { ...DEFAULT_STATS, dailyDays: [] };
+        this.stats = { ...DEFAULT_STATS, dailyDays: [], bossesBeaten: [] };
         this.unlocked = ['classic'];
         this.selected = 'classic';
         this.load();
@@ -28,7 +29,12 @@ export class Progress {
         try {
             const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
             if (!saved) return;
-            this.stats = { ...DEFAULT_STATS, ...saved.stats, dailyDays: [...(saved.stats?.dailyDays || [])] };
+            this.stats = {
+                ...DEFAULT_STATS,
+                ...saved.stats,
+                dailyDays: [...(saved.stats?.dailyDays || [])],
+                bossesBeaten: [...(saved.stats?.bossesBeaten || [])]
+            };
             this.unlocked = Array.from(new Set(['classic', ...(saved.unlocked || [])]));
             this.selected = this.isUnlocked(saved.selected) ? saved.selected : 'classic';
         } catch (e) {
@@ -61,7 +67,7 @@ export class Progress {
 
     /**
      * Tur bittiğinde istatistikleri işler ve yeni açılan kostümleri döner.
-     * @param {{modeId:string, timeMs:number, graze:number, bestCombo:number, bossDefeated:boolean, dateKey?:string}} run
+     * @param {{modeId:string, timeMs:number, graze:number, bestCombo:number, bossKills?:number, bossesBeaten?:string[], bossDefeated?:boolean, dateKey?:string}} run
      * @returns {Array} Yeni açılan kostümler
      */
     recordRun(run) {
@@ -70,7 +76,10 @@ export class Progress {
         s.bestTime = Math.max(s.bestTime, run.timeMs);
         s.bestGrazeRun = Math.max(s.bestGrazeRun, run.graze);
         s.bestCombo = Math.max(s.bestCombo, run.bestCombo);
-        if (run.bossDefeated) s.bossKills++;
+        s.bossKills += run.bossKills ?? (run.bossDefeated ? 1 : 0);
+        for (const kind of run.bossesBeaten || (run.bossDefeated ? ['jelly'] : [])) {
+            if (!s.bossesBeaten.includes(kind)) s.bossesBeaten.push(kind);
+        }
         if (run.modeId === 'hardcore') s.hardcoreBest = Math.max(s.hardcoreBest, run.timeMs);
         if (run.modeId === 'daily' && run.dateKey && !s.dailyDays.includes(run.dateKey)) {
             s.dailyDays.push(run.dateKey);

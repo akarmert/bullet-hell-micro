@@ -5,7 +5,9 @@ const store = new Map();
 globalThis.localStorage = {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
     setItem: (k, v) => store.set(k, String(v)),
-    removeItem: (k) => store.delete(k)
+    removeItem: (k) => store.delete(k),
+    key: (i) => Array.from(store.keys())[i] ?? null,
+    get length() { return store.size; }
 };
 
 const { ScoreSystem, SCORE, formatScore } = await import('../js/score.js');
@@ -88,7 +90,7 @@ test('Öğretici ipuçları ilk turda sırayla çıkar, 12 saniyede tamamlanır,
     next.start(true);
     assert.equal(next.update(1000), null, 'tamamlanınca adım ipuçları çıkmaz');
     assert.equal(next.update(30000, true), null, 'boss ipucu girişten 2 sn sonra');
-    assert.match(next.update(32500, true).text, /Jöle Kral/);
+    assert.match(next.update(32500, true).text, /boss/);
     next.start(true);
     assert.equal(next.update(32500, true), null, 'boss ipucu ikinci kez çıkmaz');
 
@@ -113,8 +115,9 @@ test('İlerleme: başarımlar kostüm açar, kilitli kostüm seçilemez, kayıt 
         fresh = p.recordRun({ modeId: 'daily', timeMs: 5000, graze: 0, bestCombo: 0, bossDefeated: false, dateKey: day });
     }
     assert.ok(p.isUnlocked('bow'), '3 farklı günlük gün');
-    p.recordRun({ modeId: 'hardcore', timeMs: 30500, graze: 0, bestCombo: 25, bossDefeated: false });
-    assert.ok(p.isUnlocked('royal') && p.isUnlocked('party'));
+    p.recordRun({ modeId: 'hardcore', timeMs: 30500, graze: 0, bestCombo: 25, bossKills: 2, bossesBeaten: ['jelly', 'cloud'] });
+    assert.ok(p.isUnlocked('royal') && p.isUnlocked('party') && p.isUnlocked('cotton'));
+    assert.equal(p.stats.bossKills, 3);
     assert.equal(p.unlocked.length, SKINS.length);
 
     assert.equal(p.select('chocolate'), true);
@@ -140,4 +143,54 @@ test('Ayarlar: ses %10 adımla sınırlar içinde, anahtarlar değişir ve kayde
     assert.equal(reloaded.get('shake'), false);
     assert.equal(reloaded.get('contrast'), true);
     assert.ok(seen.length > 1, 'dinleyiciler her değişiklikte çağrılır');
+});
+
+test('Paylaşım metni: mod, tarih, skor, süre, seri ve şeker çubuğu', async () => {
+    const { buildShareText } = await import('../js/share.js');
+    const text = buildShareText({ modeLabel: 'GÜNLÜK', dateText: '18 Kasım', score: 12340, timeText: '00:31.234', timeMs: 31234, graze: 55, bestCombo: 22, bossKills: 1 });
+    assert.match(text, /GÜNLÜK · 18 Kasım/);
+    assert.match(text, /★ 12\.340 · ⏱ 00:31\.234/);
+    assert.match(text, /seri 22 · boss 1/);
+    assert.ok(text.includes('🍬🍬🍬🍬👑'));
+    assert.ok(!text.includes('http'));
+});
+
+test('Hayalet: kayıt normalize edilir, ara değerle oynatılır, farklı ekranda ölçeklenir', async () => {
+    store.clear();
+    const { GhostRecorder, loadGhost, saveGhost, GHOST_INTERVAL } = await import('../js/ghost.js');
+    const rec = new GhostRecorder();
+    for (let t = 0; t <= 1000; t += 16) rec.sample(t, 100 + t * 0.2, 300, 600, 600);
+    assert.ok(saveGhost('bulletHellHighScore_classic', rec, { score: 999, skin: 'party' }));
+    const g = loadGhost('bulletHellHighScore_classic');
+    assert.equal(g.skin, 'party');
+    const p = g.positionAt(500, 600, 600);
+    assert.ok(Math.abs(p.x - 200) < 3 && Math.abs(p.y - 300) < 1);
+    const wide = g.positionAt(500, 1200, 600);
+    assert.ok(Math.abs(wide.x - 400) < 6, 'geniş ekranda orantılı');
+    assert.equal(g.positionAt(g.durationMs + GHOST_INTERVAL * 2, 600, 600), null);
+
+    saveGhost('bulletHellHighScore_daily_2026-11-17', rec);
+    saveGhost('bulletHellHighScore_daily_2026-11-18', rec);
+    assert.equal(loadGhost('bulletHellHighScore_daily_2026-11-17'), null, 'eski günlük hayalet silinir');
+    assert.ok(loadGhost('bulletHellHighScore_daily_2026-11-18'));
+});
+
+test('Dil: İngilizcede mod, boss, sayı ve tarih biçimi değişir; Türkçe büyük harf kuralı korunur', async () => {
+    const { setLang, t, upper } = await import('../js/i18n.js');
+    const { dateLabel } = await import('../js/rng.js');
+    try {
+        setLang('en');
+        assert.equal(ModeRegistry.get('daily').label, 'DAILY');
+        assert.equal(ModeRegistry.get('classic').label, 'CLASSIC');
+        assert.equal(formatScore(12345), '12,345');
+        assert.equal(dateLabel(new Date(2026, 10, 18)), 'Nov 18');
+        assert.equal(t('banner.bossIncoming', { title: upper(t('boss.cloud.title')) }), '⚠ COTTON CLOUD INCOMING!');
+        assert.equal(t('missing.key', null, 'fallback'), 'fallback');
+        setLang('tr');
+        assert.equal(ModeRegistry.get('daily').label, 'GÜNLÜK');
+        assert.equal(upper('jöle kral i'), 'JÖLE KRAL İ');
+        assert.equal(dateLabel(new Date(2026, 10, 18)), '18 Kasım');
+    } finally {
+        setLang('tr');
+    }
 });

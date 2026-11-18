@@ -7,6 +7,7 @@
 import { GAME_CONFIG } from './config.js';
 import { THEME, font, candyPanel } from './theme.js';
 import { SoundSystem } from './audio.js';
+import { t, upper } from './i18n.js';
 
 /**
  * Şeker serpintisi parçacığı (dönen yuvarlak çubuk veya minik top)
@@ -251,7 +252,7 @@ export class EffectsManager {
      * Faz değişimini bildirir
      */
     triggerPhase(phaseName) {
-        this.triggerBanner(`FAZ: ${phaseName}`, THEME.PURPLE);
+        this.triggerBanner(t('banner.phase', { name: phaseName }), THEME.PURPLE);
         this.sound.playPhase();
     }
 
@@ -344,8 +345,8 @@ export class EffectsManager {
     /**
      * Boss geliyor uyarısı
      */
-    triggerBossIncoming() {
-        this.triggerBanner('⚠ JÖLE KRAL GELİYOR!', THEME.PINK_DEEP);
+    triggerBossIncoming(title = 'Jöle Kral') {
+        this.triggerBanner(t('banner.bossIncoming', { title: upper(title) }), THEME.PINK_DEEP);
         this.bannerTimer = 2200;
         this.shakeTimer = 600;
         this.shakeIntensity = 4;
@@ -355,8 +356,8 @@ export class EffectsManager {
     /**
      * Boss aşama değişimi: turuncu şok dalgası
      */
-    triggerBossStage(x, y, stageName) {
-        this.triggerBanner(`JÖLE KRAL: ${stageName}`, THEME.PINK_DEEP);
+    triggerBossStage(x, y, stageName, title = 'Jöle Kral') {
+        this.triggerBanner(t('banner.bossStage', { title: upper(title), stage: stageName }), THEME.PINK_DEEP);
         this.sound.playBossStage(x);
         this.shakeTimer = 220;
         this.shakeIntensity = 6;
@@ -370,7 +371,7 @@ export class EffectsManager {
     /**
      * Boss yenildi: büyük patlama ve ekran temizliği
      */
-    triggerBossDefeated(x, y, destroyedBullets) {
+    triggerBossDefeated(x, y, destroyedBullets, title = 'Jöle Kral') {
         this.triggerEMP(x, y, destroyedBullets);
         this.shockwaves[this.shockwaves.length - 1].color = THEME.PINK_DEEP;
         this.shockwaves.push({ x, y, radius: 4, maxRadius: 700, color: THEME.PURPLE, alpha: 1.0 });
@@ -381,7 +382,7 @@ export class EffectsManager {
         for (let i = 0; i < 60; i++) {
             this.particles.push(new Particle(x, y, colors[i % colors.length], 1.3, 1.4));
         }
-        this.triggerBanner('★ JÖLE KRAL ERİDİ! ★', THEME.PURPLE);
+        this.triggerBanner(t('banner.bossDefeated', { title: upper(title) }), THEME.PURPLE);
         this.bannerTimer = 2200;
         this.sound.playBossDefeat(x);
     }

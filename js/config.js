@@ -103,6 +103,8 @@ export const GAME_CONFIG = {
     // Oyuncu ateş etmez: enerji zamanla söner, Graze ve Dash-Ram hızlandırır.
     BOSS: {
         NAME: 'BOSS',
+        KIND: 'jelly',
+        TITLE: 'Jöle Kral',
         START_TIME: 30000,
         DURATION: 18000,      // Hiç hasar verilmezse boss'un sönme süresi (ms)
         MAX_HP: 100,
@@ -118,12 +120,43 @@ export const GAME_CONFIG = {
         COLOR: '#FF6FAE',           // Jöle boss
         GLOW: 'rgba(255, 111, 174, 0.25)',
         STAGES: [
-            { NAME: 'BLOOM', INTERVAL: 900, COUNT: 14, SPEED: 125, ROTATE_STEP: 0.2 },
-            { NAME: 'FANG', INTERVAL: 1150, FAN_COUNT: 5, FAN_SPREAD: 0.2, SPEED: 215, TELEGRAPH_TIME: 420,
+            { NAME: 'BLOOM', PATTERN: 'bloom', INTERVAL: 900, COUNT: 14, SPEED: 125, ROTATE_STEP: 0.2 },
+            { NAME: 'FANG', PATTERN: 'fang', INTERVAL: 1150, FAN_COUNT: 5, FAN_SPREAD: 0.2, SPEED: 215, TELEGRAPH_TIME: 420,
               RING_INTERVAL: 1800, RING_COUNT: 10, RING_SPEED: 95 },
-            { NAME: 'VORTEX', INTERVAL: 150, ARMS: 2, SPEED: 140, ROT_SPEED: 2.2 }
+            { NAME: 'VORTEX', PATTERN: 'vortex', INTERVAL: 150, ARMS: 2, SPEED: 140, ROT_SPEED: 2.2 }
         ]
     },
+
+    // --- BOSS 2: PAMUK BULUT (Jöle Kral'dan 30 sn sonra) ---
+    BOSS_CLOUD: {
+        NAME: 'BOSS',
+        KIND: 'cloud',
+        TITLE: 'Pamuk Bulut',
+        DURATION: 20000,
+        MAX_HP: 100,
+        GRAZE_DAMAGE: 1.5,
+        RAM_DAMAGE: 7,
+        RAM_REACH: 16,
+        RADIUS: 30,
+        HOVER_Y: 175,
+        ENTRY_TIME: 1800,
+        DEATH_TIME: 900,
+        STAGE_COOLDOWN: 800,
+        BULLET_RADIUS: 4,
+        COLOR: '#B79BFF',
+        GLOW: 'rgba(183, 155, 255, 0.25)',
+        STAGES: [
+            { NAME: 'YAĞMUR', PATTERN: 'rain', INTERVAL: 95, SPEED: 165, GAP: 120 },
+            { NAME: 'DUVAR', PATTERN: 'walls', INTERVAL: 2300, SPEED: 135, GAP: 115, SPACING: 15, TELEGRAPH_TIME: 650 },
+            { NAME: 'GİRDAP', PATTERN: 'pull', PULL: 60, INTERVAL: 560, COUNT: 12, SPEED: 115, ROT_SPEED: 1.3 }
+        ]
+    },
+
+    // Boss sırası: yenilen her boss'tan BOSS_INTERVAL sonra sıradaki gelir; tur döndükçe zorlaşır
+    BOSS_ROTATION: ['BOSS', 'BOSS_CLOUD'],
+    BOSS_INTERVAL: 30000,
+    BOSS_LEVEL_SPEED: 0.12,   // Her yeni turda mermi hızı +%12
+    BOSS_LEVEL_DENSITY: 0.1,  // Her yeni turda atış sıklığı +%10
 
     // --- EFEKTLER ---
     EFFECTS: {

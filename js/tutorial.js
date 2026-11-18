@@ -7,12 +7,14 @@
 const KEY = 'bulletHellMicro_tutorial';
 export const TUTORIAL_DONE_AT = 12000;
 
+import { t } from './i18n.js';
+
 const STEPS = [
-    { from: 300, to: 3600, mouse: 'fareyle kaç · kenarlara değme!', touch: 'joystick ile kaç · kenarlara değme!' },
-    { from: 4000, to: 7600, mouse: 'mermilerin yanından sıyrıl → graze = puan', touch: 'mermilerin yanından sıyrıl → graze = puan' },
-    { from: 8000, to: 11600, mouse: 'sağ tık / space → DASH: kısa süre dokunulmazsın', touch: 'DASH butonu: kısa süre dokunulmazsın' }
+    { from: 300, to: 3600, mouse: 'tip.walls.mouse', touch: 'tip.walls.touch' },
+    { from: 4000, to: 7600, mouse: 'tip.graze', touch: 'tip.graze' },
+    { from: 8000, to: 11600, mouse: 'tip.dash.mouse', touch: 'tip.dash.touch' }
 ];
-const BOSS_HINT = { duration: 4000, text: 'Jöle Kral: yakınında graze yap, dash ile içinden geç!' };
+const BOSS_HINT = { duration: 4000, text: 'tip.boss' };
 
 function load() {
     try {
@@ -71,14 +73,14 @@ export class Tutorial {
         }
 
         if (this.bossHintAt !== null) {
-            const t = elapsedMs - this.bossHintAt;
-            if (t >= 0 && t < BOSS_HINT.duration) return { text: BOSS_HINT.text, alpha: fade(t, BOSS_HINT.duration) };
+            const since = elapsedMs - this.bossHintAt;
+            if (since >= 0 && since < BOSS_HINT.duration) return { text: t(BOSS_HINT.text), alpha: fade(since, BOSS_HINT.duration) };
         }
 
         if (!this.activeRun) return null;
         for (const step of STEPS) {
             if (elapsedMs >= step.from && elapsedMs < step.to) {
-                return { text: this.touch ? step.touch : step.mouse, alpha: fade(elapsedMs - step.from, step.to - step.from) };
+                return { text: t(this.touch ? step.touch : step.mouse), alpha: fade(elapsedMs - step.from, step.to - step.from) };
             }
         }
         return null;
