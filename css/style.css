@@ -79,10 +79,9 @@ html, body {
 
 /* Dokunmatik kontrol overlay'i (joystick + DASH butonu); dokunmaları engellemez */
 .touch-overlay {
-    position: fixed;
-    inset: 0;
-    width: 100vw;
-    height: 100dvh;
+    position: fixed;   /* Döndürülmüş kapsayıcı içinde kapsayıcıya göre konumlanır */
+    left: 0;
+    top: 0;
     pointer-events: none;
     z-index: 10;
 }

@@ -8,7 +8,8 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
-import { getSafeInsets } from './layout.js';
+import { getSafeInsets, getViewport, toVirtual } from './layout.js';
+import { Quality } from './quality.js';
 
 export class TouchControls {
     /**
@@ -44,7 +45,9 @@ export class TouchControls {
         // Tam ekran overlay canvas (dokunmaları engellemez)
         this.overlay = document.createElement('canvas');
         this.overlay.className = 'touch-overlay';
-        document.body.appendChild(this.overlay);
+        // Kapsayıcıya eklenir: görünüm döndürüldüğünde overlay de onunla birlikte döner
+        (document.querySelector('.game-container') || document.body).appendChild(this.overlay);
+        this.overlayDirty = true;
         this.octx = this.overlay.getContext('2d');
         this.dpr = 1;
         this.layout = null; // Game.applyLayout tarafından atanır (yatay/dikey, tam ekran)
@@ -83,11 +86,15 @@ export class TouchControls {
     // ------------------------------------------------------------
 
     resize() {
-        this.dpr = Math.min(window.devicePixelRatio || 1, GAME_CONFIG.DISPLAY.MAX_DPR);
-        this.vw = window.innerWidth;
-        this.vh = window.innerHeight;
+        this.dpr = Math.min(window.devicePixelRatio || 1, Quality.settings.dpr);
+        const vp = getViewport();
+        this.vw = vp.w;
+        this.vh = vp.h;
+        this.overlay.style.width = `${this.vw}px`;
+        this.overlay.style.height = `${this.vh}px`;
         this.overlay.width = Math.round(this.vw * this.dpr);
         this.overlay.height = Math.round(this.vh * this.dpr);
+        this.overlayDirty = true;
         this.insets = getSafeInsets();
     }
 
@@ -134,7 +141,16 @@ export class TouchControls {
     // Girdi olayları (oyun sırasında çağrılır)
     // ------------------------------------------------------------
 
-    down(e) {
+    /**
+     * Pointer olayını sanal görünüm koordinatlarıyla sarar (döndürülmüş görünüm desteği)
+     */
+    norm(e) {
+        const v = toVirtual(e.clientX, e.clientY);
+        return { pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, x: v.x, y: v.y };
+    }
+
+    down(ev) {
+        const e = this.norm(ev);
         this.activePointers.add(e.pointerId);
         if (this.isJoystick) {
             this.joystickDown(e);
@@ -143,11 +159,12 @@ export class TouchControls {
         }
     }
 
-    move(e) {
-        if (!this.activePointers.has(e.pointerId)) return;
+    move(ev) {
+        if (!this.activePointers.has(ev.pointerId)) return;
+        const e = this.norm(ev);
 
         if (e.pointerId === this.joyPointerId) {
-            this.updateKnob(e.clientX, e.clientY);
+            this.updateKnob(e.x, e.y);
         } else if (e.pointerId === this.dragPointerId && this.dragLast) {
             const c = this.toCanvas(e.clientX, e.clientY);
             const sens = GAME_CONFIG.TOUCH.SENSITIVITY;
@@ -192,7 +209,7 @@ export class TouchControls {
     // --- Joystick şeması ---
 
     joystickDown(e) {
-        const x = e.clientX, y = e.clientY;
+        const x = e.x, y = e.y;
 
         // 1. Sağ alt DASH butonu
         if (this.isOnDashButton(x, y)) {
@@ -299,9 +316,13 @@ export class TouchControls {
      */
     render(visible, dashRatio) {
         const ctx = this.octx;
+        const show = visible && this.isJoystick;
+        // Görünmezken her karede tam ekran temizleme yapma (mobilde gereksiz piksel işi)
+        if (!show && !this.overlayDirty) return;
         ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
         ctx.clearRect(0, 0, this.vw, this.vh);
-        if (!visible || !this.isJoystick) return;
+        this.overlayDirty = show;
+        if (!show) return;
 
         const J = GAME_CONFIG.JOYSTICK;
         // Tüm kontroller yarı şeffaf: mermiler kontrollerin altından görünür kalır

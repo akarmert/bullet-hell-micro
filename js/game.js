@@ -15,7 +15,9 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { Haptics } from './haptics.js';
 import { TouchControls } from './touchControls.js';
-import { computeLayout, getSafeInsets } from './layout.js';
+import { computeLayout, getSafeInsets, toVirtual } from './layout.js';
+import { Quality } from './quality.js';
+import { BulletSprites } from './bullet.js';
 
 export const GAME_STATE = {
     MENU: 'MENU',
@@ -27,7 +29,18 @@ export const GAME_STATE = {
 export class Game {
     constructor(canvas) {
         this.canvas = canvas;
+        this.container = canvas.parentElement;
         this.ctx = canvas.getContext('2d');
+
+        // Grafik kalitesi (FPS düşerse otomatik azalır) — shadowBlur kaliteye bağlanır
+        Quality.init();
+        Quality.patchContext(this.ctx);
+        Quality.onChange = (level) => {
+            this.applyLayout();
+            if (this.touch) this.touch.resize();
+            const label = { high: 'YÜKSEK', medium: 'ORTA', low: 'DÜŞÜK' }[level];
+            if (this.effects) this.effects.triggerBanner(`GRAFİK KALİTESİ: ${label}`, '#888899');
+        };
 
         // Mantıksal arena (kare 600x600 ya da yatay telefonda geniş) + DPR ölçekli çizim
         this.renderScale = 1;
@@ -90,14 +103,31 @@ export class Game {
         const L = computeLayout();
         const prev = this.layout;
         const arenaChanged = !prev || prev.arenaW !== L.arenaW || prev.arenaH !== L.arenaH;
+        const rotationChanged = !prev || prev.rotated !== L.rotated;
         this.layout = L;
+
+        // Döndürülmüş görünüm: kapsayıcı, sanal yatay ekran boyutunda 90° çevrilir
+        const cs = this.container.style;
+        if (L.rotated) {
+            cs.position = 'fixed';
+            cs.top = '0px';
+            cs.left = `${window.innerWidth}px`;
+            cs.width = `${window.innerHeight}px`;
+            cs.height = `${window.innerWidth}px`;
+            cs.transformOrigin = '0 0';
+            cs.transform = 'rotate(90deg)';
+        } else {
+            cs.position = cs.top = cs.left = cs.width = cs.height = cs.transformOrigin = cs.transform = '';
+        }
+        document.body.classList.toggle('rotated', L.rotated);
+        if (rotationChanged && this.touch) this.touch.reset();
 
         // Arena boyutu: tüm alt sistemler GAME_CONFIG.CANVAS'ı anlık okur
         GAME_CONFIG.CANVAS.WIDTH = L.arenaW;
         GAME_CONFIG.CANVAS.HEIGHT = L.arenaH;
 
         // Ekran (CSS) boyutu ve fiziksel çözünürlük
-        const dpr = Math.min(window.devicePixelRatio || 1, GAME_CONFIG.DISPLAY.MAX_DPR);
+        const dpr = Math.min(window.devicePixelRatio || 1, Quality.settings.dpr);
         this.canvas.style.width = `${L.cssW}px`;
         this.canvas.style.height = `${L.cssH}px`;
         const bw = Math.max(1, Math.round(L.cssW * dpr));
@@ -105,6 +135,7 @@ export class Game {
         if (this.canvas.width !== bw) this.canvas.width = bw;
         if (this.canvas.height !== bh) this.canvas.height = bh;
         this.renderScale = bw / L.arenaW;
+        BulletSprites.setScale(this.renderScale);
         document.body.classList.toggle('fullscreen', L.fullscreen);
         document.body.classList.toggle('landscape', L.landscape);
         if (this.touch) this.touch.setLayout(L);
@@ -138,6 +169,14 @@ export class Game {
      * Ekran koordinatlarını 600x600 mantıksal canvas uzayına dönüştürür
      */
     getCanvasCoords(clientX, clientY) {
+        if (this.layout && this.layout.rotated) {
+            // Döndürülmüş görünüm: ekran koordinatını sanal yatay uzaya çevir
+            const v = toVirtual(clientX, clientY);
+            return {
+                x: (v.x - this.canvas.offsetLeft) * (GAME_CONFIG.CANVAS.WIDTH / this.layout.cssW),
+                y: (v.y - this.canvas.offsetTop) * (GAME_CONFIG.CANVAS.HEIGHT / this.layout.cssH)
+            };
+        }
         const rect = this.canvas.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return { x: 300, y: 300 };
         return {
@@ -354,7 +393,21 @@ export class Game {
         if (!fn || document.fullscreenElement) return;
         try {
             const p = fn.call(el, { navigationUI: 'hide' });
-            if (p && p.catch) p.catch(() => {});
+            if (p && p.then) {
+                // Tam ekrana geçince ekranı yatay kilitle (Android Chrome / Samsung Internet).
+                // Desteklenmezse (iOS) döndürülmüş görünüm devrede kalır.
+                p.then(() => this.lockLandscape()).catch(() => {});
+            }
+        } catch (err) { /* yok say */ }
+    }
+
+    lockLandscape() {
+        if (!GAME_CONFIG.LAYOUT.FORCE_LANDSCAPE) return;
+        try {
+            const o = screen.orientation;
+            if (o && typeof o.lock === 'function') {
+                o.lock('landscape').catch(() => {});
+            }
         } catch (err) { /* yok say */ }
     }
 
@@ -617,8 +670,8 @@ export class Game {
         ctx.fillStyle = '#080811';
         ctx.fillRect(0, 0, w, h);
 
-        // Reaktif Dinamik Yaylı Izgara
-        this.effects.renderGrid(ctx);
+        // Reaktif Dinamik Yaylı Izgara (düşük kalitede kapalı)
+        if (Quality.settings.grid) this.effects.renderGrid(ctx);
 
         // Telegraf (Ön Uyarı Lazerleri)
         this.waveManager.renderTelegraphs(ctx);

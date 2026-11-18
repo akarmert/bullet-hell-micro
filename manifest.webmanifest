@@ -4,7 +4,7 @@
   "description": "30 saniyelik minimalist bullet hell kaçış oyunu",
   "start_url": "./",
   "display": "fullscreen",
-  "orientation": "any",
+  "orientation": "landscape",
   "background_color": "#05050a",
   "theme_color": "#05050a"
 }

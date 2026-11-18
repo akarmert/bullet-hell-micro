@@ -5,6 +5,62 @@
 
 import { GAME_CONFIG } from './config.js';
 
+// ============================================================
+// Mermi Sprite Önbelleği
+// Her (şekil, renk, yarıçap) için ışımalı mermi bir kez offscreen canvas'a
+// gerçek shadowBlur ile çizilir; her karede yalnızca drawImage yapılır.
+// Bu, mobilde en büyük kare süresi kalemini (mermi başına shadowBlur) ortadan kaldırır.
+// ============================================================
+export const BulletSprites = {
+    scale: 2,          // Mantıksal birim → cihaz pikseli (Game.applyLayout ayarlar)
+    cache: new Map(),
+
+    setScale(scale) {
+        const s = Math.max(0.5, Math.round(scale * 4) / 4); // Ufak oynamalarda önbellek bozulmasın
+        if (s !== this.scale) {
+            this.scale = s;
+            this.cache.clear();
+        }
+    },
+
+    get(bullet) {
+        const key = `${bullet.shape}|${bullet.color}|${bullet.glow}|${bullet.radius}`;
+        let sprite = this.cache.get(key);
+        if (!sprite) {
+            sprite = this.build(bullet);
+            this.cache.set(key, sprite);
+        }
+        return sprite;
+    },
+
+    build(bullet) {
+        const S = this.scale;
+        // Kapsül en uzun şekil (~3.2r) + gölge payı
+        const half = bullet.radius * 3.4 + 12;
+        const px = Math.ceil(half * 2 * S);
+        const canvas = document.createElement('canvas');
+        canvas.width = px;
+        canvas.height = px;
+        const ctx = canvas.getContext('2d');
+        ctx.scale(S, S);
+
+        // Sahte mermi: merkezde, rotasyon 0 (döndürme çizim anında uygulanır)
+        const proxy = {
+            x: half, y: half, radius: bullet.radius,
+            color: bullet.color, glow: bullet.glow, rotation: 0
+        };
+        const draw = {
+            diamond: Bullet.prototype.renderDiamond,
+            capsule: Bullet.prototype.renderCapsule,
+            ring: Bullet.prototype.renderRing,
+            circle: Bullet.prototype.renderCircle
+        }[bullet.shape] || Bullet.prototype.renderCircle;
+        draw.call(proxy, ctx);
+
+        return { canvas, half, rotates: bullet.shape === 'diamond' || bullet.shape === 'capsule' };
+    }
+};
+
 export class Bullet {
     constructor(params = {}) {
         this.trail = [];
@@ -58,10 +114,11 @@ export class Bullet {
 
         // Trail kaydı
         if (this.trailLength > 0) {
-            this.trail.unshift({ x: this.x, y: this.y });
-            if (this.trail.length > this.trailLength) {
-                this.trail.pop();
-            }
+            // Nesne yeniden kullanımı: her karede yeni nesne oluşturup çöp üretmez
+            const pt = this.trail.length >= this.trailLength ? this.trail.pop() : { x: 0, y: 0 };
+            pt.x = this.x;
+            pt.y = this.y;
+            this.trail.unshift(pt);
         }
 
         // Hareket
@@ -137,7 +194,25 @@ export class Bullet {
 
         ctx.globalAlpha = 1.0;
 
-        // 2. Mermi Gövdesi (Şekle göre özelleştirilmiş render)
+        // 2. Mermi Gövdesi: önbellekteki ışımalı sprite
+        const sprite = BulletSprites.get(this);
+        const size = sprite.half * 2;
+        if (sprite.rotates) {
+            ctx.translate(this.x, this.y);
+            ctx.rotate(this.rotation);
+            ctx.drawImage(sprite.canvas, -sprite.half, -sprite.half, size, size);
+        } else {
+            ctx.drawImage(sprite.canvas, this.x - sprite.half, this.y - sprite.half, size, size);
+        }
+
+        ctx.restore();
+    }
+
+    /**
+     * Doğrudan vektör çizim (sprite üretiminde ve referans için kullanılır)
+     */
+    renderVector(ctx) {
+        ctx.save();
         switch (this.shape) {
             case 'diamond':
                 this.renderDiamond(ctx);

@@ -4,6 +4,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
+import { Quality } from './quality.js';
 
 /**
  * 100% Sıfır Bağımlılıklı Web Audio API Ses ve Dinamik BGM Sistemi
@@ -545,6 +546,14 @@ export class EffectsManager {
     }
 
     /**
+     * Kalite seviyesine göre parçacık üretir (düşük kalitede bir kısmı atlanır)
+     */
+    addParticle(x, y, color, speedScale, lifeScale) {
+        if (Quality.settings.particles < 1 && Math.random() > Quality.settings.particles) return;
+        this.particles.push(new Particle(x, y, color, speedScale, lifeScale));
+    }
+
+    /**
      * Arena boyutu değiştiğinde (ekran döndürme) reaktif ızgarayı yeniden kurar
      */
     resizeArena(width, height) {
@@ -565,7 +574,7 @@ export class EffectsManager {
 
         for (let i = 0; i < count; i++) {
             const color = colors[i % colors.length];
-            this.particles.push(new Particle(x, y, color));
+            this.addParticle(x, y, color);
         }
 
         this.grid.applyForce(x, y, 220, 180);
@@ -596,7 +605,7 @@ export class EffectsManager {
         this.sound.playGraze();
         const colors = ['#ffe600', '#ffffff'];
         for (let i = 0; i < 3; i++) {
-            this.particles.push(new Particle(x, y, colors[i % 2], 0.4, 0.4));
+            this.addParticle(x, y, colors[i % 2], 0.4, 0.4);
         }
         this.grid.applyForce(x, y, 20, 45);
     }
@@ -607,7 +616,7 @@ export class EffectsManager {
     triggerDash(x, y) {
         this.sound.playDash();
         for (let i = 0; i < 8; i++) {
-            this.particles.push(new Particle(x, y, '#ffffff', 0.6, 0.5));
+            this.addParticle(x, y, '#ffffff', 0.6, 0.5);
         }
         this.grid.applyForce(x, y, 120, 100);
     }
@@ -622,7 +631,7 @@ export class EffectsManager {
         this.flashAlpha = 0.25;
 
         for (let i = 0; i < 16; i++) {
-            this.particles.push(new Particle(x, y, '#00ff88', 0.9, 0.8));
+            this.addParticle(x, y, '#00ff88', 0.9, 0.8);
         }
         this.grid.applyForce(x, y, 160, 130);
     }
@@ -632,7 +641,7 @@ export class EffectsManager {
      */
     triggerPickupEffect(x, y, color) {
         for (let i = 0; i < 14; i++) {
-            this.particles.push(new Particle(x, y, color, 0.7, 0.6));
+            this.addParticle(x, y, color, 0.7, 0.6);
         }
         this.grid.applyForce(x, y, 80, 80);
     }
@@ -659,7 +668,7 @@ export class EffectsManager {
         for (let i = 0; i < destroyedBullets.length; i++) {
             const b = destroyedBullets[i];
             for (let k = 0; k < 3; k++) {
-                this.particles.push(new Particle(b.x, b.y, b.color, 0.5, 0.5));
+                this.addParticle(b.x, b.y, b.color, 0.5, 0.5);
             }
         }
 

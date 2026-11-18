@@ -17,6 +17,7 @@ export const GAME_CONFIG = {
         PADDING: 8,              // Masaüstünde kenar boşluğu (CSS px)
         MAX_CSS_SIZE: 900,       // Masaüstünde kare arenanın en büyük ekran boyutu
         MAX_ARENA_LONG: 1400,    // Tam ekranda uzun kenarın mantıksal üst sınırı (~21:9)
+        FORCE_LANDSCAPE: true,   // Telefonda oyun her zaman yatay oynanır (dikeyde içerik döndürülür)
         REFLOW_GRACE_MS: 1500,   // Tur başındaki bu sürede boyut değişimi duraklatmaz (tam ekran geçişi)
         DENSITY_COMPENSATION: true // Geniş arenada mermi sıklığını alanla orantılı artır (adil zorluk)
     },
@@ -62,9 +63,7 @@ export const GAME_CONFIG = {
         DASH_BUTTON_MARGIN: 34 // Sağ alt köşeden uzaklık
     },
 
-    DISPLAY: {
-        MAX_DPR: 2               // Retina netliği; 3x ekranlarda performans için 2'de sınırlanır
-    },
+    // Çözünürlük sınırı artık kalite seviyesine bağlı (bkz. quality.js)
 
     // --- GÜÇLENDİRMELER (PICK-UPS) ---
     PICKUPS: {

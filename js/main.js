@@ -4,6 +4,7 @@
 // ============================================================
 
 import { Game } from './game.js';
+import { Quality } from './quality.js';
 
 window.addEventListener('DOMContentLoaded', () => {
     const canvas = document.getElementById('gameCanvas');
@@ -24,6 +25,9 @@ window.addEventListener('DOMContentLoaded', () => {
         // Delta time hesaplama (saniye)
         let dt = (currentTime - lastTime) / 1000;
         lastTime = currentTime;
+
+        // Kare süresi izleme: oyun sırasında FPS düşerse grafik kalitesi otomatik azalır
+        if (game.state === 'PLAYING') Quality.sample(dt * 1000);
 
         // Sekme değişimi veya ani FPS düşüşlerinde mermilerin zıplamasını önlemek için tavan sınırlama
         if (dt > 0.05) {
