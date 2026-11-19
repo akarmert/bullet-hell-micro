@@ -1,0 +1,26 @@
+{
+  "environment": "Chromium in the Claude desktop app browser pane, Windows desktop GPU. The pane was hidden/backgrounded, so requestAnimationFrame-based FPS could NOT be measured. All numbers are synthetic per-frame timings (2 x 1/120 s simulation steps + render), not real-device FPS. Mobile = Chrome device emulation (375x812, DPR capped to 1.5), NOT a real phone.",
+  "tests": { "total": 65, "pass": 65, "fail": 0 },
+  "drawCallsPerFrame": {
+    "method": "wrapped gl.drawElements/drawArrays, 120 frames, 900x600 DPR1",
+    "play_dense_light": 5, "play_dense_dark": 7, "boss_bubblegum": 5, "menu": 4, "result_card_dark": 14.8,
+    "baseline_canvas2d_paint_calls_play_dense": "700 (light) / 842 (dark) Canvas 2D fill/stroke/text/image calls per frame"
+  },
+  "cpuRenderMsPerFrame_900x600": {
+    "method": "game.update + game.render CPU time, no GPU wait, 120 frames",
+    "pixi": { "play_light": 2.53, "play_dark": 1.87, "boss_bubblegum": 2.29, "menu": 0.61, "result_dark": 1.46 },
+    "baseline_canvas2d": { "play_light": 0.875, "play_dark": 0.958, "boss_bubblegum": 0.404, "menu": 0.331 },
+    "note": "Canvas 2D CPU time excludes rasterisation (done later by the browser); PixiJS CPU time includes building GPU batches and live canvas texture redraws."
+  },
+  "frameMsWithGpuFinish": {
+    "method": "update x2 + render + gl.finish(), 240 frames, chaos after 2 bosses",
+    "desktop_900x600": { "light": { "avgMs": "2.35-3.28", "p95Ms": "6.5-8.6", "p99Ms": "12.4-14.8" }, "dark": { "avgMs": "2.03-4.17 (7.28 right after a theme switch while textures re-bake)", "p95Ms": "6.3-11.7", "p99Ms": "11.6-15.2" } },
+    "mobile_emulation_563x1218": { "light": { "avgMs": 1.23, "p95Ms": 4.1, "p99Ms": 7.9 }, "dark": { "avgMs": 1.21, "p95Ms": 3.4, "p99Ms": 6.5 }, "bulletsOnScreen": "10-14 (mobile density scaling)" }
+  },
+  "stress_mobile_emulation_563x1218": {
+    "method": "fixed N bullets (5 shapes, 25% with trails), spawning frozen",
+    "pixi_update_render_glFinish": { "400_light": { "avgMs": 2.83, "p95Ms": 7.2, "p99Ms": 16.5 }, "400_dark": { "avgMs": 5.02, "p95Ms": 11.1, "p99Ms": 35.7 }, "1000_dark": { "avgMs": 6.35, "p95Ms": 14.3, "p99Ms": 18.0 } },
+    "baseline_canvas2d_cpu_only_no_raster": { "400_light": { "avgMs": 4.18, "p95Ms": 12.6 }, "400_dark": { "avgMs": 5.35, "p95Ms": 15.0 }, "1000_dark": { "avgMs": 21.61, "p95Ms": 30.5 } },
+    "baseline_canvas2d_forced_raster_getImageData": { "400_light": { "avgMs": 112.55, "p95Ms": 179, "note": "getImageData readback may switch Chrome to software canvas; treat as an upper bound, not a fair number" } }
+  }
+}

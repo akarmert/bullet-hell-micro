@@ -40,60 +40,6 @@ export function drawCapsule(ctx, color, radius) {
     ctx.stroke();
 }
 
-const capsuleCache = new Map();
-const haloCache = new Map();
-
-/** Koyu temada mermi etrafındaki yumuşak renkli hale (önbellekli); DOM yoksa null */
-function haloSprite(color, radius) {
-    const key = `${color}|${radius}`;
-    const cached = haloCache.get(key);
-    if (cached) return cached;
-    if (typeof document === 'undefined' || !/^#[0-9a-f]{6}$/i.test(color)) return null;
-    const n = parseInt(color.slice(1), 16);
-    const rgb = `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`;
-    const size = Math.ceil(radius * 2.6);
-    const canvas = document.createElement('canvas');
-    canvas.width = canvas.height = size * 2;
-    const c = canvas.getContext('2d');
-    const g = c.createRadialGradient(size, size, radius * 0.6, size, size, size);
-    g.addColorStop(0, `rgba(${rgb}, 0.5)`);
-    g.addColorStop(1, `rgba(${rgb}, 0)`);
-    c.fillStyle = g;
-    c.fillRect(0, 0, size * 2, size * 2);
-    const sprite = { canvas, size };
-    if (haloCache.size > 48) haloCache.clear();
-    haloCache.set(key, sprite);
-    return sprite;
-}
-const SPRITE_SCALE = 3; // Yüksek DPI ekranlarda da keskin kalsın
-
-/** Önbellekli şeker çubuğu görseli; DOM yoksa (testler) null */
-function capsuleSprite(color, radius, outline) {
-    const key = `${color}|${radius}|${outline}|${THEME.INK}`;
-    const cached = capsuleCache.get(key);
-    if (cached) return cached;
-    if (typeof document === 'undefined') return null;
-
-    const pad = outline + 1;
-    const w = radius * 3.6 + pad * 2;
-    const h = radius * 1.9 + pad * 2;
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(w * SPRITE_SCALE);
-    canvas.height = Math.ceil(h * SPRITE_SCALE);
-    const c = canvas.getContext('2d');
-    c.scale(SPRITE_SCALE, SPRITE_SCALE);
-    c.translate(w / 2, h / 2);
-    c.lineWidth = outline;
-    c.strokeStyle = THEME.INK;
-    c.lineJoin = 'round';
-    drawCapsule(c, color, radius);
-
-    const sprite = { canvas, w, h };
-    if (capsuleCache.size > 32) capsuleCache.clear();
-    capsuleCache.set(key, sprite);
-    return sprite;
-}
-
 export class Bullet {
     constructor(params = {}) {
         this.trail = [];
@@ -226,65 +172,6 @@ export class Bullet {
     }
 
     /**
-     * Mermiyi, izini (trail) ve geometrik şekline göre çizer
-     * @param {CanvasRenderingContext2D} ctx 
-     */
-    render(ctx) {
-        if (!this.active) return;
-
-        ctx.save();
-
-        // 1. Yumuşak iz (varsa): solan pastel noktalar
-        if (this.trail.length > 1) {
-            ctx.fillStyle = this.color;
-            for (let i = 1; i < this.trail.length; i += 2) {
-                const pt = this.trail[i];
-                const ratio = 1 - i / this.trail.length;
-                ctx.globalAlpha = ratio * 0.4;
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, this.radius * ratio * 0.7, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            ctx.globalAlpha = 1.0;
-        }
-
-        // Koyu tema: mermi ay ışığında parlar (zeminden ilk bakışta seçilsin)
-        if (THEME.dark) {
-            const halo = haloSprite(this.color, this.radius);
-            if (halo) ctx.drawImage(halo.canvas, this.x - halo.size, this.y - halo.size);
-        }
-
-        ctx.lineWidth = THEME.BULLET_OUTLINE;
-        ctx.strokeStyle = THEME.INK;
-        ctx.lineJoin = 'round';
-
-        // 2. Şekere göre gövde
-        switch (this.shape) {
-            case 'diamond':
-                this.renderDiamond(ctx);
-                break;
-            case 'capsule':
-                this.renderCapsule(ctx);
-                break;
-            case 'ring':
-                this.renderRing(ctx);
-                break;
-            case 'saw':
-                this.renderSaw(ctx);
-                break;
-            case 'bubble':
-                this.renderBubble(ctx);
-                break;
-            case 'circle':
-            default:
-                this.renderCircle(ctx);
-                break;
-        }
-
-        ctx.restore();
-    }
-
-    /**
      * Sakız topu: dolgun daire + parlak nokta
      */
     renderCircle(ctx) {
@@ -322,35 +209,6 @@ export class Bullet {
         ctx.ellipse(r * 0.2, -r * 0.3, r * 0.5, r * 0.2, 0, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
         ctx.fill();
-    }
-
-    /**
-     * Seken çizgili şeker çubuğu
-     */
-    renderCapsule(ctx) {
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
-        // Kırpma + şeritler pahalı: her renk/boyut için bir kez çizilen hazır görsel kullan
-        const sprite = capsuleSprite(this.color, this.radius, THEME.BULLET_OUTLINE);
-        if (sprite) {
-            ctx.drawImage(sprite.canvas, -sprite.w / 2, -sprite.h / 2, sprite.w, sprite.h);
-            return;
-        }
-        drawCapsule(ctx, this.color, this.radius);
-    }
-
-    /**
-     * Şeker testere: dönen eğik dişler, beyaz göbek ve dik duran minik yüz.
-     * İlk 0.25 sn'de "pıt" diye büyüyerek belirir.
-     */
-    renderSaw(ctx) {
-        const r = this.sawRadius();
-        ctx.translate(this.x, this.y);
-        ctx.save();
-        ctx.rotate(this.spinAngle);
-        Bullet.drawSawBody(ctx, r, this.color);
-        ctx.restore();
-        Bullet.drawSawFace(ctx, r);
     }
 
     /** Pop-in radius: grows with a small overshoot during the first 0.25 s */

@@ -419,9 +419,4 @@ export class PickupManager {
         return 1.0;
     }
 
-    render(ctx) {
-        for (let i = 0; i < this.pickups.length; i++) {
-            this.pickups[i].render(ctx);
-        }
-    }
 }

@@ -26,3 +26,6 @@ Pinned: `pixi.js@8.22.0`, `vite@8.3.5` (dev), `@fontsource/fredoka@5.3.0` (OFL-1
 4. Remove the old live Canvas 2D path; fixed timestep loop.
 5. Tests, web build, Android build, screenshots vs `baseline/`, metrics.
 6. Docs, ZIP, `PIXIJS-STAGE1-REPORT.md`, ask for Stage 2 approval.
+
+## Status (Stage 1 complete — Stage 2 awaiting approval)
+All Stage 1 steps done; see `PIXIJS-STAGE1-REPORT.md` at the project root. Not done: real-device FPS and APK launch test (no device/emulator available).

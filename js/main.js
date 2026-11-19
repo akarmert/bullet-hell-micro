@@ -8,11 +8,7 @@ import '@fontsource/fredoka/500.css';
 import '@fontsource/fredoka/600.css';
 import '@fontsource/fredoka/700.css';
 import { Game } from './game.js';
-
-// Simulation runs in fixed steps so movement, boss timers, collisions and score
-// do not depend on the display refresh rate (30 / 60 / 90 / 120 Hz).
-const STEP = 1 / 120;
-const MAX_STEPS = 8;      // At most ~66 ms simulated per frame (tab switches, hitches)
+import { createFixedStepper } from './loop.js';
 
 window.addEventListener('DOMContentLoaded', async () => {
     const canvas = document.getElementById('gameCanvas');
@@ -25,20 +21,23 @@ window.addEventListener('DOMContentLoaded', async () => {
     window.game = game;
     if (game.ready) await game.ready;
 
+    // Canvas text does not make the browser download @font-face files, so request every
+    // Fredoka weight explicitly (incl. Turkish letters → latin-ext subset), then re-bake
+    // the text textures that were drawn with the fallback font in the meantime.
+    if (document.fonts && document.fonts.load) {
+        const sample = 'BULLET HELL ŞşİıĞğÜüÖöÇç 0123456789';
+        const loads = ['400', '500', '600', '700'].map((w) => document.fonts.load(`${w} 16px "Fredoka"`, sample));
+        Promise.race([Promise.all(loads), new Promise((r) => setTimeout(r, 4000))])
+            .catch(() => {})
+            .then(() => game.renderer.refreshTextures());
+    }
+
+    const advance = createFixedStepper((dt) => game.update(dt));
     let last = performance.now();
-    let acc = 0;
 
     function frame(now) {
-        let elapsed = (now - last) / 1000;
+        advance((now - last) / 1000);
         last = now;
-        if (elapsed > STEP * MAX_STEPS) elapsed = STEP * MAX_STEPS;
-        acc += elapsed;
-        let steps = 0;
-        while (acc >= STEP && steps < MAX_STEPS) {
-            game.update(STEP);
-            acc -= STEP;
-            steps++;
-        }
         game.render();
         requestAnimationFrame(frame);
     }

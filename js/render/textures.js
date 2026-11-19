@@ -26,6 +26,7 @@ function makeCanvas(w, h) {
 // ------------------------------------------------------------
 
 const baked = new Map();
+const MAX_BAKED = 600;
 
 /**
  * Returns a cached texture for `key`, drawing it once if needed.
@@ -34,6 +35,8 @@ const baked = new Map();
  * @returns {{ texture: Texture, anchorX: number, anchorY: number, scale: number }}
  */
 export function bake(key, bounds, draw, res = TexState.res) {
+    // Safety valve: an unexpected stream of unique keys must not grow GPU memory forever
+    if (baked.size >= MAX_BAKED) invalidateBaked();
     const fullKey = `${key}@${res}#${TexState.epoch}`;
     let entry = baked.get(fullKey);
     if (entry) return entry;

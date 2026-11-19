@@ -35,7 +35,6 @@ export class MenuBackdrop {
         this.popChain = 0;
         this.lastPopAt = -Infinity;
         this.nextShootingAt = 4;
-        this.opacity = 1;
         this.resize(width, height);
     }
 
@@ -248,57 +247,6 @@ export class MenuBackdrop {
         this.shooting = this.shooting.filter(s => s.life > 0);
     }
 
-    /**
-     * @param {number} opacity Genel saydamlık (sonuç kartında içerik önde kalsın diye soluk çizilir)
-     */
-    render(ctx, opacity = 1) {
-        if (THEME.highContrast) return; // Yüksek kontrastta sade zemin
-        this.opacity = opacity;
-        ctx.save();
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-        if (THEME.dark) this.renderNight(ctx);
-        else this.renderCandies(ctx);
-
-        for (const r of this.ripples) {
-            ctx.globalAlpha = (r.life * 0.7) * this.opacity;
-            ctx.strokeStyle = r.c;
-            ctx.lineWidth = 3 * r.life;
-            ctx.beginPath();
-            ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2);
-            ctx.stroke();
-        }
-        for (const b of this.bursts) {
-            ctx.globalAlpha = (Math.min(1, b.life * 1.5)) * this.opacity;
-            ctx.save();
-            ctx.translate(b.x, b.y);
-            ctx.rotate(b.rot);
-            ctx.fillStyle = b.c;
-            ctx.beginPath();
-            ctx.roundRect(-4, -1.6, 8, 3.2, 1.6);
-            ctx.fill();
-            ctx.restore();
-        }
-        ctx.restore();
-    }
-
-    renderCandies(ctx) {
-        for (const tr of this.trail) {
-            ctx.globalAlpha = (tr.life * 0.7) * this.opacity;
-            ctx.save();
-            ctx.translate(tr.x, tr.y);
-            ctx.rotate(tr.rot);
-            ctx.fillStyle = tr.c;
-            ctx.beginPath();
-            ctx.roundRect(-3.5, -1.4, 7, 2.8, 1.4);
-            ctx.fill();
-            ctx.restore();
-        }
-        ctx.globalAlpha = (0.88) * this.opacity;
-        for (const c of this.candies) drawCandy(ctx, c);
-        ctx.globalAlpha = (1) * this.opacity;
-    }
-
     /** Up to 7 stars nearest to the attractor, chained like a constellation: [{ s, d }] */
     constellation() {
         const a = this.attractor;
@@ -311,88 +259,6 @@ export class MenuBackdrop {
         return near.slice(0, 7);
     }
 
-    renderNight(ctx) {
-        const a = this.attractor;
-        const tw = this.time * 1.6;
-
-        // Takımyıldızı: hedefe yakın yıldızlar birbirine ve hedefe bağlanır
-        const linked = this.constellation();
-        const linkAlpha = a.idle ? 0.35 : 0.6;
-        ctx.strokeStyle = THEME.LAVENDER;
-        ctx.lineWidth = 1.2;
-        for (let i = 0; i < linked.length; i++) {
-            const { s, d } = linked[i];
-            const prev = i === 0 ? a : linked[i - 1].s;
-            ctx.globalAlpha = ((1 - d / LINK_RADIUS) * linkAlpha) * this.opacity;
-            ctx.beginPath();
-            ctx.moveTo(prev.x, prev.y);
-            ctx.lineTo(s.x, s.y);
-            ctx.stroke();
-        }
-        const linkedSet = new Set(linked.map(l => l.s));
-
-        // Yıldızlar (bağlananlar ve dokunuşla parlayanlar büyür)
-        for (const s of this.stars) {
-            const lit = linkedSet.has(s) ? 0.55 : 0;
-            const glow = Math.max(lit, s.flare);
-            ctx.globalAlpha = (Math.min(1, 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(tw + s.ph)) + glow * 0.7)) * this.opacity;
-            ctx.fillStyle = s.c;
-            const r = (s.big ? 2.2 : 1.2) + glow * 2.2;
-            if (glow > 0.3) drawStar(ctx, s.x, s.y, r * 1.9, r * 0.7);
-            else {
-                ctx.beginPath();
-                ctx.arc(s.x, s.y, r, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // Kayan yıldızlar
-        for (const s of this.shooting) {
-            const len = 0.09;
-            const g = ctx.createLinearGradient(s.x, s.y, s.x - s.vx * len, s.y - s.vy * len);
-            g.addColorStop(0, 'rgba(255, 246, 250, 0.95)');
-            g.addColorStop(1, 'rgba(255, 141, 192, 0)');
-            ctx.globalAlpha = (Math.min(1, s.life * 1.6)) * this.opacity;
-            ctx.strokeStyle = g;
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(s.x, s.y);
-            ctx.lineTo(s.x - s.vx * len, s.y - s.vy * len);
-            ctx.stroke();
-            ctx.fillStyle = '#FFF6FA';
-            drawStar(ctx, s.x, s.y, 4, 1.6);
-        }
-
-        // Ateşböcekleri: pembe/lavanta parıltılar
-        for (let i = 0; i < this.fireflies.length; i++) {
-            const f = this.fireflies[i];
-            const pulse = 0.5 + 0.5 * Math.sin(this.time * 3 + f.orbit);
-            const color = i % 2 ? '255, 141, 192' : '205, 184, 255';
-            const R = 9 + pulse * 5;
-            const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R);
-            g.addColorStop(0, `rgba(${color}, ${0.55 + pulse * 0.3})`);
-            g.addColorStop(1, `rgba(${color}, 0)`);
-            ctx.globalAlpha = (1) * this.opacity;
-            ctx.fillStyle = g;
-            ctx.fillRect(f.x - R, f.y - R, R * 2, R * 2);
-            ctx.fillStyle = '#FFF6FA';
-            ctx.beginPath();
-            ctx.arc(f.x, f.y, 1.4, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.globalAlpha = (1) * this.opacity;
-    }
-}
-
-function drawStar(ctx, x, y, R, r) {
-    ctx.beginPath();
-    for (let i = 0; i < 10; i++) {
-        const a = -Math.PI / 2 + (i * Math.PI) / 5;
-        const rr = i % 2 ? r : R;
-        ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr);
-    }
-    ctx.closePath();
-    ctx.fill();
 }
 
 /** Tek bir süzülen şeker: marşmelov, paketli şeker, lolipop ya da jöle damlası */

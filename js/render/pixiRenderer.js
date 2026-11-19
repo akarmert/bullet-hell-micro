@@ -109,6 +109,11 @@ export class PixiRenderer {
         flushTextureTrash();
     }
 
+    /** Re-bakes every generated texture (e.g. once the bundled font has loaded). */
+    refreshTextures() {
+        invalidateBaked();
+    }
+
     /** Diagnostics for dev mode / reports */
     getStats() {
         return {

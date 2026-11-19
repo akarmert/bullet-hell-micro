@@ -3,7 +3,7 @@
 > **Amaç:** Bu doküman projenin bütün teknik yapısını, sistemlerini, verilerini ve bilinen sınırlarını tek yerde anlatır. Dışarıdan bir değerlendiricinin (insan ya da yapay zekâ) kodu açmadan mimariyi anlayıp öneri yapabilmesi için yazıldı.
 > Son bölüm, hız, optimizasyon ve güvenlik için **WebGL'e (PixiJS) geçiş önerisini** içerir.
 >
-> **Durum notu:** Doküman yazıldığında çalışma dizininde henüz commit edilmemiş değişiklikler vardı: ekşi şekerler, üçüncü boss, mobil denge, geliştirici modu ve performans düzeltmeleri. Bunlar dokümana dahildir. `android/` klasörü ve Capacitor ayarları da projede bulunuyor ama git'e eklenmemiş.
+> **Durum notu (PixiJS Aşama 1 sonrası):** Bu doküman `pixijs-v8-stage1` dalındaki mimariyi anlatır. Çizim artık tamamen **PixiJS v8 (WebGL)** üzerinden yapılır, derleme **Vite** iledir. Geçişin ayrıntıları, ölçümler ve açık konular: [`PIXIJS-STAGE1-REPORT.md`](../PIXIJS-STAGE1-REPORT.md). `android/` klasörü projede bulunuyor ama git'e eklenmemiş.
 
 ---
 
@@ -15,53 +15,54 @@
 | Tema | "Marshmallow Candy": marşmelov beyazı, mor, sakız pembesi; açık + koyu tema |
 | Platform | Tarayıcı (masaüstü + mobil), Android (Capacitor ile APK) |
 | Dil | Vanilla JavaScript (ES modülleri), HTML, CSS |
-| Çizim | Tek `<canvas>` + **Canvas 2D API** (WebGL yok) |
+| Çizim | **PixiJS 8.22.0 (WebGL)**. Eski Canvas 2D çizim kodu yalnızca **doku üreticisi** olarak kullanılır |
 | Ses | Web Audio API ile **tamamen prosedürel** (ses dosyası yok) |
-| Bağımlılık | Çalışma zamanında **sıfır** kütüphane. Sadece Capacitor (Android paketleme) ve Google Fonts (Fredoka yazı tipi, CDN) |
-| Derleme | Derleme/bundler yok; dosyalar doğrudan tarayıcıya ES modülü olarak gider |
-| Kod boyutu | ~9.900 satır (`js/` + `css/`), 29 JS modülü |
-| Test | Node'un yerleşik test koşucusu, 7 dosya, **60 test** |
+| Çalışma zamanı bağımlılıkları | `pixi.js@8.22.0`, `@fontsource/fredoka@5.3.0` (yerel yazı tipi, OFL-1.1), Capacitor 7.6.10 (Android). Hepsi tam sürüme sabit |
+| Derleme | **Vite 8.3.5** (`www/` çıktısı, göreli yollar) |
+| Kod boyutu | ~10.500 satır (`js/` + `css/`), 37 JS modülü (7'si `js/render/`) |
+| Test | Node'un yerleşik test koşucusu, 8 dosya, **65 test** |
 | Dil desteği | Türkçe + İngilizce (çalışma anında değişir) |
-
----
 
 ## 2. Çalıştırma ve derleme
 
 ```bash
-npm start            # node server.js → http://localhost:3000
-npm test             # node --test tests/*.test.mjs
-npm run build:web    # index.html + css/ + js/ → www/ (Capacitor için)
-npm run apk          # build:web + cap sync android + gradlew assembleDebug
+npm ci                 # bağımlılıklar (package-lock.json'a göre)
+npm run dev            # Vite geliştirme sunucusu → http://localhost:3000 (geliştirici modu: /?dev)
+npm test               # node --test tests/*.test.mjs
+npm run build:web      # vite build → www/ (CSP eklenir, geliştirici modu çıkarılır)
+npm run preview        # derlenmiş www/ sürümünü http://localhost:4173'te dener
+npm run apk            # build:web + cap sync android + gradlew assembleDebug
 ```
 
-- **`server.js`**: Node'un yerleşik `http` ve `fs` modülleriyle yazılmış, bağımlılıksız statik sunucu. Port 3000, `Cache-Control: no-cache`. Sadece geliştirme için (bkz. §13 Güvenlik).
-- **Capacitor**: `capacitor.config.json` → `appId: com.bullethellmicro.app`, `webDir: www`. `scripts/build-web.mjs` statik dosyaları `www/` içine kopyalar.
-- **`.claude/launch.json`**: önizleme sunucusu tanımı (`node server.js`).
+- **Vite** (`vite.config.js`): geliştirme sunucusu 3000 portunda; yayın derlemesi `www/` klasörüne, `base: './'` ile (Capacitor APK içinden yüklenebilsin diye). Yayın derlemesine sıkı bir **Content-Security-Policy** `<meta>` etiketi eklenir (geliştirme sunucusunda eklenmez, çünkü Vite'ın anlık yenilemesi satır içi betik ve websocket kullanır).
+- Eski `server.js` (bağımlılıksız Node sunucusu) ve `scripts/build-web.mjs` kaldırıldı. İkisi de başlangıç yedeğinde ve git geçmişinde duruyor.
+- **Capacitor**: `capacitor.config.json` → `appId: com.bullethellmicro.app`, `webDir: www`.
+- **Geliştirici modu** yalnızca geliştirme sunucusunda (`import.meta.env.DEV`) ya da `VITE_ENABLE_DEV_MODE=true` ile derlenen pakette yüklenir; normal yayın paketinde kodu hiç yer almaz.
 - `www/`, `node_modules/` ve `*.apk` `.gitignore`'da.
-
----
 
 ## 3. Klasör yapısı ve modüller
 
 ```
-index.html            Tek sayfa: canvas + dokunmatik kontrol şeridi + birkaç HTML buton
+index.html            Tek sayfa: canvas (PixiJS/WebGL) + dokunmatik kontrol şeridi + birkaç HTML buton
 css/style.css         Tema değişkenleri (açık/koyu), tam ekran yerleşim, kontrol şeridi, geliştirici paneli
-js/                   Oyun (29 modül)
+js/                   Oyun mantığı (PixiJS'e bağımlı DEĞİL; Node testlerinde çalışır)
+js/render/            Çizim katmanı (PixiJS v8): tek ekran çizicisi
 tests/                Node test dosyaları (*.test.mjs)
-docs/                 Tasarım rehberleri, UX raporu, bu doküman
+docs/                 Tasarım rehberleri, UX raporu, bu doküman, docs/pixijs-stage1/ (plan, referans/sonra görüntüleri, ölçümler)
 ux-preview/           Tasarım karşılaştırma sayfaları + sandbox.js (kayıtlara yazmayan test ortamı)
-scripts/build-web.mjs Capacitor için www/ kopyalayıcı
-server.js             Yerel geliştirme sunucusu
+vite.config.js        Derleme, geliştirme sunucusu, yayın CSP'si
+PIXIJS-STAGE1-REPORT.md  PixiJS Aşama 1 teknik raporu
 ```
 
 ### 3.1 Modül sorumlulukları
 
 | Modül | Satır | Sorumluluk |
 |---|---|---|
-| `main.js` | 43 | Giriş noktası; `Game` oluşturur, `requestAnimationFrame` döngüsü (dt tavanı 50 ms) |
-| `game.js` | ~1150 | **Orkestratör**: durum makinesi, girdi, güncelleme sırası, çizim sırası, ölüm, ödüller, alt şerit senkronu, arka plan katmanı |
+| `main.js` | ~50 | Giriş noktası: yerel Fredoka yazı tipini yükler, `Game` oluşturur, sabit adımlı döngüyü (`loop.js`) çalıştırır |
+| `loop.js` | ~30 | Sabit adımlı (1/120 sn) simülasyon; kare başına en fazla 8 adım (DOM'suz, test edilir) |
+| `game.js` | ~1080 | **Orkestratör**: durum makinesi, girdi, güncelleme sırası, ölüm, ödüller, alt şerit senkronu; çizimi `PixiRenderer`'a devreder |
 | `config.js` | ~360 | **Tüm ayarlanabilir sayılar**: oyuncu, fazlar, 3 boss, güçlendirmeler, ekşi şekerler, testere, para, mobil denge, performans, modlar |
-| `arena.js` | ~40 | Mantıksal arena boyutu (yükseklik sabit 600, genişlik ekran oranına göre), DPR, tuval dönüşümü, güvenli alanlar |
+| `arena.js` | ~40 | Mantıksal arena boyutu (yükseklik sabit 600, genişlik ekran oranına göre), DPR tavanı, PixiJS'e yeniden boyutlandırma, güvenli alanlar |
 | `player.js` | ~410 | Marşmelov oyuncu: fare 1:1 / klavye-joystick hareketi, dash, kalkan (3 hak), dokunulmazlık, ağırlık/şişme etkileri |
 | `bullet.js` | ~450 | Mermi varlığı: 7 şekil (circle, diamond, capsule, ring, saw, bubble…), iz, sekme, salınım; kapsül ve hale önbellek görselleri |
 | `bulletManager.js` | ~130 | Mermi **nesne havuzu** (sıfır çöp hedefi), güncelleme, temizleme |
@@ -86,14 +87,21 @@ server.js             Yerel geliştirme sunucusu
 | `ghost.js` | ~95 | "En iyi tur" hayaleti kaydı/oynatması |
 | `tutorial.js` | ~90 | İlk oyun ipuçları (bir kez gösterilir) |
 | `share.js` | ~60 | Sonuç paylaşımı (Web Share API → panoya kopyala yedeği) |
-| `devMode.js` | ~170 | Geliştirici modu (`?dev`): ölümsüzlük, boss'a atlama, kayıtlar kapalı |
+| `devMode.js` | ~170 | Geliştirici modu (`?dev`): ölümsüzlük, boss'a atlama, kayıtlar kapalı; yayın paketinden çıkarılır |
+| `render/pixiRenderer.js` | ~140 | PixiJS `Application` (WebGL, elle çizim), katman sırası, ekran sarsıntısı, WebGL bağlam kaybı/kurtarma |
+| `render/textures.js` | ~200 | Doku pişirme önbelleği, içerik değişince yeniden çizilen `LiveCanvasSprite`, havuzlu `ParticleLayer`, ertelenmiş doku silme |
+| `render/shapes.js` | ~110 | Ortak beyaz şekil dokuları (nokta, ışık, hale, şerit, yıldız, iz); GPU'da renklendirilir |
+| `render/worldView.js` | ~420 | Arka plan, yıldızlar, benekler, uyarı lazerleri, şekerler, paralar, boss, hayalet, mermiler (havuz + hale + iz), oyuncu, puan baloncukları |
+| `render/fxView.js` | ~90 | Konfeti parçacıkları, şok dalgaları, flaş, bildirim afişi |
+| `render/uiView.js` | ~230 | HUD bölgeleri, ipucu, boss barı, menü/duraklatma/sonuç kartı, arena çerçevesi, maskeli kenar uyarısı |
+| `render/backdropView.js` | ~150 | Menü ve sonuç kartının etkileşimli arka planı (şekerler, yıldızlar, ateşböcekleri) |
 
 ---
 
 ## 4. Çekirdek mimari
 
 ### 4.1 Oyun döngüsü
-`main.js` her `requestAnimationFrame`'de `game.update(dt)` ve `game.render()` çağırır. `dt` saniye cinsindendir ve 0,05 s ile sınırlıdır (sekme dönüşünde ışınlanma olmasın diye). Simülasyon süresi (`elapsedMs`) sadece `PLAYING` durumunda ilerler. Yavaş çekim, `pickupManager.getSpeedFactor()` ile mermi/boss/para güncellemelerine çarpan olarak uygulanır.
+`main.js`, `loop.js`'teki sabit adımlı yürütücüyü kullanır: her `requestAnimationFrame`'de geçen süre biriktirilir, simülasyon **1/120 saniyelik eşit adımlarla** (`game.update(STEP)`) ilerler ve kare başına bir kez `game.render()` çağrılır. Kare başına en fazla 8 adım çalışır (takılmalardan sonra telafi döngüsü olmasın diye). Böylece hareket, boss süreleri, çarpışmalar ve skor 30, 60, 90 ya da 120 Hz ekranda aynı kalır; bu, testlerle doğrulanır. Simülasyon süresi (`elapsedMs`) sadece `PLAYING` durumunda ilerler. Yavaş çekim, `pickupManager.getSpeedFactor()` ile mermi/boss/para güncellemelerine çarpan olarak uygulanır.
 
 ### 4.2 Durum makinesi
 `GAME_STATE = MENU | PLAYING | PAUSED | DEAD`
@@ -105,8 +113,9 @@ server.js             Yerel geliştirme sunucusu
 
 ### 4.3 Koordinat sistemi ve çözünürlük
 - Mantıksal arena: **yükseklik 600 birim**, genişlik = `600 × ekranGenişliği / ekranYüksekliği`. Dikey telefonda ~277 birim, geniş masaüstünde ~1000 birim.
-- `arena.js` tuval piksel boyutunu `CSS boyutu × DPR` yapar. DPR tavanı masaüstünde 2, dokunmatik cihazda (`pointer: coarse`) **1,5**. Mantıksal → piksel ölçeği tek bir `setTransform` ile verilir.
-- `ResizeObserver` boyut değişince arenayı yeniden ölçer; oyuncu konumu oransal korunur.
+- PixiJS sahnesi mantıksal birimlerle kurulur ve `kökKonteyner.scale = cssYükseklik / 600` ile ekrana ölçeklenir. Çizim tamponu `renderer.resize(cssW, cssH, dpr)` ile ayarlanır. Tuvalin CSS boyutunu sayfa belirler (`autoDensity` kapalı).
+- DPR tavanı masaüstünde 2, dokunmatik cihazda (`pointer: coarse`) **1,5**. Dokular `dpr × ölçek` çözünürlüğünde pişirilir (0,25 adımlarla yuvarlanır).
+- `ResizeObserver`, pencere `resize` ve `orientationchange` olayları boyutu yeniden ölçer; oyuncu konumu oransal korunur.
 - Menüler mantıksal arenaya sabit tasarım boyutlarında (600×600 kare, 920×470 geniş, 420×790 dikey) çizilip ölçeklenir; ekrana en iyi sığan yerleşim seçilir.
 
 ### 4.4 Güncelleme sırası (PLAYING)
@@ -120,18 +129,16 @@ server.js             Yerel geliştirme sunucusu
 8. Çarpışma: mermi → (kalkan | ölüm), graze → skor + boss hasarı, boss gövdesi teması
 9. Alt şerit DOM senkronu (saniyede en fazla 10 kez)
 
-### 4.5 Çizim sırası (her kare tam yeniden çizim)
-1. **Arka plan katmanı** (önbellekli, yarı çözünürlük, 4 karede bir yenilenir): zemin rengi / koyu temada gökyüzü geçişi + pastel bulutlar
-2. Menüde: etkileşimli arka plan · Oyunda: yıldızlar (koyu tema) + yaylı benek ızgarası
-3. Uyarı lazerleri → güçlendirmeler/ekşi şekerler → paralar → boss → hayalet
-4. Mermiler (koyu temada önbellekli hale görseli) → oyuncu → seri/puan baloncukları
-5. Efektler (parçacık, şok dalgası, flaş, afiş)
-6. Arayüz katmanı (menü / HUD + kenar uyarısı + ipucu + boss barı + duraklatma / sonuç kartı)
-7. Oyun içinde: arena çerçevesi + yaklaşılan kenarın pembe vurgusu
+### 4.5 Çizim mimarisi (PixiJS katmanları)
+Oyun mantığı PixiJS'i hiç import etmez. `PixiRenderer` her karede oyun durumunu **okur** ve sahneyi günceller. Katmanlar (arkadan öne):
+1. **Arka plan** (sarsılmaz): zemin rengi / koyu temada gökyüzü geçişi dokusu + pastel bulutlar (tek ışık dokusu, `ParticleContainer`)
+2. Menüde: **etkileşimli arka plan** (`BackdropView`)
+3. **Oyun alanı + efektler** (birlikte sarsılır): yıldızlar ve benekler (`ParticleContainer`) → uyarı lazerleri (`Graphics` + nokta parçacıkları) → şekerler, paralar, boss, hayalet (`LiveCanvasSprite`) → mermi izleri ve haleleri (`ParticleContainer`) → mermiler (pişmiş doku + sprite havuzu; testere gövdesi döner, yüzü dik kalır) → oyuncu → puan baloncukları → konfeti, şok dalgası, flaş, afiş
+4. **Arayüz** (sarsılmaz): kenar uyarısı ışığı (çerçeve içine maskeli) → HUD bölgeleri → ipucu → boss barı → menü / duraklatma / sonuç kartı (kartın gövdesinde maskeli arka plan efekti) → arena çerçevesi ve yaklaşılan kenarın pembe parçası (çerçeve çizgisine maskeli)
 
-Ekran sarsıntısı (`effects.preRender`) arka plandan sonra uygulanır, böylece saydam olmayan tuvalde kenarda siyah şerit oluşmaz.
-
----
+**Dokular:** Mevcut Canvas 2D çizim fonksiyonları yalnızca **doku üreticisi** olarak kullanılır:
+- *Pişmiş dokular* (`bake`): mermi şekilleri, konfeti, şekerler, puan yazıları, ortak beyaz şekiller bir kez çizilir; tema, kontrast, çözünürlük ya da yazı tipi değişince yeniden pişirilir. Eski dokular bir sonraki çizimden sonra silinir.
+- *Canlı dokular* (`LiveCanvasSprite`): oyuncu, boss, şekerler, paralar, HUD bölgeleri ve ekranlar küçük bir ara tuvalde çizilir ve **yalnızca görünüşü değişince** yeniden yüklenir (animasyonlu olanlar en fazla saniyede 30 kez). Konum değişince sadece sprite kayar.
 
 ## 5. Oyun tasarımı ve sistemler
 
@@ -248,52 +255,51 @@ Bütün okuma/yazmalar `try/catch` içindedir (gizli sekme, kota hatası).
 `i18n.js` içinde TR ve EN sözlükleri. `t(anahtar, parametreler, yedek)` ile çağrılır, parametreler `{ad}` biçiminde. `upper()` Türkçe büyük harf kuralına uyar (i → İ). Mod adları, boss adları ve aşamaları, HUD, afişler, bilgi paneli ve HTML butonları çevrilir.
 
 ## 11. Geliştirici modu
-- Adres `?dev` içerince (`?dev=0` hariç) solda bir panel açılır. Dar ekranda kapalı başlar.
+- Geliştirme sunucusunda (`npm run dev`) adres `?dev` içerince (`?dev=0` hariç) solda bir panel açılır. Dar ekranda kapalı başlar.
 - Ölümsüzlük (açılışta açık; aynı çarpmanın tekrarları tek sayılır), boss'a atlama (Jöle/Bulut/Sakız), AĞIR/DEV uygula, ekşi şeker bırak, kalkan +1, mermileri temizle, turu bitir.
 - **Geliştirici modunda rekor, hayalet, istatistik, kostüm başarımı ve şeker kaydedilmez.**
-- Bu mod normal adreste yüklenmez ama koddan çıkarılmış da değildir (bkz. §13).
+- **Yayın paketinde (`npm run build:web`) geliştirici modunun kodu yoktur**; `?dev` hiçbir şey yapmaz. İstenirse `VITE_ENABLE_DEV_MODE=true npm run build:web` ile bilerek açılabilir.
 
 ## 12. Testler
-`node --test tests/*.test.mjs`, 7 dosya, 60 test. DOM gerektirmeyen mantık test edilir:
-- `boss.test.mjs`: boss girişi, hasar modeli, aşamalar, 3 boss rotasyonu, Pamuk Bulut desenleri, Sakız Balon (balon patlaması, sekme, boşluklu halka), mobil yoğunluk ölçeği
-- `mobile.test.mjs`: kalkan kuralları, ekşi şeker etkileri (yavaşlama, imleç takibi, büyüme/küçülme, kalkanın engellememesi, süzülme)
+`node --test tests/*.test.mjs`, 8 dosya, 65 test. DOM ve WebGL gerektirmeyen mantık test edilir:
+- `boss.test.mjs`: boss girişi, hasar modeli, aşamalar, 3 boss rotasyonu, Pamuk Bulut desenleri, Sakız Balon, mobil yoğunluk ölçeği
+- `mobile.test.mjs`: kalkan kuralları, ekşi şeker etkileri
 - `features.test.mjs`: skor, modlar, günlük RNG, i18n, kostümler, geliştirici modu
 - `ui.test.mjs`: menü yerleşimleri, ≥44 px dokunma hedefleri, sonuç kartı butonları, odak sırası
+- `stage1.test.mjs`: sabit adımın 30/60/90/120 Hz'de aynı süreyi simüle etmesi, takılma sınırı, aynı tohumla 30 Hz ve 120 Hz'de **birebir aynı mermiler**, oyun mantığının çiziciye bağımlı olmaması, yayın güvenliği (eski sunucu yok, CSP yalnızca derlemede, uzak yazı tipi yok, sürümler sabit)
 - `theme.test.mjs`, `menuBackdrop.test.mjs`, `audio.test.mjs`
 
-Görsel doğrulama otomatik değil; `ux-preview/sandbox.js` kayıtlara yazmayan bir test ortamı ve senaryo kısayolları (menü, oyun, boss, ölüm) sağlar.
+Görsel doğrulama otomatik piksel karşılaştırması değildir: `docs/pixijs-stage1/baseline/` (Canvas 2D) ve `docs/pixijs-stage1/after/` (PixiJS) klasörlerinde aynı senaryoların ekran görüntüleri vardır. `ux-preview/sandbox.js` kayıtlara yazmayan bir test ortamı sağlar.
 
-## 13. Mevcut performans önlemleri ve bilinen sınırlar
+## 13. Performans önlemleri ve bilinen sınırlar
 
-**Yapılmış optimizasyonlar**
-- Mermi nesne havuzu (çöp toplayıcı baskısı az).
-- Kapsül mermi ve koyu tema mermi halesi önceden çizilip görsel olarak önbelleğe alınır.
-- Arka plan (zemin + büyük pastel bulut degradeleri) yarı çözünürlüklü ayrı katmanda, 4 karede bir yeniden çizilir. Önceden her karede yaklaşık 3 tam ekran degrade boyanıyordu.
-- Dokunmatik cihazlarda DPR tavanı 1,5 (2'ye göre ~%44 daha az piksel).
-- Tuval `alpha: false` ile açılır.
-- Alt şerit DOM yazımı saniyede en fazla 10 kez, DASH halkası sadece değişince yazılır.
-- Kaos ayarı ve sayımlarda her kare yeni nesne üretimi kaldırıldı; graze sesi sınırlandı.
+**Uygulanmış (Aşama 1)**
+- WebGL toplu çizim: yoğun sahnede kare başına **5–7 GPU çizim çağrısı** (Canvas 2D'de 700–840 boyama komutu vardı).
+- Mermi sprite havuzu (mermi nesne havuzuyla eşli), konfeti sprite havuzu, `ParticleContainer` katmanları (iz, hale, benek, yıldız, bulut, lazer noktası). Kare başına yeni nesne üretilmez.
+- Doku pişirme önbelleği (en fazla 600 doku; aşılırsa sıfırlanır) ve değişince yüklenen canlı dokular.
+- Ekran dışındaki mermiler çizilmez (40 birim pay); oyun mantığında güncellenmeye devam eder.
+- Dokunmatikte DPR tavanı 1,5; alt şerit DOM yazımı saniyede en fazla 10; graze sesi sınırlı.
+- Sabit adımlı simülasyon (FPS'den bağımsız oynanış).
 
-**Bilinen sınırlar / teknik borç**
-- **Canvas 2D**: her mermi, parçacık, şeker ve yüz her karede tek tek yol (path) olarak çizilir. Yoğun anlarda (yüzlerce mermi + patlama parçacıkları) çizim komutu sayısı çok yükselir. Telefonlarda takılmanın ana kaynağı budur. JS mantığı ölçümde kare başına <0,1 ms, çizim komut üretimi ~0,8 ms (masaüstü). Asıl maliyet tarayıcının bu komutları rasterleştirmesidir ve JS'ten ölçülemez.
-- Arayüz (menü, kart, HUD) değişmese bile her karede yeniden çizilir.
-- Boss ve oyuncu yüzleri her karede vektör olarak çizilir.
-- Gerçek cihaz performans ölçümü yapılmadı; ölçümler masaüstü tarayıcıda telefon boyutu emülasyonuyla yapıldı.
-- `game.js` ve `ui.js` büyük dosyalar (~1.200 satır); çizim ile mantık aynı sınıflarda.
-- Görsel regresyon testi yok.
+**Bilinen sınırlar (Aşama 2 adayları)**
+- Masaüstünde HUD'un süre ve skor bölgeleri her karede yeniden yüklenir (küçük ama sürekli). Menü ve sonuç kartı animasyonu tam ekran dokuyu saniyede 30 kez yeniler.
+- Gerçek telefonda FPS ölçülmedi; ölçümler masaüstü tarayıcıda telefon emülasyonuyla, gizli panelde (`gl.finish` ile) yapıldı.
+- p99 kare süresinde ara ara 12–35 ms sıçramalar görüldü (muhtemelen doku yüklemeleri ve çöp toplayıcı); kaynağı ölçümle doğrulanmalı.
+- Görsel regresyon testi otomatik değil.
 
-## 14. Güvenlik notları (mevcut durum)
-- **Sunucu yok, hesap yok, ağ isteği yok** (Google Fonts hariç). Oyun tamamen istemci tarafında çalışır.
-- **Skorlar ve şeker localStorage'da düz JSON**: kullanıcı tarayıcı araçlarıyla değiştirebilir. Şu an çevrimiçi liderlik tablosu olmadığı için risk yalnızca kişisel. Liderlik tablosu eklenirse sunucu tarafı doğrulama şart olur.
-- **Harici kaynak**: Fredoka yazı tipi `fonts.googleapis.com`'dan yüklenir. Bu hem çevrimdışı çalışmayı bozar hem de üçüncü tarafa istek gönderir. Yazı tipi projeye gömülmeli (OFL lisansı izin verir).
-- **CSP yok**: `index.html` bir Content-Security-Policy tanımlamıyor. Kod `innerHTML`'i yalnızca geliştirici panelinde, sabit metinle kullanır; kullanıcı girdisi DOM'a yazılmaz.
-- **Geliştirici modu yayın paketinde mevcut**: `?dev` ile açılır. Kayıt yapmadığı için skor hilesine yol açmaz ama yayın derlemesinde tamamen kapatılması önerilir.
-- **`server.js` sadece geliştirme içindir**: proje klasöründeki her dosyayı sunar (ör. `.git/`, `node_modules/`), yol temizliği basittir. İnternete açılmamalı; yayın için statik barındırma ya da Capacitor/Electron paketi kullanılmalı.
-- Paylaşım yalnızca metin üretir (`navigator.share` / pano); dışarıdan veri okunmaz.
+## 14. Güvenlik notları
+- **Sunucu yok, hesap yok, ağ isteği yok.** Yazı tipi artık pakette (Google Fonts kaldırıldı); oyun tamamen çevrimdışı çalışır.
+- **Sıkı CSP** (yalnızca yayın derlemesinde): `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'`. PixiJS `pixi.js/unsafe-eval` modülüyle `eval`/`new Function` kullanmadan çalışır. Derlenmiş sürümde CSP ihlali gözlenmedi.
+- **Bağımlılıklar tam sürüme sabit** (`pixi.js 8.22.0`, `vite 8.3.5`, `@fontsource/fredoka 5.3.0`, Capacitor `7.6.10`); `npm audit`: 0 açık.
+- **Geliştirici modu yayın paketinden çıkarılır.**
+- **Eski `server.js` kaldırıldı** (proje klasöründeki her dosyayı sunuyordu). Vite geliştirme sunucusu yalnızca `localhost`'u dinler.
+- **Skorlar ve şeker localStorage'da düz JSON**: kullanıcı değiştirebilir. Çevrimiçi liderlik tablosu yok; eklenirse sunucu tarafı doğrulama şart olur. Kayıt anahtarları değişmedi.
+- `window.game` tarayıcı konsolundan erişilebilir (hata ayıklama kolaylığı); yalnızca yerel oyunu etkiler.
+- Android: `INTERNET` izni ve `allowBackup="true"` Capacitor varsayılanı olarak duruyor; oyun ağ kullanmadığı için yayın öncesi gözden geçirilmesi önerilir (rapora bakın).
 
----
+## 15. WebGL'e (PixiJS) geçiş önerisi — Aşama 1 olarak uygulandı
 
-## 15. Öneri: Hız, optimizasyon ve güvenlik için WebGL'e (PixiJS) geçiş
+> Aşağıdaki öneri `pixijs-v8-stage1` dalında **Aşama 1** olarak uygulandı. Gerçekleşen mimari §4.5'te, sonuçlar ve sapmalar [`PIXIJS-STAGE1-REPORT.md`](../PIXIJS-STAGE1-REPORT.md) içinde. Bölüm, değerlendirme geçmişi için korunuyor.
 
 ### 15.1 Neden
 Oyunun mantığı hafif. Darboğaz **Canvas 2D çizim modeli**: her nesne her karede ayrı yol komutlarıyla rasterleştiriliyor. Bullet hell türünde nesne sayısı yüzlerle ölçülür ve mobil tarayıcılarda bu model hızla tıkanır. **PixiJS (WebGL)** aynı görselleri ekran kartına **doku (texture)** olarak yükler ve aynı dokuyu kullanan binlerce sprite'ı birkaç çizim çağrısında toplu (batch) çizer. Bu tür oyunlarda mobilde akıcılık için standart çözüm budur.

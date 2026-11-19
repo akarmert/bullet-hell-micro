@@ -5,9 +5,8 @@
 
 import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
-import { Boss, BOSS_STATE } from './boss.js';
+import { Boss } from './boss.js';
 import { random } from './rng.js';
-import { THEME } from './theme.js';
 
 export class WaveManager {
     constructor(bulletManager, mode = null) {
@@ -142,52 +141,6 @@ export class WaveManager {
             }
         }
         this.telegraphs.length = activeCount;
-    }
-
-    /**
-     * Telegraf çizgilerini canvas üzerine çizer (kesikli lazer uyarısı)
-     * @param {CanvasRenderingContext2D} ctx 
-     */
-    renderTelegraphs(ctx) {
-        if (this.telegraphs.length === 0) return;
-
-        ctx.save();
-        ctx.lineCap = 'round';
-        for (let i = 0; i < this.telegraphs.length; i++) {
-            const t = this.telegraphs[i];
-            const progress = 1 - Math.max(0, t.remaining / t.duration);
-
-            // Geniş yumuşak şerit: ateşlemeye yaklaştıkça koyulaşır
-            ctx.beginPath();
-            ctx.moveTo(t.x1, t.y1);
-            ctx.lineTo(t.x2, t.y2);
-            ctx.strokeStyle = t.color;
-            ctx.globalAlpha = 0.12 + progress * 0.2;
-            ctx.lineWidth = 10;
-            ctx.setLineDash([]);
-            ctx.stroke();
-
-            // Noktalı şeker çizgisi
-            ctx.beginPath();
-            ctx.moveTo(t.x1, t.y1);
-            ctx.lineTo(t.x2, t.y2);
-            ctx.globalAlpha = 0.45 + progress * 0.55;
-            ctx.strokeStyle = t.color;
-            ctx.lineWidth = 3;
-            ctx.setLineDash([1, 9]);
-            ctx.lineDashOffset = -progress * 40;
-            ctx.stroke();
-
-            // Başlangıçta küçülen halka
-            ctx.setLineDash([]);
-            ctx.globalAlpha = 1;
-            ctx.beginPath();
-            ctx.arc(t.x1, t.y1, 4 + (1 - progress) * 10, 0, Math.PI * 2);
-            ctx.strokeStyle = THEME.INK;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-        }
-        ctx.restore();
     }
 
     /**
@@ -577,13 +530,6 @@ export class WaveManager {
         }
         this.lastElapsedMs = elapsedMs;
         this.boss.update(dt, player);
-    }
-
-    /**
-     * Boss'u çizer (yenildiyse hiçbir şey çizmez)
-     */
-    renderBoss(ctx) {
-        if (this.boss && this.boss.state !== BOSS_STATE.DEAD) this.boss.render(ctx);
     }
 
     // ------------------------------------------------------------

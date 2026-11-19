@@ -89,8 +89,8 @@ export class Game {
         // Geliştirici modu: adrese ?dev eklenince (ölümsüzlük, boss'a atlama; kayıtlar kapalı)
         this.dev = null;
         // Dev mode is compiled out of production builds unless VITE_ENABLE_DEV_MODE=true.
-        const env = (import.meta && import.meta.env) || {};
-        const devAllowed = env.DEV === true || env.VITE_ENABLE_DEV_MODE === 'true';
+        // Written literally so Vite replaces it at build time and drops the dev-mode chunk
+        const devAllowed = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_MODE === 'true';
         if (devAllowed && typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')) {
             import('./devMode.js').then(({ DevMode, isDevRequested }) => {
                 if (isDevRequested()) this.dev = new DevMode(this);
@@ -145,6 +145,9 @@ export class Game {
         this.initInputListeners();
         resizeArena(this);
         new ResizeObserver(() => resizeArena(this)).observe(this.canvas);
+        // Some WebViews skip ResizeObserver on rotation: also listen to the window events
+        window.addEventListener('resize', () => resizeArena(this));
+        window.addEventListener('orientationchange', () => setTimeout(() => resizeArena(this), 50));
         // Odak kaybında oyunu otomatik duraklat (sekme değişimi, bildirim, uygulama değişimi)
         window.addEventListener('blur', () => { this.keys = {}; this.pauseGame(); });
         document.addEventListener('visibilitychange', () => { if (document.hidden) this.pauseGame(); });

@@ -175,7 +175,4 @@ export class CoinManager {
         return collected;
     }
 
-    render(ctx) {
-        for (const coin of this.coins) coin.render(ctx);
-    }
 }

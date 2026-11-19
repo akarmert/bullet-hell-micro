@@ -225,7 +225,7 @@ export class WorldView {
         this.syncCoins(game, playing);
         this.syncBoss(game, playing);
         this.syncGhost(game, w, h);
-        this.syncBullets(game);
+        this.syncBullets(game, w, h);
         this.syncPlayer(game, playing, now);
         this.syncPopups(game);
     }
@@ -319,7 +319,10 @@ export class WorldView {
         });
     }
 
-    syncBullets(game) {
+    syncBullets(game, w, h) {
+        // Culling: bullets slightly outside the arena keep updating in the game logic,
+        // but are not drawn (no sprite, halo or trail)
+        const M = 40;
         this.bulletSprites.begin();
         this.sawFaces.begin();
         this.trails.begin();
@@ -329,6 +332,7 @@ export class WorldView {
         let n = 0;
         for (const b of game.bulletManager.bullets) {
             if (!b.active) continue;
+            if (b.x < -M || b.x > w + M || b.y < -M || b.y > h + M) continue;
             n++;
             const tint = toTint(b.color);
             // Soft trail: fading pastel dots
