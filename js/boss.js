@@ -204,9 +204,9 @@ export class Boss {
      * @returns {'none'|'shield'|'fatal'}
      */
     resolveBodyContact(player) {
-        if (this.state !== BOSS_STATE.FIGHTING || player.isDashing || !this.touches(player)) return 'none';
+        if (this.state !== BOSS_STATE.FIGHTING || player.isDashing || player.invulnTimer > 0 || !this.touches(player)) return 'none';
         if (player.hasShield) {
-            player.hasShield = false;
+            player.breakAllShields(); // Boss'a çarpmak bütün kalkanları birden kırar
             const dx = player.x - this.x;
             const dy = player.y - this.y;
             const len = Math.hypot(dx, dy) || 1;
@@ -436,18 +436,6 @@ export class Boss {
         ctx.lineJoin = 'round';
         if (dying) ctx.globalAlpha = 1 - dyingT * 0.7;
 
-        // Ram menzili ipucu
-        if (this.state === BOSS_STATE.FIGHTING) {
-            ctx.beginPath();
-            ctx.arc(0, 0, r + c.RAM_REACH, 0, Math.PI * 2);
-            ctx.setLineDash([2, 7]);
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = 'rgba(142, 91, 232, 0.45)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-
         // Gölge
         ctx.beginPath();
         ctx.ellipse(0, r * 1.15, r * 1.05, r * 0.28, 0, 0, Math.PI * 2);
@@ -542,29 +530,21 @@ export class Boss {
         ctx.lineJoin = 'round';
         if (dying) ctx.globalAlpha = 1 - dyingT * 0.7;
 
-        // Girdap: dönen kesikli halkalar
+        // Girdap: çekimi anlatan, kesiksiz dönen yumuşak yaylar
         if (this.stage === 2 && this.state === BOSS_STATE.FIGHTING) {
             ctx.save();
             ctx.rotate(-t * 2);
-            ctx.setLineDash([10, 14]);
             ctx.lineCap = 'round';
-            for (const k of [1.9, 2.6]) {
-                ctx.beginPath();
-                ctx.arc(0, 0, r * k, 0, Math.PI * 2);
-                ctx.strokeStyle = this.pulling ? 'rgba(142, 91, 232, 0.55)' : 'rgba(142, 91, 232, 0.25)';
-                ctx.lineWidth = 3;
-                ctx.stroke();
+            ctx.strokeStyle = this.pulling ? 'rgba(142, 91, 232, 0.5)' : 'rgba(142, 91, 232, 0.22)';
+            ctx.lineWidth = 3;
+            for (const [k, offset] of [[1.9, 0], [2.6, Math.PI / 2]]) {
+                for (const side of [0, Math.PI]) {
+                    ctx.beginPath();
+                    ctx.arc(0, 0, r * k, offset + side, offset + side + Math.PI * 0.55);
+                    ctx.stroke();
+                }
             }
             ctx.restore();
-        } else if (this.state === BOSS_STATE.FIGHTING) {
-            ctx.beginPath();
-            ctx.arc(0, 0, r + c.RAM_REACH, 0, Math.PI * 2);
-            ctx.setLineDash([2, 7]);
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = 'rgba(142, 91, 232, 0.45)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            ctx.setLineDash([]);
         }
 
         // Gölge

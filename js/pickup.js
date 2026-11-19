@@ -243,8 +243,8 @@ export class PickupManager {
 
         switch (pickup.type) {
             case 'shield':
-                player.hasShield = true;
-                effects.triggerBanner(t('banner.shieldPicked'), pickup.color);
+                player.addShield();
+                effects.triggerBanner(t('banner.shieldPicked', { pips: player.shieldPips() }), pickup.color);
                 break;
 
             case 'slowmo':

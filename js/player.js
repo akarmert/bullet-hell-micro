@@ -24,7 +24,8 @@ export class Player {
 
         this.alive = true;
         this.grazeCount = 0;
-        this.hasShield = false;
+        this.shieldCharges = 0;   // Kalan kalkan hakkı (0-3)
+        this.invulnTimer = 0;     // Engellenen darbeden sonraki dokunulmazlık (ms)
 
         // Dash (I-Frame) Durumu
         this.isDashing = false;
@@ -112,6 +113,49 @@ export class Player {
     /**
      * Oyuncuyu başlangıç durumuna döndürür
      */
+    /** Kalkan var mı? (eski kodlarla uyumluluk için) */
+    get hasShield() {
+        return this.shieldCharges > 0;
+    }
+
+    set hasShield(value) {
+        this.shieldCharges = value ? Math.max(this.shieldCharges, 1) : 0;
+    }
+
+    /** Kalkan güçlendirmesi: +1 hak (en fazla MAX) */
+    addShield() {
+        const S = GAME_CONFIG.PLAYER.SHIELD;
+        this.shieldCharges = Math.min(S.MAX, this.shieldCharges + S.PER_PICKUP);
+        return this.shieldCharges;
+    }
+
+    /**
+     * Bir darbeyi kalkanla engeller. Dokunulmazlık sadece SON kalkan kırılınca başlar.
+     * @returns {number} Kalan hak
+     */
+    useShield() {
+        if (this.shieldCharges <= 0) return 0;
+        this.shieldCharges--;
+        if (this.shieldCharges === 0) this.invulnTimer = GAME_CONFIG.PLAYER.SHIELD.IFRAME_MS;
+        return this.shieldCharges;
+    }
+
+    /** Boss gövdesine çarpma: bütün kalkanlar birden gider, dokunulmazlık başlar */
+    breakAllShields() {
+        this.shieldCharges = 0;
+        this.invulnTimer = GAME_CONFIG.PLAYER.SHIELD.IFRAME_MS;
+    }
+
+    /** Kalan kalkan sayısı kadar 🛡️ (her yazı tipinde aynı boyutta görünür) */
+    shieldPips() {
+        return '🛡️'.repeat(this.shieldCharges);
+    }
+
+    /** Darbe almıyor mu? (dash ya da kalkan sonrası dokunulmazlık) */
+    get isInvulnerable() {
+        return this.isDashing || this.invulnTimer > 0;
+    }
+
     reset() {
         this.x = GAME_CONFIG.PLAYER.START_X;
         this.y = GAME_CONFIG.PLAYER.START_Y;
@@ -121,7 +165,8 @@ export class Player {
         this.vy = 0;
         this.alive = true;
         this.grazeCount = 0;
-        this.hasShield = false;
+        this.shieldCharges = 0;
+        this.invulnTimer = 0;
         this.isDashing = false;
         this.dashTimer = 0;
         this.dashCooldownTimer = 0;
@@ -141,6 +186,11 @@ export class Player {
         // Kalkan dönme animasyonu
         if (this.hasShield) {
             this.shieldAngle += dt * 3.5;
+        }
+
+        // Kalkan sonrası dokunulmazlık
+        if (this.invulnTimer > 0) {
+            this.invulnTimer = Math.max(0, this.invulnTimer - dtMs);
         }
 
         // Dash durumları
@@ -226,6 +276,8 @@ export class Player {
 
         ctx.save();
         ctx.lineJoin = 'round';
+        // Kalkan sonrası dokunulmazlıkta yanıp söner
+        if (this.invulnTimer > 0 && Math.floor(this.invulnTimer / 90) % 2 === 0) ctx.globalAlpha = 0.35;
 
         // 1. Dash hayalet izleri (pembe yumuşak kopyalar)
         for (let i = 0; i < this.afterImages.length; i++) {
@@ -263,6 +315,17 @@ export class Player {
             ctx.lineWidth = 2.5;
             ctx.lineCap = 'round';
             ctx.stroke();
+            // Kalan hak sayısı kadar köpük üstünde dönen nokta
+            for (let i = 0; i < this.shieldCharges; i++) {
+                const a = -this.shieldAngle * 0.6 + (i * Math.PI * 2) / 3;
+                ctx.beginPath();
+                ctx.arc(this.x + Math.cos(a) * sr, this.y + Math.sin(a) * sr, 3, 0, Math.PI * 2);
+                ctx.fillStyle = THEME.PINK;
+                ctx.fill();
+                ctx.lineWidth = 1.2;
+                ctx.strokeStyle = THEME.INK;
+                ctx.stroke();
+            }
         }
 
         // 4-7. Kostümlü marşmelov gövde, yüz ve hitbox çekirdeği

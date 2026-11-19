@@ -67,7 +67,7 @@ const STRINGS = {
         // HUD
         'hud.graze': 'graze {n}',
         'hud.best': 'en iyi ★ {score}',
-        'hud.shield': 'kalkan',
+        'hud.shield': 'kalkan {pips}',
         'hud.slowmo': 'yavaş {s}s',
         'hud.dashReady': 'DASH hazır · sağ tık / space / shift',
         'hud.dashCharging': 'dash doluyor…',
@@ -108,9 +108,10 @@ const STRINGS = {
         'banner.tipsReset': 'ipuçları sıfırlandı',
         'banner.ghostPassed': '👻 hayaletini geride bıraktın!',
         'banner.shieldBroken': 'KALKAN PATLADI!',
+        'banner.shieldLeft': 'POF! {pips}',
         'banner.copied': '✓ sonuç kopyalandı',
         'banner.copyFailed': 'kopyalanamadı',
-        'banner.shieldPicked': 'KALKAN ALINDI (+1 CAN)',
+        'banner.shieldPicked': 'KALKAN {pips}',
         'banner.slowmo': 'YAVAŞ ÇEKİM!',
         'banner.emp': 'POP! ({n} MERMİ)',
 
@@ -221,7 +222,7 @@ const STRINGS = {
 
         'hud.graze': 'graze {n}',
         'hud.best': 'best ★ {score}',
-        'hud.shield': 'shield',
+        'hud.shield': 'shield {pips}',
         'hud.slowmo': 'slow {s}s',
         'hud.dashReady': 'DASH ready · right click / space / shift',
         'hud.dashCharging': 'dash charging…',
@@ -259,9 +260,10 @@ const STRINGS = {
         'banner.tipsReset': 'tips reset',
         'banner.ghostPassed': '👻 you outlasted your ghost!',
         'banner.shieldBroken': 'SHIELD POPPED!',
+        'banner.shieldLeft': 'POP! {pips}',
         'banner.copied': '✓ result copied',
         'banner.copyFailed': 'could not copy',
-        'banner.shieldPicked': 'SHIELD UP (+1 LIFE)',
+        'banner.shieldPicked': 'SHIELD {pips}',
         'banner.slowmo': 'SLOW MOTION!',
         'banner.emp': 'POP! ({n} BULLETS)',
 

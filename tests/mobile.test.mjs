@@ -49,6 +49,8 @@ test('Graze, Shield ve Dash çarpışma korumaları değişmez', () => {
     assert.equal(player.hasShield, false);
     assert.equal(hit.active, false);
     hit.active = true;
+    assert.equal(CollisionSystem.checkPlayerBullet(player, hit), false, 'kalkan sonrası kısa dokunulmazlık');
+    player.invulnTimer = 0;
     player.isDashing = true;
     assert.equal(CollisionSystem.checkPlayerBullet(player, hit), false);
     player.isDashing = false;
@@ -89,4 +91,47 @@ test('Geniş arena: başlangıç, dört kenar çarpışması, sekme ve tüm mod 
         Object.assign(GAME_CONFIG.CANVAS, previous);
         GAME_CONFIG.PLAYER.START_X = start;
     }
+});
+
+test('Kalkan: her güçlendirme +1 hak (0 → 1 → 2 → 3), en fazla 3', () => {
+    const S = GAME_CONFIG.PLAYER.SHIELD;
+    const player = new Player();
+    assert.equal(player.hasShield, false);
+    assert.equal(player.shieldPips(), '');
+    assert.equal(player.addShield(), 1);
+    assert.equal(player.addShield(), 2);
+    assert.equal(player.shieldPips(), '🛡️🛡️');
+    assert.equal(player.addShield(), 3);
+    assert.equal(player.addShield(), S.MAX, 'en fazla 3');
+});
+
+test('Kalkan: her darbe bir hak harcar; dokunulmazlık sadece son kalkan kırılınca', () => {
+    const S = GAME_CONFIG.PLAYER.SHIELD;
+    const player = new Player();
+    player.addShield(); player.addShield(); player.addShield();
+    const at = () => new Bullet({ x: player.x, y: player.y, radius: 4 });
+
+    assert.equal(CollisionSystem.processInteractions(player, [at()]), null);
+    assert.equal(player.shieldCharges, 2);
+    assert.equal(player.invulnTimer, 0, 'ara kırılmalarda dokunulmazlık yok');
+    assert.equal(CollisionSystem.processInteractions(player, [at()]), null);
+    assert.equal(player.shieldCharges, 1);
+    assert.equal(player.invulnTimer, 0);
+    assert.equal(CollisionSystem.processInteractions(player, [at()]), null);
+    assert.equal(player.shieldCharges, 0);
+    assert.equal(player.invulnTimer, S.IFRAME_MS, 'son kalkan kırılınca dokunulmazlık');
+
+    assert.equal(CollisionSystem.processInteractions(player, [at()]), null, 'dokunulmazken ölmez');
+    player.update(S.IFRAME_MS / 1000 + 0.01);
+    assert.ok(CollisionSystem.processInteractions(player, [at()]), 'dokunulmazlık bitince mermi öldürür');
+});
+
+test('Kalkan: aynı karede iki mermi iki hak harcar, sonra gelen dokunulmazlıkta zarar vermez', () => {
+    const player = new Player();
+    player.addShield(); player.addShield();
+    const cluster = [0, 1, 2, 3].map(i => new Bullet({ x: player.x + i, y: player.y, radius: 4 }));
+    assert.equal(CollisionSystem.processInteractions(player, cluster), null);
+    assert.equal(player.shieldCharges, 0);
+    assert.equal(cluster.filter(b => !b.active).length, 2, 'iki mermi iki kalkanla engellendi');
+    assert.ok(player.invulnTimer > 0);
 });

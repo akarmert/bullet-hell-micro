@@ -106,10 +106,11 @@ test('Gövde teması ölümcül; dash geçer, kalkan kırılıp oyuncuyu dışar
     player.isDashing = true;
     assert.equal(boss.resolveBodyContact(player), 'none');
     player.isDashing = false;
-    player.hasShield = true;
+    player.addShield(); player.addShield(); player.addShield();
     assert.equal(boss.resolveBodyContact(player), 'shield');
-    assert.equal(player.hasShield, false);
-    assert.equal(boss.touches(player), false);
+    assert.equal(player.shieldCharges, 0, 'boss bütün kalkanları birden kırar');
+    assert.ok(player.invulnTimer > 0, 'ardından kısa dokunulmazlık');
+    assert.equal(boss.touches(player), false, 'dışarı itilir');
 });
 
 test('CHAOS modunda boss yok; reset boss durumunu temizler', () => {

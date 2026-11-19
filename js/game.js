@@ -341,6 +341,13 @@ export class Game {
         this.effects.sound.playPhase();
     }
 
+    /** Kalkan bir darbeyi engellediğinde: kalan hak ya da "patladı" */
+    shieldBannerText() {
+        return this.player.shieldCharges > 0
+            ? t('banner.shieldLeft', { pips: this.player.shieldPips() })
+            : t('banner.shieldBroken');
+    }
+
     /** "Nasıl oynanır" paneli (menüde ve sonuç ekranında) */
     openInfo() {
         this.ui.settingsOpen = false;
@@ -734,7 +741,7 @@ export class Game {
                 // onShieldBreak
                 (bullet) => {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
-                    this.effects.triggerBanner(t('banner.shieldBroken'), THEME.PURPLE);
+                    this.effects.triggerBanner(this.shieldBannerText(), THEME.PURPLE);
                 }
             );
 
@@ -749,7 +756,7 @@ export class Game {
                 const contact = boss.resolveBodyContact(this.player);
                 if (contact === 'shield') {
                     this.effects.triggerShieldBreak(this.player.x, this.player.y);
-                    this.effects.triggerBanner(t('banner.shieldBroken'), THEME.PURPLE);
+                    this.effects.triggerBanner(this.shieldBannerText(), THEME.PURPLE);
                 } else if (contact === 'fatal') {
                     this.triggerDeath();
                     return;

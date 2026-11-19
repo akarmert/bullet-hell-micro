@@ -33,7 +33,7 @@ export class CollisionSystem {
      * @returns {boolean}
      */
     static checkPlayerBullet(player, bullet) {
-        if (!player.alive || player.isDashing || !bullet.active) {
+        if (!player.alive || player.isDashing || player.invulnTimer > 0 || !bullet.active) {
             return false;
         }
 
@@ -97,9 +97,10 @@ export class CollisionSystem {
 
             // 2. Ölümcül Hitbox Kontrolü
             if (this.checkPlayerBullet(player, bullet)) {
-                // Kalkan koruması
+                // Kalkan koruması: her darbe bir hak harcar;
+                // son kalkan kırılınca kısa dokunulmazlık başlar
                 if (player.hasShield) {
-                    player.hasShield = false;
+                    player.useShield();
                     bullet.active = false;
                     if (onShieldBreak) onShieldBreak(bullet);
                     continue; // Ölümü engelle ve devam et

@@ -18,6 +18,11 @@ export const GAME_CONFIG = {
         START_X: 300,
         START_Y: 300,
         KEYBOARD_SPEED: 360,  // Klavye / Gamepad hareket hızı (px/s)
+        SHIELD: {
+            PER_PICKUP: 1,     // Her kalkan güçlendirmesi +1 hak (0 → 1 → 2 → 3)
+            MAX: 3,            // Aynı anda en fazla 3 kalkan
+            IFRAME_MS: 800     // Son kalkan kırılınca kısa dokunulmazlık (karakter yanıp söner)
+        },
         DASH: {
             DURATION: 160,     // Dokunulmazlık ve atılma süresi (ms)
             COOLDOWN: 2400,    // Yeniden kullanım bekleme süresi (ms)

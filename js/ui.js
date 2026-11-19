@@ -753,7 +753,7 @@ export class UIManager {
         }
         // Sağ üst: aktif güçlendirmeler
         if (player && player.hasShield) {
-            UIManager.pill(ctx, t('hud.shield'), right, rowY, THEME.TEXT_PRIMARY, THEME.WHITE, 'right', 10);
+            UIManager.pill(ctx, t('hud.shield', { pips: player.shieldPips() }), right, rowY, THEME.TEXT_PRIMARY, THEME.WHITE, 'right', 10);
             rowY += 24;
         }
         if (pickupManager && pickupManager.isSlowmoActive()) {
