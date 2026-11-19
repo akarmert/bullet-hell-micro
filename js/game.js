@@ -909,7 +909,7 @@ export class Game {
         if (this.state === GAME_STATE.MENU) {
             this.ui.renderMenu(ctx, this.currentMode.id);
         } else if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.renderEdgeWarning(ctx, w, h);
+            this.renderEdgeWarning(ctx, w, h, { linePart: false });
             this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score, !!this.barVisible, this.runCandies);
             if (this.state === GAME_STATE.PLAYING) this.ui.renderHint(ctx, this.currentHint, this.player);
             if (this.waveManager.boss) this.waveManager.boss.renderHealthBar(ctx, this.ui.safe.top);
@@ -930,7 +930,10 @@ export class Game {
         }
 
         // Arena sınır çerçevesi: sadece oyun içinde (menüde ve sonuç ekranında yok)
-        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) this.renderArenaBorder(ctx, w, h);
+        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
+            this.renderArenaBorder(ctx, w, h);
+            this.renderEdgeWarning(ctx, w, h, { glowPart: false }); // Çerçevenin yaklaşılan parçası pembe yanar
+        }
     }
 
     /** Ölüm patlaması bitti mi? (yeniden başlatma ve butonlar bundan sonra) */
@@ -1015,29 +1018,63 @@ export class Game {
     }
 
     /**
-     * Oyuncu kenara yaklaştıkça o kenarda nabız gibi atan pembe uyarı
+     * Oyuncu kenara yaklaştıkça SADECE yaklaştığı noktada nabız gibi atan pembe uyarı:
+     * kenarda yumuşak bir hale + çerçevenin o kısmı pembe yanar (bütün kenar boyanmaz).
+     * Hale çerçevenin içine kırpılır, çerçeve vurgusu çerçevenin kendi yuvarlak yolunu izler;
+     * köşede iki kenar birden yanınca ikisi de yumuşatılır.
      */
-    renderEdgeWarning(ctx, w, h) {
+    renderEdgeWarning(ctx, w, h, { glowPart = true, linePart = true } = {}) {
         const p = this.player;
         if (!p.alive) return;
         const range = 60;
-        const band = 50;
-        const pulse = 0.75 + Math.sin(performance.now() * 0.012) * 0.25;
+        const glowR = 120;   // Kenardaki halenin yarıçapı
+        const span = 85;     // Çerçevede pembe yanan parçanın yarıçapı
+        const pulse = 0.8 + Math.sin(performance.now() * 0.01) * 0.2;
+        const cssH = this.canvas && this.canvas.clientHeight;
+        const lw = cssH ? 6 * h / cssH : 6;
         const edges = [
-            [p.x - p.radius, [0, 0, band, 0], [0, 0, band, h]],
-            [w - p.x - p.radius, [w, 0, w - band, 0], [w - band, 0, band, h]],
-            [p.y - p.radius, [0, 0, 0, band], [0, 0, w, band]],
-            [h - p.y - p.radius, [0, h, 0, h - band], [0, h - band, w, band]]
-        ];
+            [p.x - p.radius, 0, p.y],
+            [w - p.x - p.radius, w, p.y],
+            [p.y - p.radius, p.x, 0],
+            [h - p.y - p.radius, p.x, h]
+        ].filter(([dist]) => dist < range);
+        if (!edges.length) return;
+        const soften = edges.length > 1 ? 0.65 : 1; // Köşede iki hale üst üste binip sertleşmesin
+
+        // Çerçevenin yolu (renderArenaBorder ile aynı)
+        const framePath = () => {
+            ctx.beginPath();
+            if (this.barVisible) ctx.roundRect(lw / 2, lw / 2, w - lw, h + lw * 2, [18, 18, 0, 0]);
+            else ctx.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
+        };
+
         ctx.save();
-        for (const [dist, g, rect] of edges) {
-            if (dist >= range) continue;
-            const k = Math.max(0, 1 - dist / range) * pulse;
-            const grad = ctx.createLinearGradient(g[0], g[1], g[2], g[3]);
-            grad.addColorStop(0, `rgba(240, 70, 143, ${0.6 * k})`);
-            grad.addColorStop(1, 'rgba(240, 70, 143, 0)');
-            ctx.fillStyle = grad;
-            ctx.fillRect(rect[0], rect[1], rect[2], rect[3]);
+        if (glowPart) {
+            framePath();
+            ctx.clip(); // Hale çerçevenin dışına (yuvarlak köşenin arkasına) taşmaz
+            for (const [dist, ex, ey] of edges) {
+                const k = Math.max(0, 1 - dist / range) * pulse * soften;
+                const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, glowR);
+                glow.addColorStop(0, `rgba(240, 70, 143, ${0.4 * k})`);
+                glow.addColorStop(0.35, `rgba(240, 70, 143, ${0.22 * k})`);
+                glow.addColorStop(0.7, `rgba(240, 70, 143, ${0.07 * k})`);
+                glow.addColorStop(1, 'rgba(240, 70, 143, 0)');
+                ctx.fillStyle = glow;
+                ctx.fillRect(ex - glowR, ey - glowR, glowR * 2, glowR * 2);
+            }
+        }
+        if (linePart) {
+            ctx.lineWidth = lw;
+            for (const [dist, ex, ey] of edges) {
+                const k = Math.max(0, 1 - dist / range) * pulse * soften;
+                const line = ctx.createRadialGradient(ex, ey, 0, ex, ey, span);
+                line.addColorStop(0, `rgba(255, 111, 174, ${Math.min(1, 1.2 * k)})`);
+                line.addColorStop(0.6, `rgba(255, 111, 174, ${0.45 * k})`);
+                line.addColorStop(1, 'rgba(255, 111, 174, 0)');
+                ctx.strokeStyle = line;
+                framePath();
+                ctx.stroke(); // Çerçevenin kendisi (köşe kıvrımı dahil) o noktada pembeleşir
+            }
         }
         ctx.restore();
     }
