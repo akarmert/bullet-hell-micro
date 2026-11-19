@@ -3,6 +3,7 @@
 // ============================================================
 
 import { SKINS, getSkin } from './skins.js';
+import { GAME_CONFIG } from './config.js';
 
 const KEY = 'bulletHellMicro_progress';
 
@@ -22,7 +23,41 @@ export class Progress {
         this.stats = { ...DEFAULT_STATS, dailyDays: [], bossesBeaten: [] };
         this.unlocked = ['classic'];
         this.selected = 'classic';
+        this.candies = 0;
         this.load();
+    }
+
+    /** Tur sonunda kazanılacak şeker: puan / 200 + boss başına 15 */
+    static runReward(score, bossKills = 0) {
+        const C = GAME_CONFIG.CANDY;
+        return Math.max(0, Math.floor((score || 0) / C.POINTS_PER) + (bossKills || 0) * C.PER_BOSS);
+    }
+
+    addCandies(n) {
+        const amount = Math.max(0, Math.floor(n || 0));
+        this.candies += amount;
+        this.save();
+        return amount;
+    }
+
+    /** Kostüm şekerle alınabilir mi (fiyatı var ve henüz açılmamış)? */
+    isForSale(id) {
+        const skin = SKINS.find(s => s.id === id);
+        return !!(skin && skin.price && !this.isUnlocked(id));
+    }
+
+    /**
+     * Şekerle kostüm alır ve hemen seçer
+     * @returns {boolean} Başarılı mı
+     */
+    buy(id) {
+        const skin = SKINS.find(s => s.id === id);
+        if (!skin || !this.isForSale(id) || this.candies < skin.price) return false;
+        this.candies -= skin.price;
+        this.unlocked.push(id);
+        this.selected = id;
+        this.save();
+        return true;
     }
 
     load() {
@@ -37,6 +72,7 @@ export class Progress {
             };
             this.unlocked = Array.from(new Set(['classic', ...(saved.unlocked || [])]));
             this.selected = this.isUnlocked(saved.selected) ? saved.selected : 'classic';
+            this.candies = Math.max(0, Math.floor(saved.candies || 0));
         } catch (e) {
             // Bozuk kayıt: varsayılanlarla devam
         }
@@ -44,7 +80,7 @@ export class Progress {
 
     save() {
         try {
-            localStorage.setItem(KEY, JSON.stringify({ stats: this.stats, unlocked: this.unlocked, selected: this.selected }));
+            localStorage.setItem(KEY, JSON.stringify({ stats: this.stats, unlocked: this.unlocked, selected: this.selected, candies: this.candies }));
         } catch (e) {
             // Kaydedilemezse oturum içinde geçerli kalır
         }

@@ -135,3 +135,26 @@ test('Bilgi ("i") butonları: menüde ve sonuç kartında dokunulabilir, ≥ 44 
         assert.equal(ui.hitsDeadInfo(D.cx, D.cy + D.retry.y * D.s + 10), false);
     }
 });
+
+test('Mağaza: satın alma butonu sadece şekerle alınabilen kilitli kostümde çıkar', async () => {
+    const { SKINS } = await import('../js/skins.js');
+    const ui = new UIManager();
+    const owned = new Set(['classic']);
+    ui.progress = { candies: 0, isUnlocked: (id) => owned.has(id), isForSale: (id) => !!SKINS.find(k => k.id === id && k.price) && !owned.has(id) };
+    for (const [w, h] of [[PHONE_PORTRAIT, 600], [PHONE_LANDSCAPE, 600], [600, 600]]) {
+        ui.setLayout(w, h);
+        ui.skinIndex = SKINS.findIndex(k => k.id === 'caramel');
+        const r = ui.getBuyRect();
+        assert.ok(r, `${ui.layout.name}: butonu var`);
+        assert.ok(r.y + r.h <= ui.layout.H, `${ui.layout.name}: buton yerleşimin içinde`);
+        const p = center(ui, r);
+        assert.equal(ui.getMenuAction(p.x, p.y).type, 'buy');
+
+        ui.skinIndex = SKINS.findIndex(k => k.id === 'strawberry');
+        assert.equal(ui.getBuyRect(), null, 'başarım kostümünde buton yok');
+        owned.add('caramel');
+        ui.skinIndex = SKINS.findIndex(k => k.id === 'caramel');
+        assert.equal(ui.getBuyRect(), null, 'alınmış kostümde buton yok');
+        owned.delete('caramel');
+    }
+});

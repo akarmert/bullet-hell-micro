@@ -210,6 +210,8 @@ export class Game {
                     this.openSettings();
                 } else if (action.type === 'info') {
                     this.openInfo();
+                } else if (action.type === 'buy') {
+                    this.tryBuySkin();
                 } else if (action.type === 'skinPrev' || action.type === 'skinNext') {
                     this.cycleSkin(action.type === 'skinNext' ? 1 : -1);
                 }
@@ -272,7 +274,10 @@ export class Game {
                     if (focused === 'play') this.startGame();
                     else if (focused === 'settings') this.openSettings();
                     else if (focused === 'info') this.openInfo();
-                    else if (focused === 'skin') this.cycleSkin(1);
+                    else if (focused === 'skin') {
+                        if (this.progress.isForSale(SKINS[this.ui.skinIndex].id)) this.tryBuySkin();
+                        else this.cycleSkin(1);
+                    }
                     else this.selectMode(focused);
                     return;
                 }
@@ -376,7 +381,37 @@ export class Game {
     }
 
     /** Menüde kostümler arasında gezinir; açık olanı seçer */
+    /**
+     * Seçicideki kostümü şekerle alır. İlk dokunuş onay ister, ikinci dokunuş satın alır.
+     */
+    tryBuySkin() {
+        const skin = SKINS[this.ui.skinIndex];
+        if (!skin || !this.progress.isForSale(skin.id)) return;
+        const name = t(`skin.${skin.id}.name`, null, skin.name);
+        if (this.progress.candies < skin.price) {
+            // Buton sallanır; üzerinde kaç şeker eksik olduğu zaten yazıyor
+            this.ui.buyConfirm = null;
+            this.ui.buyShakeUntil = performance.now() + 400;
+            this.effects.sound.playGraze(null, 0);
+            return;
+        }
+        const now = performance.now();
+        const c = this.ui.buyConfirm;
+        if (c && c.id === skin.id && now < c.until) {
+            this.ui.buyConfirm = null;
+            if (this.progress.buy(skin.id)) {
+                this.player.skin = this.progress.skin;
+                this.ui.shopFlash = { id: skin.id, text: t('shop.bought', { name }), until: now + 2200 };
+                this.effects.sound.playRecord();
+            }
+            return;
+        }
+        this.ui.buyConfirm = { id: skin.id, until: now + GAME_CONFIG.CANDY.CONFIRM_MS };
+        this.effects.sound.playPhase();
+    }
+
     cycleSkin(dir) {
+        this.ui.buyConfirm = null;
         const n = SKINS.length;
         this.ui.skinIndex = (this.ui.skinIndex + dir + n) % n;
         const skin = SKINS[this.ui.skinIndex];
@@ -520,6 +555,7 @@ export class Game {
         this.tutorial.start(this.touchControls.touchDevice);
         this.currentHint = null;
         this.lastUnlocked = [];
+        this.lastCandies = 0;
         this.ui.settingsOpen = false;
         this.ui.infoOpen = false;
         this.player.skin = this.progress.skin;
@@ -571,6 +607,9 @@ export class Game {
             bossesBeaten: this.waveManager.bossesBeaten,
             dateKey: dateKey()
         });
+
+        // Tur ödülü: şeker
+        this.lastCandies = this.progress.addCandies(Progress.runReward(this.score.total, this.waveManager.bossKills));
 
         if (isRecord || this.lastUnlocked.length) {
             setTimeout(() => {
@@ -767,7 +806,8 @@ export class Game {
                 bossTitle: this.waveManager.boss ? this.waveManager.boss.title : '',
                 score: this.score,
                 waves: this.waveManager,
-                unlocked: this.lastUnlocked
+                unlocked: this.lastUnlocked,
+                candies: this.lastCandies || 0
             });
         }
 

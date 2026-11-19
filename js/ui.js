@@ -30,7 +30,7 @@ export const MENU_LAYOUTS = {
         ],
         desc: { x: 300, y: 334, maxW: 560 },
         play: { x: 160, y: 396, w: 280, h: 68 },
-        skin: { cx: 300, cy: 520, dx: 82, r: 24 }
+        skin: { cx: 300, cy: 504, dx: 82, r: 24 }
     },
     wide: {
         name: 'wide', W: 920, H: 470,
@@ -267,9 +267,22 @@ export class UIManager {
         if (Math.hypot(x - L.info.cx, y - L.info.cy) <= L.info.r + 8) return { type: 'info' };
         if (inRect(L.play)) return { type: 'play' };
         const s = L.skin;
+        const buy = this.getBuyRect(L);
+        if (buy && inRect(buy)) return { type: 'buy' };
         if (Math.hypot(x - (s.cx - s.dx), y - s.cy) <= s.r + 10) return { type: 'skinPrev' };
         if (Math.hypot(x - (s.cx + s.dx), y - s.cy) <= s.r + 10) return { type: 'skinNext' };
         return null;
+    }
+
+    /**
+     * Seçicideki kostüm şekerle alınabiliyorsa satın alma butonunun alanı (menü koordinatı)
+     */
+    getBuyRect(L = this.layout) {
+        if (!this.progress) return null;
+        const skin = SKINS[this.skinIndex];
+        if (!skin || !this.progress.isForSale(skin.id)) return null;
+        const s = L.skin;
+        return { x: s.cx - 92, y: s.cy + s.r + 32, w: 184, h: 38 };
     }
 
     /** K4: klavye odağını taşır */
@@ -404,6 +417,11 @@ export class UIManager {
         ctx.fillText(t('menu.settings'), sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
         if (focus === 'settings') focusRing(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2);
 
+        // Şeker bakiyesi
+        if (this.progress) {
+            UIManager.pill(ctx, `🍬 ${formatScore(this.progress.candies)}`, sb.x - 10, sb.y + sb.h / 2, THEME.WHITE, THEME.INK, 'right', 15);
+        }
+
         // Bilgi butonu (nasıl oynanır)
         UIManager.roundButton(ctx, L.info.cx, L.info.cy, L.info.r, 'i');
         if (focus === 'info') focusRing(ctx, L.info.cx - L.info.r, L.info.cy - L.info.r, L.info.r * 2, L.info.r * 2, L.info.r);
@@ -504,6 +522,7 @@ export class UIManager {
             ['🧱', t('info.edge.title'), t('info.edge.text')],
             ['👑', t('info.boss.title'), t('info.boss.text')]
         ];
+        rows.push(['🍭', t('info.candy.title'), t('info.candy.text')]);
         if (!touch) rows.push(['⌨️', t('info.keys.title'), t('info.keys.text')]);
 
         const aw = w - this.safe.left - this.safe.right;
@@ -568,7 +587,9 @@ export class UIManager {
         UIManager.roundButton(ctx, s.cx + s.dx, s.cy, s.r, '›');
 
         const blink = (time % 3.2) < 0.12 ? 0.25 : 1;
-        drawMarshmallow(ctx, s.cx, s.cy - 4 + Math.sin(time * 2.4) * 2, s.r, skin, { locked, blink, squash: 1 + Math.sin(time * 5) * 0.03 });
+        // Satılık kostüm görünür (ne aldığını gör); başarım kostümü kilitli sürpriz kalır
+        const forSale = this.progress.isForSale(skin.id);
+        drawMarshmallow(ctx, s.cx, s.cy - 4 + Math.sin(time * 2.4) * 2, s.r, skin, { locked: locked && !forSale, blink, squash: 1 + Math.sin(time * 5) * 0.03 });
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -576,9 +597,33 @@ export class UIManager {
         ctx.fillStyle = locked ? THEME.MUTED : THEME.INK;
         const count = `${this.progress.unlocked.length}/${SKINS.length}`;
         ctx.fillText(`${t(`skin.${skin.id}.name`, null, skin.name)}${this.progress.selected === skin.id ? ' ✓' : ''}`, s.cx, s.cy + s.r + 22);
-        ctx.font = font(13, 600);
-        ctx.fillStyle = locked ? THEME.TEXT_ACCENT : THEME.MUTED;
-        ctx.fillText(locked ? `🔒 ${t('menu.locked', { hint: t(`skin.${skin.id}.hint`, null, skin.hint) })}` : t('menu.costumes', { count }), s.cx, s.cy + s.r + 42, L.W - 20);
+        const buy = this.getBuyRect(L);
+        const flash = this.shopFlash && this.shopFlash.id === skin.id && performance.now() < this.shopFlash.until;
+        if (flash) {
+            // Satın alındı geri bildirimi butonun yerinde
+            ctx.font = font(16, 700);
+            ctx.fillStyle = THEME.TEXT_PRIMARY;
+            ctx.fillText(`✨ ${this.shopFlash.text}`, s.cx, s.cy + s.r + 51, L.W - 20);
+        } else if (buy) {
+            // Şekerle alınabilir: iki dokunuşlu satın alma butonu
+            const price = skin.price;
+            const have = this.progress.candies;
+            const confirming = this.buyConfirm && this.buyConfirm.id === skin.id && performance.now() < this.buyConfirm.until;
+            let fill = THEME.WHITE;
+            let color = THEME.MUTED;
+            let label = t('shop.need', { price, need: price - have });
+            if (confirming) { fill = THEME.TEXT_PRIMARY; color = THEME.WHITE; label = t('shop.confirm', { price }); }
+            else if (have >= price) { fill = THEME.PINK; color = THEME.INK; label = t('shop.buy', { price }); }
+            const shake = this.buyShakeUntil && performance.now() < this.buyShakeUntil ? Math.sin(performance.now() * 0.06) * 5 : 0;
+            candyPanel(ctx, buy.x + shake, buy.y, buy.w, buy.h, buy.h / 2, fill, { depth: 4, lineWidth: 2 });
+            ctx.font = font(15, 700);
+            ctx.fillStyle = color;
+            ctx.fillText(label, buy.x + shake + buy.w / 2, buy.y + buy.h / 2 + 1, buy.w - 16);
+        } else {
+            ctx.font = font(13, 600);
+            ctx.fillStyle = locked ? THEME.TEXT_ACCENT : THEME.MUTED;
+            ctx.fillText(locked ? `🔒 ${t('menu.locked', { hint: t(`skin.${skin.id}.hint`, null, skin.hint) })}` : t('menu.costumes', { count }), s.cx, s.cy + s.r + 42, L.W - 20);
+        }
         if (focused) focusRing(ctx, s.cx - s.dx - s.r, s.cy - s.r, s.dx * 2 + s.r * 2, s.r * 2, s.r);
     }
 
@@ -851,7 +896,7 @@ export class UIManager {
      * @param {object} info { score, waves, unlocked: Skin[], reveal, cause, bossTitle }
      */
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, info = {}) {
-        const { score = null, waves = null, unlocked = [], reveal = 1, cause = 'bullet', bossTitle = '' } = info;
+        const { score = null, waves = null, unlocked = [], reveal = 1, cause = 'bullet', bossTitle = '', candies = 0 } = info;
         if (reveal <= 0) return; // Önce ölüm patlaması görünsün
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
@@ -892,6 +937,10 @@ export class UIManager {
         ctx.fillText(t('dead.score'), 0, -50);
         ctx.font = font(38, 700);
         outlinedText(ctx, formatScore(score ? score.total : 0), 0, -20, THEME.TEXT_ACCENT, THEME.WHITE, 5);
+        if (candies > 0) {
+            // Bu turda kazanılan şeker, "skor" etiketinin sağında
+            UIManager.pill(ctx, t('dead.candies', { n: candies }), 34, -50, THEME.PINK_SOFT, THEME.INK, 'left', 12);
+        }
 
         // Süre · graze · seri
         const cols = [

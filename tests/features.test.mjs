@@ -118,7 +118,8 @@ test('İlerleme: başarımlar kostüm açar, kilitli kostüm seçilemez, kayıt 
     p.recordRun({ modeId: 'hardcore', timeMs: 30500, graze: 0, bestCombo: 25, bossKills: 2, bossesBeaten: ['jelly', 'cloud'] });
     assert.ok(p.isUnlocked('royal') && p.isUnlocked('party') && p.isUnlocked('cotton'));
     assert.equal(p.stats.bossKills, 3);
-    assert.equal(p.unlocked.length, SKINS.length);
+    assert.equal(p.unlocked.length, SKINS.filter(k => !k.price).length, 'başarımlar şekerle alınan kostümleri açmaz');
+    assert.ok(SKINS.filter(k => k.price).every(k => !p.isUnlocked(k.id)));
 
     assert.equal(p.select('chocolate'), true);
     const reloaded = new Progress();
@@ -193,4 +194,34 @@ test('Dil: İngilizcede mod, boss, sayı ve tarih biçimi değişir; Türkçe b�
     } finally {
         setLang('tr');
     }
+});
+
+test('Şeker: tur ödülü, satın alma, yetersiz bakiye ve kalıcılık', async () => {
+    store.clear();
+    const { GAME_CONFIG } = await import('../js/config.js');
+    const C = GAME_CONFIG.CANDY;
+    assert.equal(Progress.runReward(0, 0), 0);
+    assert.equal(Progress.runReward(5000, 1), Math.floor(5000 / C.POINTS_PER) + C.PER_BOSS);
+    assert.equal(Progress.runReward(199, 0), 0);
+
+    const p = new Progress();
+    assert.equal(p.candies, 0);
+    const caramel = SKINS.find(k => k.id === 'caramel');
+    assert.ok(caramel.price > 0 && p.isForSale('caramel'));
+    assert.equal(p.isForSale('strawberry'), false, 'başarım kostümü satılık değil');
+    assert.equal(p.buy('caramel'), false, 'şeker yetmezse alınamaz');
+    assert.equal(p.isUnlocked('caramel'), false);
+
+    p.addCandies(caramel.price + 7);
+    assert.equal(p.buy('caramel'), true);
+    assert.equal(p.candies, 7, 'fiyat düşülür');
+    assert.equal(p.selected, 'caramel', 'alınan kostüm seçilir');
+    assert.equal(p.isForSale('caramel'), false);
+    assert.equal(p.buy('caramel'), false, 'ikinci kez alınamaz');
+    assert.equal(p.addCandies(-50), 0, 'negatif ödül yok');
+
+    const reloaded = new Progress();
+    assert.equal(reloaded.candies, 7);
+    assert.ok(reloaded.isUnlocked('caramel'));
+    assert.equal(reloaded.selected, 'caramel');
 });

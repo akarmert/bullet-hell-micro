@@ -190,6 +190,14 @@ export const GAME_CONFIG = {
         ALL_EVERY: 3000       // CHAOS modu
     },
 
+    // --- ŞEKER (oyun içi para) ---
+    // Her tur sonunda kazanılır; bazı kostümler şekerle alınır. Gerçek parayla ilgisi yoktur.
+    CANDY: {
+        POINTS_PER: 200,      // Her 200 puan = 1 şeker
+        PER_BOSS: 15,         // Yenilen her boss için ek şeker
+        CONFIRM_MS: 2500      // Satın almada ikinci dokunuş için süre
+    },
+
     // --- EFEKTLER ---
     EFFECTS: {
         SHAKE_DURATION: 300,      // ms

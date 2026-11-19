@@ -1,6 +1,7 @@
 // ============================================================
 // skins.js — Marşmelov Kostümleri ve Çizimi
-// Her kostüm bir başarımla açılır; çizim hem oyunda hem menü önizlemesinde kullanılır.
+// Kostümler başarımla açılır ya da (price olanlar) şekerle alınır;
+// çizim hem oyunda hem menü önizlemesinde kullanılır.
 // ============================================================
 
 import { THEME } from './theme.js';
@@ -21,7 +22,17 @@ export const SKINS = [
     { id: 'cotton', name: 'Pamuk', body: '#F7F0FF', cheek: 'rgba(183, 155, 255, 0.6)', accessory: 'puff',
       hint: "Pamuk Bulut'u dağıt", test: (s) => (s.bossesBeaten || []).includes('cloud') },
     { id: 'royal', name: 'Kraliyet', body: '#F3EBFF', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'crown',
-      hint: "HARDCORE'da 30 saniye dayan", test: (s) => s.hardcoreBest >= 30000 }
+      hint: "HARDCORE'da 30 saniye dayan", test: (s) => s.hardcoreBest >= 30000 },
+
+    // --- Şekerle alınan kostümler (başarımla açılmaz) ---
+    { id: 'caramel', name: 'Karamel', body: '#F2D2A0', cheek: 'rgba(240, 70, 143, 0.5)', accessory: 'drizzle', drizzle: '#B5651D',
+      hint: 'şekerle alınır', price: 180, test: () => false },
+    { id: 'bubblegum', name: 'Sakız', body: '#FF9CCB', cheek: 'rgba(240, 70, 143, 0.65)', accessory: 'bubble',
+      hint: 'şekerle alınır', price: 300, test: () => false },
+    { id: 'night', name: 'Gece', body: '#C9B8EE', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'stars',
+      hint: 'şekerle alınır', price: 480, test: () => false },
+    { id: 'chef', name: 'Şef', body: '#FFFFFF', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'chef',
+      hint: 'şekerle alınır', price: 720, test: () => false }
 ];
 
 export function getSkin(id) {
@@ -76,13 +87,32 @@ export function drawMarshmallow(ctx, x, y, r, skin, { squash = 1, blink = 1, loc
             ctx.fill();
         }
     } else if (skin.accessory === 'drizzle') {
-        ctx.strokeStyle = THEME.PINK;
+        ctx.strokeStyle = skin.drizzle || THEME.PINK;
         ctx.lineWidth = r * 0.16;
         ctx.beginPath();
         ctx.moveTo(x - r * 0.7, y - r * 0.45);
         ctx.quadraticCurveTo(x - r * 0.2, y - r * 0.2, x + r * 0.1, y - r * 0.55);
         ctx.quadraticCurveTo(x + r * 0.4, y - r * 0.8, x + r * 0.7, y - r * 0.4);
         ctx.stroke();
+    } else if (skin.accessory === 'stars') {
+        // Gövdede minik yıldızlar
+        ctx.fillStyle = '#FFF4B8';
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = Math.max(0.6, r * 0.05);
+        for (const [sx, sy, k] of [[-0.5, -0.5, 0.2], [0.45, 0.45, 0.16], [-0.35, 0.55, 0.12], [0.55, -0.35, 0.11]]) {
+            const cx = x + sx * r;
+            const cy = y + sy * r;
+            const R = k * r;
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const a = -Math.PI / 2 + (i * Math.PI) / 4;
+                const rr = i % 2 ? R * 0.4 : R;
+                ctx[i ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+        }
     }
 
     // Gözler ve allık
@@ -111,7 +141,48 @@ export function drawMarshmallow(ctx, x, y, r, skin, { squash = 1, blink = 1, loc
     const top = y - r * squash;
     ctx.strokeStyle = THEME.INK;
     ctx.lineWidth = Math.max(1, r * 0.12);
-    if (skin.accessory === 'hat') {
+    if (skin.accessory === 'chef') {
+        // Şef şapkası: kabarık üst + bant
+        ctx.lineWidth = Math.max(1, r * 0.12);
+        ctx.strokeStyle = THEME.INK;
+        const puffs = [[-0.32, -0.42, 0.3], [0.0, -0.58, 0.34], [0.32, -0.42, 0.3]];
+        for (const [px, py, pr] of puffs) {
+            ctx.beginPath();
+            ctx.arc(x + px * r, top + py * r, pr * r, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.roundRect(x - r * 0.45, top - r * 0.38, r * 0.9, r * 0.42, r * 0.08);
+        ctx.stroke();
+        ctx.fillStyle = THEME.WHITE;
+        for (const [px, py, pr] of puffs) {
+            ctx.beginPath();
+            ctx.arc(x + px * r, top + py * r, pr * r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.fillRect(x - r * 0.45, top - r * 0.38, r * 0.9, r * 0.42);
+        ctx.strokeStyle = THEME.LAVENDER;
+        ctx.beginPath();
+        ctx.moveTo(x - r * 0.4, top - r * 0.08);
+        ctx.lineTo(x + r * 0.4, top - r * 0.08);
+        ctx.stroke();
+    } else if (skin.accessory === 'bubble') {
+        // Ağızdan şişen sakız balonu
+        const bx = x + r * 0.58;
+        const by = y + r * 0.42;
+        const br = r * 0.36;
+        ctx.beginPath();
+        ctx.arc(bx, by, br, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.PINK;
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, r * 0.1);
+        ctx.strokeStyle = THEME.INK;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(bx - br * 0.35, by - br * 0.35, br * 0.25, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fill();
+    } else if (skin.accessory === 'hat') {
         ctx.beginPath();
         ctx.moveTo(x - r * 0.42, top + r * 0.12);
         ctx.lineTo(x + r * 0.05, top - r * 0.9);
