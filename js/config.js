@@ -171,6 +171,25 @@ export const GAME_CONFIG = {
         DROP: 'shield'        // Jöle Kral yenildiği yere kalkan düşürür
     },
 
+    // --- ŞEKER TESTERELER ---
+    // Yavaş, dalgalanarak ilerleyen, duvardan seken, dişleri dönen minik testereler.
+    // Oyuncuya nişan almaz; kenardan arenanın ortasına doğru gelir.
+    SAW: {
+        RADIUS: 7,            // Çarpışma yarıçapı (diş uçları zararsız süs)
+        SPEED: 115,
+        WOBBLE: 60,           // Yan salınım hızı (px/s) → yaklaşık ±17 px dalga
+        WOBBLE_FREQ: 3.5,
+        SPIN: 9,              // Dönüş hızı (rad/s)
+        BOUNCES: 2,
+        COLOR: '#FF6FAE',
+        ALT_COLOR: '#B79BFF',
+        GLOW: 'rgba(255, 111, 174, 0.25)',
+        AIM_EVERY: 3200,      // AIM fazında (20-30 sn) ilk kez görünür
+        CHAOS_EVERY: 2600,    // Boss'lar arası normal kaos
+        BREAK_EVERY: 4500,    // İlk boss sonrası kolay mola
+        ALL_EVERY: 3000       // CHAOS modu
+    },
+
     // --- EFEKTLER ---
     EFFECTS: {
         SHAKE_DURATION: 300,      // ms

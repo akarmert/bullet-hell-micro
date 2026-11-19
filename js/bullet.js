@@ -91,7 +91,10 @@ export class Bullet {
         type = 'standard',
         maxBounces = 0,
         trailLength = 0,
-        shape = 'circle'
+        shape = 'circle',
+        wobble = 0,
+        wobbleFreq = 0,
+        spin = 0
     } = {}) {
         this.x = x;
         this.y = y;
@@ -109,6 +112,13 @@ export class Bullet {
         this.active = true;
         this.hasGrazed = false; // Teğet geçme sayacı için tek seferlik kilit
         this.rotation = Math.atan2(vy, vx);
+        // Testere: yan salınım ve dönüş
+        this.wobble = wobble;
+        this.wobbleFreq = wobbleFreq;
+        this.wobblePhase = 0;
+        this.spin = spin;
+        this.spinAngle = 0;
+        this.age = 0;
     }
 
     /**
@@ -129,9 +139,20 @@ export class Bullet {
             }
         }
 
-        // Hareket
-        this.x += this.vx * effectiveDt;
-        this.y += this.vy * effectiveDt;
+        // Hareket (salınım varsa ana yöne dik küçük bir dalga eklenir)
+        this.age += effectiveDt;
+        let mx = this.vx;
+        let my = this.vy;
+        if (this.wobble) {
+            this.wobblePhase += effectiveDt * this.wobbleFreq;
+            const sp = Math.hypot(this.vx, this.vy) || 1;
+            const o = Math.cos(this.wobblePhase) * this.wobble;
+            mx += (-this.vy / sp) * o;
+            my += (this.vx / sp) * o;
+        }
+        if (this.spin) this.spinAngle += this.spin * effectiveDt;
+        this.x += mx * effectiveDt;
+        this.y += my * effectiveDt;
         this.rotation = Math.atan2(this.vy, this.vx);
 
         const w = GAME_CONFIG.CANVAS.WIDTH;
@@ -216,6 +237,9 @@ export class Bullet {
             case 'ring':
                 this.renderRing(ctx);
                 break;
+            case 'saw':
+                this.renderSaw(ctx);
+                break;
             case 'circle':
             default:
                 this.renderCircle(ctx);
@@ -278,6 +302,70 @@ export class Bullet {
             return;
         }
         drawCapsule(ctx, this.color, this.radius);
+    }
+
+    /**
+     * Şeker testere: dönen eğik dişler, beyaz göbek ve dik duran minik yüz.
+     * İlk 0.25 sn'de "pıt" diye büyüyerek belirir.
+     */
+    renderSaw(ctx) {
+        const pop = Math.min(1, this.age / 0.25);
+        const c1 = 1.70158;
+        const back = 1 + (c1 + 1) * Math.pow(pop - 1, 3) + c1 * Math.pow(pop - 1, 2);
+        const r = this.radius * (0.4 + 0.6 * back);
+        const teeth = 6;           // Az ama tombul dişler: küçük boyutta da renk okunur
+        const outer = r * 1.55;
+        const inner = r * 1.08;
+        const step = (Math.PI * 2) / teeth;
+
+        ctx.translate(this.x, this.y);
+
+        // Dönen dişli gövde
+        ctx.save();
+        ctx.rotate(this.spinAngle);
+        ctx.beginPath();
+        for (let i = 0; i < teeth; i++) {
+            const a = i * step;
+            const p0 = [Math.cos(a) * inner, Math.sin(a) * inner];
+            const tip = [Math.cos(a + step * 0.55) * outer, Math.sin(a + step * 0.55) * outer];
+            const p1 = [Math.cos(a + step * 0.8) * inner, Math.sin(a + step * 0.8) * inner];
+            if (i === 0) ctx.moveTo(p0[0], p0[1]); else ctx.lineTo(p0[0], p0[1]);
+            ctx.lineTo(tip[0], tip[1]);
+            ctx.lineTo(p1[0], p1[1]);
+            ctx.arc(0, 0, inner, a + step * 0.8, a + step, false);
+        }
+        ctx.closePath();
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.lineWidth = THEME.BULLET_OUTLINE * 0.75; // İnce kontur dişlerin rengini boğmasın
+        ctx.stroke();
+
+        // Beyaz göbek ve dönmeyi gösteren minik çentik
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.WHITE;
+        ctx.fill();
+        ctx.lineWidth = Math.max(0.8, THEME.BULLET_OUTLINE * 0.55);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(r * 0.48, 0, r * 0.1, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.restore();
+
+        // Dik duran tatlı yüz
+        ctx.fillStyle = THEME.INK;
+        for (const side of [-1, 1]) {
+            ctx.beginPath();
+            ctx.arc(side * r * 0.26, -r * 0.08, Math.max(0.7, r * 0.11), 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.beginPath();
+        ctx.arc(0, r * 0.12, r * 0.18, 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = Math.max(0.8, r * 0.09);
+        ctx.lineCap = 'round';
+        ctx.stroke();
     }
 
     /**

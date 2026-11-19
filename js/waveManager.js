@@ -23,7 +23,8 @@ export class WaveManager {
             warmup: 0,
             spiral: 0,
             aim: 0,
-            chaos: 0
+            chaos: 0,
+            saw: 0
         };
 
         this.onPhaseChange = null; // Faz geçişlerinde tetiklenecek callback
@@ -84,6 +85,7 @@ export class WaveManager {
         this.timers.spiral = 0;
         this.timers.aim = 0;
         this.timers.chaos = 0;
+        this.timers.saw = 0;
         this.boss = null;
         this.bossActive = false;
         this.bossCount = 0;
@@ -405,6 +407,60 @@ export class WaveManager {
             this.timers.warmup = 0;
             this.spawnBorderBullet(GAME_CONFIG.PHASE_1, 0.6, elapsedMs);
         }
+
+        // Şeker testereler ilk kez burada görünür
+        this.updateSaws(dtMs, GAME_CONFIG.SAW.AIM_EVERY * intervalMult, elapsedMs);
+    }
+
+    /**
+     * Belirli aralıklarla şeker testere üretir
+     */
+    updateSaws(dtMs, everyMs, elapsedMs) {
+        this.timers.saw += dtMs;
+        while (this.timers.saw >= everyMs) {
+            this.timers.saw -= everyMs;
+            this.spawnSaw(elapsedMs);
+        }
+    }
+
+    /**
+     * Kenarın hemen içinden, arenanın ortasına doğru (oyuncuya değil) yavaş testere
+     */
+    spawnSaw(elapsedMs = 0) {
+        const S = GAME_CONFIG.SAW;
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const r = S.RADIUS;
+        const pad = r + 2;
+        const edge = Math.floor(random() * 4);
+        let x;
+        let y;
+        switch (edge) {
+            case 0: x = pad + 20 + random() * (w - 2 * pad - 40); y = pad; break;
+            case 1: x = w - pad; y = pad + 20 + random() * (h - 2 * pad - 40); break;
+            case 2: x = pad + 20 + random() * (w - 2 * pad - 40); y = h - pad; break;
+            default: x = pad; y = pad + 20 + random() * (h - 2 * pad - 40); break;
+        }
+        const tx = w / 2 + (random() - 0.5) * w * 0.4;
+        const ty = h / 2 + (random() - 0.5) * h * 0.4;
+        const a = Math.atan2(ty - y, tx - x);
+        const speed = S.SPEED * this.mode.getSpeedMultiplier(elapsedMs) * (0.9 + random() * 0.2);
+        return this.bulletManager.spawn({
+            x,
+            y,
+            vx: Math.cos(a) * speed,
+            vy: Math.sin(a) * speed,
+            radius: r,
+            speed,
+            color: random() < 0.5 ? S.COLOR : S.ALT_COLOR,
+            glow: S.GLOW,
+            shape: 'saw',
+            type: 'saw',
+            maxBounces: S.BOUNCES,
+            wobble: S.WOBBLE,
+            wobbleFreq: S.WOBBLE_FREQ,
+            spin: S.SPIN * (random() < 0.5 ? -1 : 1)
+        });
     }
 
     /**
@@ -551,6 +607,9 @@ export class WaveManager {
             this.spawnAimedTelegraph(GAME_CONFIG.PHASE_3, player, elapsedMs);
         }
 
+        // Şeker testereler (molada daha seyrek)
+        this.updateSaws(dtMs, (relief ? GAME_CONFIG.SAW.BREAK_EVERY : GAME_CONFIG.SAW.CHAOS_EVERY) * modeInterval, elapsedMs);
+
         // ENDLESS Modu: Süre uzadıkça periyodik spiral dalgası da eklenir (molada yok)
         if (!relief && this.mode.id === 'endless' && chaosTime > 5000) {
             this.spiralAngle += (GAME_CONFIG.PHASE_2.BASE_ROT_SPEED * 1.2) * dt;
@@ -656,6 +715,9 @@ export class WaveManager {
     // ------------------------------------------------------------
     updateSimultaneousChaos(elapsedMs, dt, dtMs, player) {
         const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+
+        // 0. Şeker testereler
+        this.updateSaws(dtMs, GAME_CONFIG.SAW.ALL_EVERY * intervalMult, elapsedMs);
 
         // 1. Kenar mermileri (Her 500ms)
         this.timers.warmup += dtMs;

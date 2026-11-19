@@ -297,3 +297,61 @@ test('Pamuk Bulut oyun saatinde 1:15\'te gelir; geç yenilirse en az 15 sn mola 
     assert.ok(late.nextBossAt >= late.bossDefeatedAt + GAME_CONFIG.BOSS_INTERVAL - 1);
     assert.ok(late.nextBossAt >= 75000);
 });
+
+test('Şeker testere: dalgalı ama yolundan çok sapmayan hareket, dönme ve duvardan sekme', async () => {
+    const { Bullet } = await import('../js/bullet.js');
+    const S = GAME_CONFIG.SAW;
+    const saw = new Bullet({ x: 100, y: 300, vx: S.SPEED, vy: 0, radius: S.RADIUS, shape: 'saw', type: 'saw',
+        maxBounces: S.BOUNCES, wobble: S.WOBBLE, wobbleFreq: S.WOBBLE_FREQ, spin: S.SPIN });
+    let maxOff = 0;
+    for (let i = 0; i < 60; i++) {
+        saw.update(1 / 60);
+        maxOff = Math.max(maxOff, Math.abs(saw.y - 300));
+    }
+    assert.ok(Math.abs(saw.x - (100 + S.SPEED)) < 2, 'ana yönde hız korunur');
+    assert.ok(maxOff > 5 && maxOff < 25, `yan salınım sınırlı (${maxOff.toFixed(1)} px)`);
+    assert.ok(Math.abs(saw.spinAngle - S.SPIN) < 0.01, 'dişler döner');
+
+    const edge = new Bullet({ x: GAME_CONFIG.CANVAS.WIDTH - 10, y: 300, vx: 200, vy: 0, radius: S.RADIUS, maxBounces: 2, shape: 'saw' });
+    edge.update(0.05);
+    assert.ok(edge.vx < 0, 'duvardan seker');
+
+    const plain = new Bullet({ x: 0, y: 0, vx: 10, vy: 0 });
+    assert.equal(plain.wobble, 0, 'havuzdan gelen eski mermide salınım kalmaz');
+});
+
+test('Şeker testereler: AIM fazında ilk kez görünür, boss sırasında gelmez, molada daha seyrek', () => {
+    const count = (waves, from, to) => {
+        const player = new Player();
+        let n = 0;
+        const orig = waves.bulletManager.spawn.bind(waves.bulletManager);
+        waves.bulletManager.spawn = (p) => { if (p.type === 'saw') n++; return orig(p); };
+        run(waves, player, from, to);
+        return n;
+    };
+    assert.equal(count(bossWaves().waves, 0, 20000), 0, 'ilk 20 sn testere yok');
+    const aim = bossWaves().waves;
+    run(aim, new Player(), 0, 20000);
+    assert.ok(count(aim, 20000, 29900) >= 2, 'AIM fazında görünür');
+
+    const boss = bossWaves().waves;
+    run(boss, new Player(), 0, 30000);
+    assert.equal(count(boss, 30000, 45000), 0, 'boss sırasında testere yok');
+
+    const sawsIn = (kills) => {
+        const { waves } = bossWaves();
+        const t0 = 60000;
+        Object.assign(waves, { bossKills: kills, bossActive: false, bossDefeatedAt: t0, chaosStartMs: t0, nextBossAt: t0 + 1e9, currentPhaseName: 'CHAOS' });
+        return count(waves, t0, t0 + 20000);
+    };
+    assert.ok(sawsIn(1) < sawsIn(2), 'molada normal kaostan seyrek');
+
+    // Testereler kenarın içinde doğar ve sonlu hızlıdır
+    const w = bossWaves().waves;
+    for (let i = 0; i < 20; i++) {
+        const b = w.spawnSaw(25000);
+        assert.ok(b.x >= b.radius && b.x <= GAME_CONFIG.CANVAS.WIDTH - b.radius);
+        assert.ok(b.y >= b.radius && b.y <= GAME_CONFIG.CANVAS.HEIGHT - b.radius);
+        assert.ok(Number.isFinite(b.vx) && Number.isFinite(b.vy));
+    }
+});
