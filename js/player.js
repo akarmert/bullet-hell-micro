@@ -290,16 +290,7 @@ export class Player {
         }
         ctx.globalAlpha = 1;
 
-        // 2. Graze alanı: kesikli lavanta halka
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.grazeRadius, 0, Math.PI * 2);
-        ctx.strokeStyle = this.isDashing ? THEME.PINK : 'rgba(142, 91, 232, 0.28)';
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([3, 4]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        // 3. Kalkan: dönen sabun köpüğü
+        // 2. Kalkan: dönen sabun köpüğü
         if (this.hasShield) {
             const sr = this.radius * 3.9;
             ctx.beginPath();
