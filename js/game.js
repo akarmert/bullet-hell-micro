@@ -15,7 +15,7 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
-import { THEME, setHighContrast } from './theme.js';
+import { THEME, setHighContrast, applyTheme, resolveTheme, systemPrefersDark } from './theme.js';
 import { ScoreSystem, formatScore } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
@@ -74,6 +74,7 @@ export class Game {
             this.effects.sound.setVolumes(v.musicVolume, v.sfxVolume);
             this.effects.motionEnabled = v.shake;
             setHighContrast(v.contrast);
+            this.applyThemeSetting();
             setLang(v.lang);
             this.applyDomText();
         });
@@ -339,6 +340,43 @@ export class Game {
         this.ui.setMode(this.currentMode);
         this.waveManager.setMode(this.currentMode);
         this.effects.sound.playPhase();
+    }
+
+    /** Ayardaki tema tercihini (sistem/açık/koyu) uygular */
+    applyThemeSetting() {
+        const pref = this.settings.get('theme');
+        applyTheme(resolveTheme(pref, systemPrefersDark()));
+        // Sistem teması oyun açıkken değişirse "sistem" tercihi onu izler
+        if (!this.themeWatch && typeof matchMedia === 'function') {
+            this.themeWatch = matchMedia('(prefers-color-scheme: dark)');
+            const onSystemChange = () => {
+                if (this.settings.get('theme') === 'system') applyTheme(resolveTheme('system', this.themeWatch.matches));
+            };
+            if (this.themeWatch.addEventListener) this.themeWatch.addEventListener('change', onSystemChange);
+        }
+    }
+
+    /** Koyu tema dekoru: yavaşça parıldayan şeker serpintisi yıldızlar (oynanışı etkilemez) */
+    renderStars(ctx, w, h) {
+        if (!this.stars || this.stars.w !== w) {
+            let seed = 1337;
+            const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+            const list = [];
+            for (let i = 0; i < Math.round(w / 14); i++) {
+                list.push({ x: rnd() * w, y: rnd() * h, ph: rnd() * 6.28, big: rnd() < 0.15, c: THEME.SPRINKLES[i % THEME.SPRINKLES.length] });
+            }
+            this.stars = { w, list };
+        }
+        const now = performance.now() * 0.0016;
+        ctx.save();
+        for (const s of this.stars.list) {
+            ctx.globalAlpha = 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(now + s.ph));
+            ctx.fillStyle = s.c;
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, s.big ? 2.2 : 1.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
     }
 
     /** Kalkan bir darbeyi engellediğinde: kalan hak ya da "patladı" */
@@ -776,9 +814,17 @@ export class Game {
         // Ekran sarsıntısı varsa canvas matrisine uygula
         this.effects.preRender(ctx);
 
-        // Arka plan temizliği
-        ctx.fillStyle = THEME.BG;
+        // Arka plan temizliği (koyu temada gece geçişi + serpinti yıldızlar)
+        if (THEME.dark) {
+            const sky = ctx.createLinearGradient(0, 0, 0, h);
+            sky.addColorStop(0, THEME.BG_TOP);
+            sky.addColorStop(1, THEME.BG);
+            ctx.fillStyle = sky;
+        } else {
+            ctx.fillStyle = THEME.BG;
+        }
         ctx.fillRect(0, 0, w, h);
+        if (THEME.dark && !THEME.highContrast) this.renderStars(ctx, w, h);
 
         // Reaktif Dinamik Yaylı Izgara
         this.effects.renderGrid(ctx);

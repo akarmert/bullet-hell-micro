@@ -151,7 +151,7 @@ class SpringGrid {
                 const d = Math.min(24, Math.abs(pt.x - pt.baseX) + Math.abs(pt.y - pt.baseY));
                 ctx.beginPath();
                 ctx.arc(pt.x, pt.y, 2 + d * 0.14, 0, Math.PI * 2);
-                ctx.fillStyle = d > 3 ? 'rgba(255, 111, 174, 0.55)' : 'rgba(142, 91, 232, 0.16)';
+                ctx.fillStyle = d > 3 ? 'rgba(255, 111, 174, 0.55)' : THEME.GRID_DOT;
                 ctx.fill();
             }
         }
@@ -504,7 +504,7 @@ export class EffectsManager {
         }
         for (const b of this.blobs) {
             const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-            g.addColorStop(0, `rgba(${b.color}, 0.55)`);
+            g.addColorStop(0, `rgba(${b.color}, ${THEME.BLOB_ALPHA})`);
             g.addColorStop(1, `rgba(${b.color}, 0)`);
             ctx.fillStyle = g;
             ctx.fillRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
@@ -551,8 +551,8 @@ export class EffectsManager {
             const cx = GAME_CONFIG.CANVAS.WIDTH / 2;
             const cy = 148; // Sayaç ve boss barının altında
             ctx.translate(cx, cy);
-            candyPanel(ctx, -tw / 2 - 16, -15, tw + 32, 30, 15, THEME.WHITE, { depth: 3, shadow: this.bannerColor });
-            ctx.fillStyle = THEME.INK;
+            candyPanel(ctx, -tw / 2 - 16, -15, tw + 32, 30, 15, THEME.SURFACE, { depth: 3, shadow: this.bannerColor });
+            ctx.fillStyle = THEME.TEXT;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(this.bannerText, 0, 1);

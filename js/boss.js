@@ -661,7 +661,7 @@ export class Boss {
 
         ctx.beginPath();
         ctx.roundRect(x, y, barW, barH, barH / 2);
-        ctx.fillStyle = THEME.WHITE;
+        ctx.fillStyle = THEME.SURFACE;
         ctx.fill();
         if (fill > 0) {
             ctx.save();

@@ -279,6 +279,15 @@ export class Player {
         // Kalkan sonrası dokunulmazlıkta yanıp söner
         if (this.invulnTimer > 0 && Math.floor(this.invulnTimer / 90) % 2 === 0) ctx.globalAlpha = 0.35;
 
+        // Koyu tema: marşmelovun altında pembe "gece lambası" (en parlak nesne oyuncu)
+        if (THEME.dark && this.alive) {
+            const g = ctx.createRadialGradient(this.x, this.y, r * 0.5, this.x, this.y, r * 4.2);
+            g.addColorStop(0, 'rgba(255, 141, 192, 0.32)');
+            g.addColorStop(1, 'rgba(255, 141, 192, 0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(this.x - r * 4.2, this.y - r * 4.2, r * 8.4, r * 8.4);
+        }
+
         // 1. Dash hayalet izleri (pembe yumuşak kopyalar)
         for (let i = 0; i < this.afterImages.length; i++) {
             const img = this.afterImages[i];

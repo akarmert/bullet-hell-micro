@@ -4,6 +4,10 @@
 // ============================================================
 
 import { t, detectLang, getLang, LANGS, LANG_NAMES } from './i18n.js';
+import { THEME_MODES } from './theme.js';
+
+/** Seçenekli satırların sırayla dönen değerleri */
+const CHOICES = { lang: LANGS, theme: THEME_MODES };
 
 const KEY = 'bulletHellMicro_settings';
 
@@ -13,6 +17,7 @@ export const SETTING_ROWS = [
     { id: 'shake', label: 'sarsıntı ve flaş', type: 'toggle' },
     { id: 'contrast', label: 'yüksek kontrast', type: 'toggle' },
     { id: 'ghost', label: 'hayalet (en iyi tur)', type: 'toggle' },
+    { id: 'theme', label: 'tema', type: 'choice' },
     { id: 'lang', label: 'dil', type: 'choice' },
     { id: 'tutorial', label: 'ipuçlarını tekrar göster', type: 'action' },
     { id: 'close', label: 'kapat', type: 'action' }
@@ -20,7 +25,7 @@ export const SETTING_ROWS = [
 
 export class Settings {
     constructor() {
-        this.values = { musicVolume: 0.8, sfxVolume: 0.9, shake: true, contrast: false, ghost: true, lang: detectLang() };
+        this.values = { musicVolume: 0.8, sfxVolume: 0.9, shake: true, contrast: false, ghost: true, theme: 'system', lang: detectLang() };
         this.listeners = [];
         this.load();
     }
@@ -31,6 +36,7 @@ export class Settings {
             for (const k of Object.keys(this.values)) {
                 if (typeof saved[k] === typeof this.values[k]) this.values[k] = saved[k];
             }
+            if (!THEME_MODES.includes(this.values.theme)) this.values.theme = 'system';
         } catch (e) {
             // varsayılanlar
         }
@@ -64,8 +70,9 @@ export class Settings {
             this.values[id] = Math.round(Math.max(0, Math.min(1, v + dir * 0.1)) * 10) / 10;
         } else if (typeof v === 'boolean') {
             this.values[id] = !v;
-        } else if (id === 'lang') {
-            this.values[id] = LANGS[(LANGS.indexOf(v) + (dir < 0 ? LANGS.length - 1 : 1)) % LANGS.length];
+        } else if (CHOICES[id]) {
+            const list = CHOICES[id];
+            this.values[id] = list[(list.indexOf(v) + (dir < 0 ? list.length - 1 : 1)) % list.length];
         } else {
             return;
         }
@@ -79,6 +86,7 @@ export class Settings {
         if (typeof v === 'number') return getLang() === 'en' ? `${Math.round(v * 100)}%` : `%${Math.round(v * 100)}`;
         if (typeof v === 'boolean') return v ? t('settings.on') : t('settings.off');
         if (id === 'lang') return LANG_NAMES[v] || v;
+        if (id === 'theme') return t(`settings.theme.${v}`);
         return '';
     }
 }

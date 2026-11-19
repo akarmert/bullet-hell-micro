@@ -101,7 +101,7 @@ export class Coin {
         // Değerli şekerde ışıltı
         if (this.sparkle) {
             const a = this.age * 0.005;
-            ctx.fillStyle = '#E8A800'; // Açık zeminde görünen altın ışıltı
+            ctx.fillStyle = THEME.SPARKLE; // Altın ışıltı (temaya göre ton)
             for (let i = 0; i < 3; i++) {
                 const ang = a + (i * Math.PI * 2) / 3;
                 const sx = Math.cos(ang) * (r + 9);

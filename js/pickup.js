@@ -118,10 +118,10 @@ export class Pickup {
         ctx.font = font(10, 700);
         ctx.textAlign = 'center';
         ctx.lineWidth = 3;
-        ctx.strokeStyle = THEME.WHITE;
+        ctx.strokeStyle = THEME.TEXT_HALO;
         const label = t(`pickup.${this.type}`, null, this.label);
         ctx.strokeText(label, 0, -r * 1.55);
-        ctx.fillStyle = THEME.INK;
+        ctx.fillStyle = THEME.TEXT;
         ctx.fillText(label, 0, -r * 1.55);
 
         ctx.restore();

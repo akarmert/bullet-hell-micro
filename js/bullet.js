@@ -41,11 +41,35 @@ function drawCapsule(ctx, color, radius) {
 }
 
 const capsuleCache = new Map();
+const haloCache = new Map();
+
+/** Koyu temada mermi etrafındaki yumuşak renkli hale (önbellekli); DOM yoksa null */
+function haloSprite(color, radius) {
+    const key = `${color}|${radius}`;
+    const cached = haloCache.get(key);
+    if (cached) return cached;
+    if (typeof document === 'undefined' || !/^#[0-9a-f]{6}$/i.test(color)) return null;
+    const n = parseInt(color.slice(1), 16);
+    const rgb = `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`;
+    const size = Math.ceil(radius * 2.6);
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = size * 2;
+    const c = canvas.getContext('2d');
+    const g = c.createRadialGradient(size, size, radius * 0.6, size, size, size);
+    g.addColorStop(0, `rgba(${rgb}, 0.5)`);
+    g.addColorStop(1, `rgba(${rgb}, 0)`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, size * 2, size * 2);
+    const sprite = { canvas, size };
+    if (haloCache.size > 48) haloCache.clear();
+    haloCache.set(key, sprite);
+    return sprite;
+}
 const SPRITE_SCALE = 3; // Yüksek DPI ekranlarda da keskin kalsın
 
 /** Önbellekli şeker çubuğu görseli; DOM yoksa (testler) null */
 function capsuleSprite(color, radius, outline) {
-    const key = `${color}|${radius}|${outline}`;
+    const key = `${color}|${radius}|${outline}|${THEME.INK}`;
     const cached = capsuleCache.get(key);
     if (cached) return cached;
     if (typeof document === 'undefined') return null;
@@ -220,6 +244,12 @@ export class Bullet {
                 ctx.fill();
             }
             ctx.globalAlpha = 1.0;
+        }
+
+        // Koyu tema: mermi ay ışığında parlar (zeminden ilk bakışta seçilsin)
+        if (THEME.dark) {
+            const halo = haloSprite(this.color, this.radius);
+            if (halo) ctx.drawImage(halo.canvas, this.x - halo.size, this.y - halo.size);
         }
 
         ctx.lineWidth = THEME.BULLET_OUTLINE;

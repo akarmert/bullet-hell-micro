@@ -380,13 +380,13 @@ export class UIManager {
         ctx.fill();
         ctx.beginPath();
         ctx.arc(x, y, r, 0, Math.PI * 2);
-        ctx.fillStyle = THEME.WHITE;
+        ctx.fillStyle = THEME.SURFACE;
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = THEME.INK;
         ctx.stroke();
         ctx.font = font(r, 700);
-        ctx.fillStyle = THEME.INK;
+        ctx.fillStyle = THEME.TEXT;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(label, x, y + 1);
@@ -411,15 +411,15 @@ export class UIManager {
 
         // Ayarlar butonu
         const sb = L.settings;
-        candyPanel(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2, THEME.WHITE, { depth: 3, lineWidth: 2 });
+        candyPanel(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2, THEME.SURFACE, { depth: 3, lineWidth: 2 });
         ctx.font = font(15, 700);
-        ctx.fillStyle = THEME.INK;
+        ctx.fillStyle = THEME.TEXT;
         ctx.fillText(t('menu.settings'), sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
         if (focus === 'settings') focusRing(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2);
 
         // Şeker bakiyesi
         if (this.progress) {
-            UIManager.pill(ctx, `🍬 ${formatScore(this.progress.candies)}`, sb.x - 10, sb.y + sb.h / 2, THEME.WHITE, THEME.INK, 'right', 15);
+            UIManager.pill(ctx, `🍬 ${formatScore(this.progress.candies)}`, sb.x - 10, sb.y + sb.h / 2, THEME.SURFACE, THEME.TEXT, 'right', 15);
         }
 
         // Bilgi butonu (nasıl oynanır)
@@ -433,7 +433,7 @@ export class UIManager {
         ctx.textBaseline = 'alphabetic';
         ctx.fillStyle = THEME.PINK;
         ctx.fillText('BULLET HELL', ti.x + 3, titleY + 4);
-        outlinedText(ctx, 'BULLET HELL', ti.x, titleY, THEME.INK, THEME.WHITE, 6);
+        outlinedText(ctx, 'BULLET HELL', ti.x, titleY, THEME.TEXT, THEME.TEXT_HALO, 6);
         const titleW = ctx.measureText('BULLET HELL').width;
         ctx.save();
         ctx.translate(ti.x + titleW / 2 - 18, titleY + 14);
@@ -450,13 +450,13 @@ export class UIManager {
         for (const c of L.cards) {
             const selected = c.id === activeModeId;
             const y = c.y + (selected ? -2 : 0);
-            candyPanel(ctx, c.x, y, c.w, c.h, 18, selected ? THEME.PINK : THEME.WHITE, { depth: selected ? 6 : 4, lineWidth: 2 });
+            candyPanel(ctx, c.x, y, c.w, c.h, 18, selected ? THEME.PINK : THEME.SURFACE, { depth: selected ? 6 : 4, lineWidth: 2 });
             const best = t('menu.best', { score: formatScore(this.getBestScore(c.id)) });
             const label = ModeRegistry.get(c.id).label;
             if (c.wide) {
                 ctx.textAlign = 'left';
                 ctx.font = font(18, 700);
-                ctx.fillStyle = THEME.INK;
+                ctx.fillStyle = selected ? THEME.INK : THEME.TEXT;
                 ctx.fillText(`☀ ${label} · ${dateLabel()}`, c.x + 20, y + c.h / 2 + 1, c.w * 0.62);
                 ctx.textAlign = 'right';
                 ctx.font = font(13, 600);
@@ -465,7 +465,7 @@ export class UIManager {
                 ctx.textAlign = 'center';
             } else {
                 ctx.font = font(19, 700);
-                ctx.fillStyle = THEME.INK;
+                ctx.fillStyle = selected ? THEME.INK : THEME.TEXT;
                 ctx.fillText(label, c.x + c.w / 2, y + c.h / 2 - 9, c.w - 16);
                 ctx.font = font(13, 600);
                 ctx.fillStyle = selected ? THEME.INK : THEME.MUTED;
@@ -482,7 +482,7 @@ export class UIManager {
         // Açıklama ve kontrol ipuçları
         const activeMode = ModeRegistry.get(activeModeId);
         ctx.font = font(15, 600);
-        ctx.fillStyle = THEME.INK;
+        ctx.fillStyle = THEME.TEXT;
         ctx.fillText(activeMode.description, L.desc.x, L.desc.y, L.desc.maxW);
         ctx.font = font(13, 600);
         ctx.fillStyle = THEME.MUTED;
@@ -543,11 +543,11 @@ export class UIManager {
         s = Math.min(s, ah * 0.94 / PH);
 
         ctx.save();
-        ctx.fillStyle = 'rgba(255, 246, 250, 0.85)';
+        ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.85)`;
         ctx.fillRect(0, 0, w, h);
         ctx.translate(this.safe.left + aw / 2, this.safe.top + ah / 2);
         ctx.scale(s, s);
-        candyPanel(ctx, -PW / 2, -PH / 2, PW, PH, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+        candyPanel(ctx, -PW / 2, -PH / 2, PW, PH, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -562,7 +562,7 @@ export class UIManager {
             ctx.fillText(icon, -PW / 2 + 34, y + 10);
             ctx.textAlign = 'left';
             ctx.font = font(15, 700);
-            ctx.fillStyle = THEME.INK;
+            ctx.fillStyle = THEME.TEXT;
             ctx.fillText(title, textX, y + 8);
             ctx.font = font(13, 500);
             ctx.fillStyle = THEME.MUTED;
@@ -594,7 +594,7 @@ export class UIManager {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.font = font(16, 700);
-        ctx.fillStyle = locked ? THEME.MUTED : THEME.INK;
+        ctx.fillStyle = locked ? THEME.MUTED : THEME.TEXT;
         const count = `${this.progress.unlocked.length}/${SKINS.length}`;
         ctx.fillText(`${t(`skin.${skin.id}.name`, null, skin.name)}${this.progress.selected === skin.id ? ' ✓' : ''}`, s.cx, s.cy + s.r + 22);
         const buy = this.getBuyRect(L);
@@ -609,10 +609,10 @@ export class UIManager {
             const price = skin.price;
             const have = this.progress.candies;
             const confirming = this.buyConfirm && this.buyConfirm.id === skin.id && performance.now() < this.buyConfirm.until;
-            let fill = THEME.WHITE;
+            let fill = THEME.SURFACE;
             let color = THEME.MUTED;
             let label = t('shop.need', { price, need: price - have });
-            if (confirming) { fill = THEME.TEXT_PRIMARY; color = THEME.WHITE; label = t('shop.confirm', { price }); }
+            if (confirming) { fill = THEME.PURPLE_DEEP; color = THEME.WHITE; label = t('shop.confirm', { price }); }
             else if (have >= price) { fill = THEME.PINK; color = THEME.INK; label = t('shop.buy', { price }); }
             const shake = this.buyShakeUntil && performance.now() < this.buyShakeUntil ? Math.sin(performance.now() * 0.06) * 5 : 0;
             candyPanel(ctx, buy.x + shake, buy.y, buy.w, buy.h, buy.h / 2, fill, { depth: 4, lineWidth: 2 });
@@ -639,13 +639,13 @@ export class UIManager {
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
         ctx.save();
-        ctx.fillStyle = 'rgba(255, 246, 250, 0.8)';
+        ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.8)`;
         ctx.fillRect(0, 0, w, h);
         ctx.translate(this.menuOffsetX, this.menuOffsetY);
         ctx.scale(this.menuScale, this.menuScale);
 
         const height = L.rowTop - L.y + SETTING_ROWS.length * L.rowH + 18;
-        candyPanel(ctx, L.x, L.y, L.w, height, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+        candyPanel(ctx, L.x, L.y, L.w, height, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -660,19 +660,19 @@ export class UIManager {
             if (selected) {
                 ctx.beginPath();
                 ctx.roundRect(L.x + 14, y + 4, L.w - 28, L.rowH - 8, 14);
-                ctx.fillStyle = 'rgba(205, 184, 255, 0.45)';
+                ctx.fillStyle = THEME.ROW_HIGHLIGHT;
                 ctx.fill();
             }
             if (row.type === 'action') {
                 ctx.textAlign = 'center';
                 ctx.font = font(15, 700);
-                ctx.fillStyle = row.id === 'close' ? THEME.TEXT_ACCENT : THEME.INK;
+                ctx.fillStyle = row.id === 'close' ? THEME.TEXT_ACCENT : THEME.TEXT;
                 ctx.fillText(t(`settings.${row.id}`), 300, cy);
                 return;
             }
             ctx.textAlign = 'left';
             ctx.font = font(15, 600);
-            ctx.fillStyle = THEME.INK;
+            ctx.fillStyle = THEME.TEXT;
             ctx.fillText(t(`settings.${row.id}`), L.x + 30, cy);
 
             const vx = L.x + L.w - 70;
@@ -693,7 +693,7 @@ export class UIManager {
                 }
             } else {
                 const on = S.get(row.id);
-                UIManager.pill(ctx, S.display(row.id), vx, cy, on ? THEME.PINK : THEME.WHITE, THEME.INK, 'center', 12);
+                UIManager.pill(ctx, S.display(row.id), vx, cy, on ? THEME.PINK : THEME.SURFACE, on ? THEME.INK : THEME.TEXT, 'center', 12);
             }
         });
 
@@ -742,7 +742,7 @@ export class UIManager {
             // Orta: süre ve rekor
             ctx.textAlign = 'center';
             ctx.font = font(Math.min(36, w * 0.085), 700);
-            outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.INK, THEME.WHITE, 6);
+            outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.TEXT, THEME.TEXT_HALO, 6);
             ctx.font = font(11, 600);
             ctx.fillStyle = THEME.MUTED;
             ctx.fillText(t('hud.best', { score: formatScore(this.getBestScore(mode.id)) }), w / 2, 70);
@@ -753,7 +753,7 @@ export class UIManager {
         }
         // Sağ üst: aktif güçlendirmeler
         if (player && player.hasShield) {
-            UIManager.pill(ctx, t('hud.shield', { pips: player.shieldPips() }), right, rowY, THEME.TEXT_PRIMARY, THEME.WHITE, 'right', 10);
+            UIManager.pill(ctx, t('hud.shield', { pips: player.shieldPips() }), right, rowY, THEME.PURPLE_DEEP, THEME.WHITE, 'right', 10);
             rowY += 24;
         }
         if (pickupManager && pickupManager.isSlowmoActive()) {
@@ -772,7 +772,7 @@ export class UIManager {
 
             ctx.beginPath();
             ctx.roundRect(barX, barY, barW, barH, barH / 2);
-            ctx.fillStyle = THEME.WHITE;
+            ctx.fillStyle = THEME.SURFACE;
             ctx.fill();
             if (ratio > 0) {
                 ctx.save();
@@ -809,7 +809,7 @@ export class UIManager {
             const k = p.age / 700;
             ctx.globalAlpha = 1 - k;
             ctx.font = font(p.big ? 20 : 11 + p.multiplier, 700);
-            outlinedText(ctx, p.text, p.x, p.y - 18 - k * 26, p.multiplier > 1 ? THEME.PINK_DEEP : THEME.PURPLE, THEME.WHITE, 3);
+            outlinedText(ctx, p.text, p.x, p.y - 18 - k * 26, p.multiplier > 1 ? THEME.PINK_DEEP : THEME.PURPLE, THEME.TEXT_HALO, 3);
         }
         ctx.globalAlpha = 1;
 
@@ -819,11 +819,11 @@ export class UIManager {
             const label = score.multiplier > 1 ? `x${score.multiplier} · ${score.combo}` : t('hud.combo', { n: score.combo });
             ctx.font = font(11, 700);
             const tw = ctx.measureText(label).width + 16;
-            candyPanel(ctx, x - tw / 2, y - 9, tw, 18, 9, score.multiplier > 1 ? THEME.PINK : THEME.WHITE, { lineWidth: 1.5, depth: 2 });
+            candyPanel(ctx, x - tw / 2, y - 9, tw, 18, 9, score.multiplier > 1 ? THEME.PINK : THEME.SURFACE, { lineWidth: 1.5, depth: 2 });
             // Kalan seri süresi
             ctx.fillStyle = score.multiplier > 1 ? 'rgba(255, 255, 255, 0.5)' : 'rgba(205, 184, 255, 0.7)';
             ctx.fillRect(x - tw / 2 + 6, y + 5, (tw - 12) * score.comboRatio, 2);
-            ctx.fillStyle = THEME.INK;
+            ctx.fillStyle = score.multiplier > 1 ? THEME.INK : THEME.TEXT;
             ctx.fillText(label, x, y);
         }
         ctx.restore();
@@ -841,8 +841,8 @@ export class UIManager {
         ctx.globalAlpha = Math.max(0, hint.alpha) * (near ? 0.25 : 1);
         ctx.font = font(14, 700);
         const tw = Math.min(w - 40, ctx.measureText(hint.text).width + 36);
-        candyPanel(ctx, w / 2 - tw / 2, y - 18, tw, 36, 18, THEME.WHITE, { depth: 4, shadow: THEME.PURPLE });
-        ctx.fillStyle = THEME.INK;
+        candyPanel(ctx, w / 2 - tw / 2, y - 18, tw, 36, 18, THEME.SURFACE, { depth: 4, shadow: THEME.PURPLE });
+        ctx.fillStyle = THEME.TEXT;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(`💡 ${hint.text}`, w / 2, y + 1, tw - 20);
@@ -860,23 +860,23 @@ export class UIManager {
         if (countdownMs > 0) {
             const step = Math.ceil(countdownMs / 500);
             const frac = (countdownMs % 500) / 500;
-            ctx.fillStyle = 'rgba(255, 246, 250, 0.35)';
+            ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.35)`;
             ctx.fillRect(0, 0, w, h);
             ctx.font = font(64 + frac * 26, 700);
             ctx.globalAlpha = 0.5 + frac * 0.5;
             ctx.fillStyle = THEME.PINK;
             ctx.fillText(String(step), w / 2 + 3, h / 2 + 5);
-            outlinedText(ctx, String(step), w / 2, h / 2, THEME.INK, THEME.WHITE, 7);
+            outlinedText(ctx, String(step), w / 2, h / 2, THEME.TEXT, THEME.TEXT_HALO, 7);
             ctx.restore();
             return;
         }
 
-        ctx.fillStyle = 'rgba(255, 246, 250, 0.78)';
+        ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.78)`;
         ctx.fillRect(0, 0, w, h);
 
         const cw = Math.min(320, w - 40);
         const ch = touch ? 120 : 140;
-        candyPanel(ctx, w / 2 - cw / 2, h / 2 - ch / 2 - 10, cw, ch, 22, THEME.WHITE, { depth: 6, lineWidth: 2.5 });
+        candyPanel(ctx, w / 2 - cw / 2, h / 2 - ch / 2 - 10, cw, ch, 22, THEME.SURFACE, { depth: 6, lineWidth: 2.5 });
 
         ctx.font = font(28, 700);
         ctx.fillStyle = THEME.PURPLE;
@@ -885,7 +885,7 @@ export class UIManager {
         const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
         ctx.font = font(14, 600);
         ctx.globalAlpha = 0.65 + pulse * 0.35;
-        ctx.fillStyle = THEME.INK;
+        ctx.fillStyle = THEME.TEXT;
         ctx.fillText(touch ? t('pause.resumeTouch') : t('pause.resume'), w / 2, h / 2 + 2);
         ctx.globalAlpha = 1;
 
@@ -911,12 +911,12 @@ export class UIManager {
 
         ctx.save();
         ctx.globalAlpha = reveal;
-        ctx.fillStyle = 'rgba(255, 246, 250, 0.85)';
+        ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.85)`;
         ctx.fillRect(0, 0, w, h);
         ctx.translate(D.cx, D.cy + (1 - reveal) * 24); // Kart hafifçe yukarı kayarak gelir
         ctx.scale(D.s, D.s);
 
-        candyPanel(ctx, -cw / 2, -205, cw, 410, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+        candyPanel(ctx, -cw / 2, -205, cw, 410, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
@@ -934,7 +934,7 @@ export class UIManager {
 
         if (this.isNewRecord) {
             const bounce = Math.abs(Math.sin(performance.now() * 0.005)) * 3;
-            UIManager.pill(ctx, t('dead.newRecord'), 0, -78 - bounce, THEME.TEXT_PRIMARY, THEME.WHITE, 'center', 13);
+            UIManager.pill(ctx, t('dead.newRecord'), 0, -78 - bounce, THEME.PURPLE_DEEP, THEME.WHITE, 'center', 13);
         }
 
         // Skor
@@ -942,7 +942,7 @@ export class UIManager {
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText(t('dead.score'), 0, -50);
         ctx.font = font(38, 700);
-        outlinedText(ctx, formatScore(score ? score.total : 0), 0, -20, THEME.TEXT_ACCENT, THEME.WHITE, 5);
+        outlinedText(ctx, formatScore(score ? score.total : 0), 0, -20, THEME.TEXT_ACCENT, THEME.TEXT_HALO, 5);
         if (candies > 0) {
             // Bu turda kazanılan şeker, "skor" etiketinin sağında
             UIManager.pill(ctx, t('dead.candies', { n: candies }), 34, -50, THEME.PINK_SOFT, THEME.INK, 'left', 12);
@@ -961,7 +961,7 @@ export class UIManager {
             ctx.fillStyle = THEME.MUTED;
             ctx.fillText(label, x, 18, colGap - 4);
             ctx.font = font(18, 700);
-            ctx.fillStyle = THEME.INK;
+            ctx.fillStyle = THEME.TEXT;
             ctx.fillText(value, x, 40, colGap - 4);
         });
 

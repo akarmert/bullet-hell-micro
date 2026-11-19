@@ -7,6 +7,7 @@ import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
 import { Boss, BOSS_STATE } from './boss.js';
 import { random } from './rng.js';
+import { THEME } from './theme.js';
 
 export class WaveManager {
     constructor(bulletManager, mode = null) {
@@ -166,7 +167,7 @@ export class WaveManager {
             ctx.globalAlpha = 1;
             ctx.beginPath();
             ctx.arc(t.x1, t.y1, 4 + (1 - progress) * 10, 0, Math.PI * 2);
-            ctx.strokeStyle = '#4B2A6E';
+            ctx.strokeStyle = THEME.INK;
             ctx.lineWidth = 1.5;
             ctx.stroke();
         }
