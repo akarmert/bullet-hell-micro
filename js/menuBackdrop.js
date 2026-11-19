@@ -13,7 +13,7 @@ const CANDY_KINDS = ['mallow', 'wrap', 'lolly', 'drop'];
 const CANDY_COLORS = ['#FF6FAE', '#8E5BE8', '#CDB8FF', '#FFC4DE', '#B79BFF'];
 const IDLE_MS = 2500;          // Bu kadar hareketsizlikten sonra gezgin devralır
 const REPEL_RADIUS = 110;      // Şekerlerin imleçten kaçma menzili
-const LINK_RADIUS = 135;       // Takımyıldızı çizgilerinin menzili
+export const LINK_RADIUS = 135;       // Takımyıldızı çizgilerinin menzili
 const CHAIN_GAP = 1.2;         // Art arda patlatmalarda nota yükselir (saniye)
 
 const rand = (a, b) => a + Math.random() * (b - a);
@@ -299,18 +299,24 @@ export class MenuBackdrop {
         ctx.globalAlpha = (1) * this.opacity;
     }
 
-    renderNight(ctx) {
+    /** Up to 7 stars nearest to the attractor, chained like a constellation: [{ s, d }] */
+    constellation() {
         const a = this.attractor;
-        const tw = this.time * 1.6;
-
-        // Takımyıldızı: hedefe yakın yıldızlar birbirine ve hedefe bağlanır
         const near = [];
         for (const s of this.stars) {
             const d = Math.hypot(s.x - a.x, s.y - a.y);
             if (d < LINK_RADIUS) near.push({ s, d });
         }
         near.sort((p, q) => p.d - q.d);
-        const linked = near.slice(0, 7);
+        return near.slice(0, 7);
+    }
+
+    renderNight(ctx) {
+        const a = this.attractor;
+        const tw = this.time * 1.6;
+
+        // Takımyıldızı: hedefe yakın yıldızlar birbirine ve hedefe bağlanır
+        const linked = this.constellation();
         const linkAlpha = a.idle ? 0.35 : 0.6;
         ctx.strokeStyle = THEME.LAVENDER;
         ctx.lineWidth = 1.2;
@@ -390,7 +396,7 @@ function drawStar(ctx, x, y, R, r) {
 }
 
 /** Tek bir süzülen şeker: marşmelov, paketli şeker, lolipop ya da jöle damlası */
-function drawCandy(ctx, c) {
+export function drawCandy(ctx, c) {
     const s = c.size;
     ctx.save();
     ctx.translate(c.x, c.y);

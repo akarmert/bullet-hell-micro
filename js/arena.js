@@ -15,9 +15,8 @@ export function resizeArena(game) {
     const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     const P = GAME_CONFIG.PERFORMANCE;
     const dpr = Math.min(window.devicePixelRatio || 1, coarse ? P.MAX_DPR_TOUCH : P.MAX_DPR);
-    game.canvas.width = Math.round(rect.width * dpr);
-    game.canvas.height = Math.round(rect.height * dpr);
-    game.ctx.setTransform(game.canvas.width / width, 0, 0, game.canvas.height / height, 0, 0);
+    // PixiJS owns the drawing buffer: it sizes the canvas and scales the logical stage
+    if (game.renderer) game.renderer.resize(rect.width, rect.height, dpr);
     if (game.player) {
         game.player.x *= width / oldWidth;
         game.player.clampToArena();

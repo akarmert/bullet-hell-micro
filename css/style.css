@@ -1,5 +1,5 @@
 /* Marşmelov şeker teması: tam ekran arena ve safe-area uyumlu dokunmatik katman. */
-@import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
+/* Fredoka is bundled locally from @fontsource/fredoka (OFL-1.1), imported in js/main.js. */
 
 :root {
     --bg: #FFF6FA;

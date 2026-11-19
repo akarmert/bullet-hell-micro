@@ -15,15 +15,15 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
+import { PixiRenderer } from './render/pixiRenderer.js';
 import { THEME, setHighContrast, applyTheme, resolveTheme, systemPrefersDark } from './theme.js';
 import { MenuBackdrop } from './menuBackdrop.js';
-import { DevMode, isDevRequested } from './devMode.js';
 import { ScoreSystem, formatScore } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
 import { CoinManager } from './coins.js';
 import { Settings, SETTING_ROWS } from './settings.js';
-import { SKINS, getSkin, drawMarshmallow } from './skins.js';
+import { SKINS } from './skins.js';
 import { seedRandom, dateKey, dateLabel } from './rng.js';
 import { GhostRecorder, loadGhost, saveGhost } from './ghost.js';
 import { buildShareText, shareText } from './share.js';
@@ -39,11 +39,9 @@ export const GAME_STATE = {
 export class Game {
     constructor(canvas) {
         this.canvas = canvas;
-        // Tuval hep tam boyanır: saydamlık kapalı olunca tarayıcı daha hızlı birleştirir
-        this.ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
-        this.bgLayer = null;      // Yarı çözünürlüklü arka plan katmanı (zemin + pastel bulutlar)
-        this.bgFrame = 0;
-        this.bgKey = '';
+        // PixiJS (WebGL) renderer; initialised asynchronously, the loop waits for `ready`
+        this.renderer = new PixiRenderer(canvas);
+        this.ready = this.renderer.init().then(() => resizeArena(this));
 
         resizeArena(this);
 
@@ -89,7 +87,15 @@ export class Game {
         this.state = GAME_STATE.MENU;
         this.menuBackdrop = new MenuBackdrop(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
         // Geliştirici modu: adrese ?dev eklenince (ölümsüzlük, boss'a atlama; kayıtlar kapalı)
-        this.dev = isDevRequested() ? new DevMode(this) : null;
+        this.dev = null;
+        // Dev mode is compiled out of production builds unless VITE_ENABLE_DEV_MODE=true.
+        const env = (import.meta && import.meta.env) || {};
+        const devAllowed = env.DEV === true || env.VITE_ENABLE_DEV_MODE === 'true';
+        if (devAllowed && typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')) {
+            import('./devMode.js').then(({ DevMode, isDevRequested }) => {
+                if (isDevRequested()) this.dev = new DevMode(this);
+            });
+        }
         this.elapsedMs = 0;          // Simülasyon süresi: sadece oynanırken dt ile birikir
         this.resumeCountdown = 0;    // Devam ederken geri sayım (ms)
         this.deathTimestamp = 0;
@@ -361,44 +367,6 @@ export class Game {
         this.effects.sound.playPhase();
     }
 
-    /**
-     * Zemin rengi/geçişi ve büyük pastel bulutlar her karede tam ekran boyanmak yerine
-     * yarı çözünürlüklü bir katmana birkaç karede bir çizilir; her kare sadece kopyalanır.
-     * (Telefonlarda en büyük çizim yükü bu tam ekran degradelerdi.)
-     */
-    renderBackgroundLayer(ctx, w, h) {
-        const P = GAME_CONFIG.PERFORMANCE;
-        if (typeof document === 'undefined') return;
-        const lw = Math.max(1, Math.round(this.canvas.width * P.BG_SCALE));
-        const lh = Math.max(1, Math.round(this.canvas.height * P.BG_SCALE));
-        const key = `${lw}x${lh}|${THEME.mode}|${THEME.highContrast}`;
-        if (!this.bgLayer) {
-            this.bgLayer = document.createElement('canvas');
-            this.bgCtx = this.bgLayer.getContext('2d', { alpha: false }) || this.bgLayer.getContext('2d');
-        }
-        const dirty = key !== this.bgKey;
-        if (dirty) {
-            this.bgLayer.width = lw;
-            this.bgLayer.height = lh;
-            this.bgKey = key;
-        }
-        if (dirty || this.bgFrame++ % P.BG_REFRESH_FRAMES === 0) {
-            const b = this.bgCtx;
-            b.setTransform(lw / w, 0, 0, lh / h, 0, 0);
-            if (THEME.dark) {
-                const sky = b.createLinearGradient(0, 0, 0, h);
-                sky.addColorStop(0, THEME.BG_TOP);
-                sky.addColorStop(1, THEME.BG);
-                b.fillStyle = sky;
-            } else {
-                b.fillStyle = THEME.BG;
-            }
-            b.fillRect(0, 0, w, h);
-            this.effects.renderBlobs(b);
-        }
-        ctx.drawImage(this.bgLayer, 0, 0, w, h);
-    }
-
     /** Menüde boş alana dokunma: şeker patlat / kayan yıldız */
     tapMenuBackdrop(x, y) {
         const result = this.menuBackdrop.tap(x, y);
@@ -421,29 +389,6 @@ export class Game {
             };
             if (this.themeWatch.addEventListener) this.themeWatch.addEventListener('change', onSystemChange);
         }
-    }
-
-    /** Koyu tema dekoru: yavaşça parıldayan şeker serpintisi yıldızlar (oynanışı etkilemez) */
-    renderStars(ctx, w, h) {
-        if (!this.stars || this.stars.w !== w) {
-            let seed = 1337;
-            const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-            const list = [];
-            for (let i = 0; i < Math.round(w / 14); i++) {
-                list.push({ x: rnd() * w, y: rnd() * h, ph: rnd() * 6.28, big: rnd() < 0.15, c: THEME.SPRINKLES[i % THEME.SPRINKLES.length] });
-            }
-            this.stars = { w, list };
-        }
-        const now = performance.now() * 0.0016;
-        ctx.save();
-        for (const s of this.stars.list) {
-            ctx.globalAlpha = 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(now + s.ph));
-            ctx.fillStyle = s.c;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, s.big ? 2.2 : 1.2, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.restore();
     }
 
     /** Kalkan bir darbeyi engellediğinde: kalan hak ya da "patladı" */
@@ -907,81 +852,8 @@ export class Game {
      * Arenayı, varlıkları, efektleri ve arayüzü çizer
      */
     render() {
-        const ctx = this.ctx;
-        const w = GAME_CONFIG.CANVAS.WIDTH;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
-
-        // Arka plan: zemin + pastel bulutlar önbellekli katmandan tek seferde.
-        // Sarsıntıdan ÖNCE çizilir: tuval saydam olmadığından kayan zemin kenarda siyah şerit bırakmasın
-        this.renderBackgroundLayer(ctx, w, h);
-
-        // Ekran sarsıntısı varsa canvas matrisine uygula
-        this.effects.preRender(ctx);
-        if (this.state === GAME_STATE.MENU) {
-            // Ana menü: etkileşimli şeker / gece arka planı
-            this.menuBackdrop.render(ctx);
-        } else {
-            if (THEME.dark && !THEME.highContrast) this.renderStars(ctx, w, h);
-            // Reaktif Dinamik Yaylı Izgara (benekler canlı, bulutlar katmanda)
-            this.effects.grid.render(ctx);
-        }
-
-        // Telegraf (Ön Uyarı Lazerleri)
-        this.waveManager.renderTelegraphs(ctx);
-
-        // Saha Güçlendirmeleri (Pickups)
-        this.pickupManager.render(ctx);
-        if (this.state !== GAME_STATE.MENU) this.coins.render(ctx);
-
-        // Boss
-        if (this.state !== GAME_STATE.MENU) this.waveManager.renderBoss(ctx);
-
-        // Hayalet (en iyi tur), mermilerin altında
-        if (this.ghost && (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
-            this.renderGhost(ctx, w, h);
-        }
-
-        // Mermiler ve Oyuncu
-        this.bulletManager.render(ctx);
-        if (this.state !== GAME_STATE.MENU) {
-            this.player.render(ctx);
-        }
-        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.ui.renderComboAndPopups(ctx, this.player, this.score);
-        }
-
-        // Post-render görsel efektler (Parçacıklar, Şok dalgaları, Flaş, Banner)
-        this.effects.postRender(ctx);
-
-        // UI Katmanı
-        if (this.state === GAME_STATE.MENU) {
-            this.ui.renderMenu(ctx, this.currentMode.id);
-        } else if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.renderEdgeWarning(ctx, w, h, { linePart: false });
-            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score, !!this.barVisible, this.runCandies);
-            if (this.state === GAME_STATE.PLAYING) this.ui.renderHint(ctx, this.currentHint, this.player);
-            if (this.waveManager.boss) this.waveManager.boss.renderHealthBar(ctx, this.ui.safe.top);
-            if (this.state === GAME_STATE.PAUSED) {
-                this.ui.renderPaused(ctx, this.resumeCountdown, this.touchControls.touchDevice);
-            }
-        } else if (this.state === GAME_STATE.DEAD) {
-            this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player, {
-                reveal: this.deathReveal(),
-                cause: this.deathCause,
-                bossTitle: this.waveManager.boss ? this.waveManager.boss.title : '',
-                score: this.score,
-                waves: this.waveManager,
-                unlocked: this.lastUnlocked,
-                candies: this.lastCandies || 0,
-                backdrop: this.menuBackdrop
-            });
-        }
-
-        // Arena sınır çerçevesi: sadece oyun içinde (menüde ve sonuç ekranında yok)
-        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.renderArenaBorder(ctx, w, h);
-            this.renderEdgeWarning(ctx, w, h, { glowPart: false }); // Çerçevenin yaklaşılan parçası pembe yanar
-        }
+        // All drawing goes through PixiJS (js/render/); the game only provides state
+        this.renderer.render(this);
     }
 
     /** Ölüm patlaması bitti mi? (yeniden başlatma ve butonlar bundan sonra) */
@@ -1034,20 +906,6 @@ export class Game {
         aria('gameCanvas', t('dom.canvas'));
     }
 
-    renderGhost(ctx, w, h) {
-        const pos = this.ghost.positionAt(this.elapsedMs, w, h);
-        if (!pos) return;
-        ctx.save();
-        ctx.globalAlpha = 0.32;
-        drawMarshmallow(ctx, pos.x, pos.y, this.player.radius * 1.9, getSkin(this.ghost.skin));
-        ctx.globalAlpha = 0.6;
-        ctx.font = '700 9px "Fredoka", system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = THEME.TEXT_PRIMARY;
-        ctx.fillText(t('hud.ghost'), pos.x, pos.y - 16);
-        ctx.restore();
-    }
-
     /** Ölüm ekranından sonucu paylaşır / kopyalar */
     async shareResult() {
         if (this.state !== GAME_STATE.DEAD) return;
@@ -1067,84 +925,5 @@ export class Game {
         const result = await shareText(text, this.touchControls.touchDevice);
         if (result === 'copied') this.effects.triggerBanner(t('banner.copied'), THEME.PURPLE);
         else if (result === 'failed') this.effects.triggerBanner(t('banner.copyFailed'), THEME.PINK);
-    }
-
-    /**
-     * Oyuncu kenara yaklaştıkça SADECE yaklaştığı noktada nabız gibi atan pembe uyarı:
-     * kenarda yumuşak bir hale + çerçevenin o kısmı pembe yanar (bütün kenar boyanmaz).
-     * Hale çerçevenin içine kırpılır, çerçeve vurgusu çerçevenin kendi yuvarlak yolunu izler;
-     * köşede iki kenar birden yanınca ikisi de yumuşatılır.
-     */
-    renderEdgeWarning(ctx, w, h, { glowPart = true, linePart = true } = {}) {
-        const p = this.player;
-        if (!p.alive) return;
-        const range = 60;
-        const glowR = 120;   // Kenardaki halenin yarıçapı
-        const span = 85;     // Çerçevede pembe yanan parçanın yarıçapı
-        const pulse = 0.8 + Math.sin(performance.now() * 0.01) * 0.2;
-        const cssH = this.canvas && this.canvas.clientHeight;
-        const lw = cssH ? 6 * h / cssH : 6;
-        const edges = [
-            [p.x - p.radius, 0, p.y],
-            [w - p.x - p.radius, w, p.y],
-            [p.y - p.radius, p.x, 0],
-            [h - p.y - p.radius, p.x, h]
-        ].filter(([dist]) => dist < range);
-        if (!edges.length) return;
-        const soften = edges.length > 1 ? 0.65 : 1; // Köşede iki hale üst üste binip sertleşmesin
-
-        // Çerçevenin yolu (renderArenaBorder ile aynı)
-        const framePath = () => {
-            ctx.beginPath();
-            if (this.barVisible) ctx.roundRect(lw / 2, lw / 2, w - lw, h + lw * 2, [18, 18, 0, 0]);
-            else ctx.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
-        };
-
-        ctx.save();
-        if (glowPart) {
-            framePath();
-            ctx.clip(); // Hale çerçevenin dışına (yuvarlak köşenin arkasına) taşmaz
-            for (const [dist, ex, ey] of edges) {
-                const k = Math.max(0, 1 - dist / range) * pulse * soften;
-                const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, glowR);
-                glow.addColorStop(0, `rgba(240, 70, 143, ${0.4 * k})`);
-                glow.addColorStop(0.35, `rgba(240, 70, 143, ${0.22 * k})`);
-                glow.addColorStop(0.7, `rgba(240, 70, 143, ${0.07 * k})`);
-                glow.addColorStop(1, 'rgba(240, 70, 143, 0)');
-                ctx.fillStyle = glow;
-                ctx.fillRect(ex - glowR, ey - glowR, glowR * 2, glowR * 2);
-            }
-        }
-        if (linePart) {
-            ctx.lineWidth = lw;
-            for (const [dist, ex, ey] of edges) {
-                const k = Math.max(0, 1 - dist / range) * pulse * soften;
-                const line = ctx.createRadialGradient(ex, ey, 0, ex, ey, span);
-                line.addColorStop(0, `rgba(255, 111, 174, ${Math.min(1, 1.2 * k)})`);
-                line.addColorStop(0.6, `rgba(255, 111, 174, ${0.45 * k})`);
-                line.addColorStop(1, 'rgba(255, 111, 174, 0)');
-                ctx.strokeStyle = line;
-                framePath();
-                ctx.stroke(); // Çerçevenin kendisi (köşe kıvrımı dahil) o noktada pembeleşir
-            }
-        }
-        ctx.restore();
-    }
-
-    /**
-     * Arena sınırlarını parlayan çizgi ile belirler
-     */
-    renderArenaBorder(ctx, w, h) {
-        // Ekranda her zaman ~6 CSS px kalınlık; alt şerit varken alt kenar şeridin üst çizgisine dönüşür
-        const cssH = this.canvas && this.canvas.clientHeight;
-        const lw = cssH ? 6 * h / cssH : 6;
-        ctx.save();
-        ctx.strokeStyle = THEME.FRAME;
-        ctx.lineWidth = lw;
-        ctx.beginPath();
-        if (this.barVisible) ctx.roundRect(lw / 2, lw / 2, w - lw, h + lw * 2, [18, 18, 0, 0]);
-        else ctx.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
-        ctx.stroke();
-        ctx.restore();
     }
 }

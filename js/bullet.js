@@ -9,7 +9,7 @@ import { THEME } from './theme.js';
 /**
  * Çizgili şeker çubuğu (merkez orijinde, x ekseni boyunca)
  */
-function drawCapsule(ctx, color, radius) {
+export function drawCapsule(ctx, color, radius) {
     const length = radius * 3.6;
     const width = radius * 1.9;
     const x = -length / 2;
@@ -344,20 +344,29 @@ export class Bullet {
      * İlk 0.25 sn'de "pıt" diye büyüyerek belirir.
      */
     renderSaw(ctx) {
+        const r = this.sawRadius();
+        ctx.translate(this.x, this.y);
+        ctx.save();
+        ctx.rotate(this.spinAngle);
+        Bullet.drawSawBody(ctx, r, this.color);
+        ctx.restore();
+        Bullet.drawSawFace(ctx, r);
+    }
+
+    /** Pop-in radius: grows with a small overshoot during the first 0.25 s */
+    sawRadius() {
         const pop = Math.min(1, this.age / 0.25);
         const c1 = 1.70158;
         const back = 1 + (c1 + 1) * Math.pow(pop - 1, 3) + c1 * Math.pow(pop - 1, 2);
-        const r = this.radius * (0.4 + 0.6 * back);
-        const teeth = 6;           // Az ama tombul dişler: küçük boyutta da renk okunur
+        return this.radius * (0.4 + 0.6 * back);
+    }
+
+    /** Spinning toothed body, white hub and a notch that shows the rotation (origin-centred) */
+    static drawSawBody(ctx, r, color) {
+        const teeth = 6;           // Few, chunky teeth: colour stays readable at small sizes
         const outer = r * 1.55;
         const inner = r * 1.08;
         const step = (Math.PI * 2) / teeth;
-
-        ctx.translate(this.x, this.y);
-
-        // Dönen dişli gövde
-        ctx.save();
-        ctx.rotate(this.spinAngle);
         ctx.beginPath();
         for (let i = 0; i < teeth; i++) {
             const a = i * step;
@@ -370,12 +379,12 @@ export class Bullet {
             ctx.arc(0, 0, inner, a + step * 0.8, a + step, false);
         }
         ctx.closePath();
-        ctx.fillStyle = this.color;
+        ctx.fillStyle = color;
         ctx.fill();
-        ctx.lineWidth = THEME.BULLET_OUTLINE * 0.75; // İnce kontur dişlerin rengini boğmasın
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = THEME.BULLET_OUTLINE * 0.75; // Thin outline so it does not drown the colour
         ctx.stroke();
 
-        // Beyaz göbek ve dönmeyi gösteren minik çentik
         ctx.beginPath();
         ctx.arc(0, 0, r * 0.68, 0, Math.PI * 2);
         ctx.fillStyle = THEME.WHITE;
@@ -384,11 +393,12 @@ export class Bullet {
         ctx.stroke();
         ctx.beginPath();
         ctx.arc(r * 0.48, 0, r * 0.1, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
+        ctx.fillStyle = color;
         ctx.fill();
-        ctx.restore();
+    }
 
-        // Dik duran tatlı yüz
+    /** Upright cute face (does not spin) */
+    static drawSawFace(ctx, r) {
         ctx.fillStyle = THEME.INK;
         for (const side of [-1, 1]) {
             ctx.beginPath();
@@ -407,8 +417,13 @@ export class Bullet {
      * Spiral fazı için lavanta donut
      */
     /** Sakız balonu: yarı saydam pembe balon; patlamaya yaklaştıkça titreyerek şişer */
+    /** Bubble swell factor: trembles and grows as it gets close to popping */
+    bubbleWobble() {
+        return this.age > 1.0 ? 1 + Math.sin(this.age * 22) * 0.07 + (this.age - 1.0) * 0.12 : 1;
+    }
+
     renderBubble(ctx) {
-        const wob = this.age > 1.0 ? 1 + Math.sin(this.age * 22) * 0.07 + (this.age - 1.0) * 0.12 : 1;
+        const wob = this.bubbleWobble();
         const r = this.radius * wob;
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
