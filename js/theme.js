@@ -10,7 +10,7 @@ export const THEME = {
     WHITE: '#FFFFFF',
     INK: '#4B2A6E',         // Kontur ve metin: koyu erik moru
     INK_SOFT: 'rgba(75, 42, 110, 0.55)',
-    MUTED: '#9C86B8',       // İkincil metin
+    MUTED: '#6F5A8C',       // İkincil metin (zeminde 5.6:1)
     PURPLE: '#8E5BE8',
     PURPLE_DEEP: '#6A3FC8',
     LAVENDER: '#CDB8FF',
@@ -18,6 +18,8 @@ export const THEME = {
     PINK_DEEP: '#F0468F',
     PINK_SOFT: '#FFC4DE',
     SHADOW: 'rgba(75, 42, 110, 0.16)',
+    TEXT_ACCENT: '#C2185B',  // Küçük pembe metinler (zeminde 5.5:1); dolgular için PINK/PINK_DEEP
+    TEXT_PRIMARY: '#6A3FC8', // Küçük mor metinler ve beyaz yazılı küçük mor dolgular
     SPRINKLES: ['#FF6FAE', '#8E5BE8', '#CDB8FF', '#FFC4DE', '#FFFFFF'],
 
     // Ayarlarla değişen görsel bayraklar

@@ -190,7 +190,10 @@ export class Game {
                     return;
                 }
                 const action = this.ui.getMenuAction(coords.x, coords.y);
-                if (!action || action.type === 'play') {
+                this.ui.keyboardFocus = false;
+                if (!action) {
+                    // K1: boş alana tıklamak oyunu başlatmaz
+                } else if (action.type === 'play') {
                     this.startGame();
                 } else if (action.type === 'mode') {
                     this.selectMode(action.id);
@@ -202,7 +205,8 @@ export class Game {
             } else if (this.state === GAME_STATE.PAUSED) {
                 this.resumeGame();
             } else if (this.state === GAME_STATE.DEAD) {
-                if (this.deathScreenReady()) {
+                // K6: sadece "tekrar oyna" butonu yeniden başlatır
+                if (this.deathScreenReady() && this.ui.hitsRetry(coords.x, coords.y)) {
                     this.restartGame();
                 }
             }
@@ -237,6 +241,22 @@ export class Game {
                 return;
             }
             if (this.state === GAME_STATE.MENU) {
+                // K4: ↑ ↓ / Tab ile odak, Enter / Space ile odaktaki öğeyi seç
+                if (e.code === 'ArrowDown' || e.code === 'KeyS' || (e.code === 'Tab' && !e.shiftKey)) {
+                    e.preventDefault(); this.ui.moveFocus(1); return;
+                }
+                if (e.code === 'ArrowUp' || e.code === 'KeyW' || (e.code === 'Tab' && e.shiftKey)) {
+                    e.preventDefault(); this.ui.moveFocus(-1); return;
+                }
+                const focused = this.ui.focusedItem;
+                if ((e.code === 'Enter' || e.code === 'Space') && focused) {
+                    e.preventDefault();
+                    if (focused === 'play') this.startGame();
+                    else if (focused === 'settings') this.openSettings();
+                    else if (focused === 'skin') this.cycleSkin(1);
+                    else this.selectMode(focused);
+                    return;
+                }
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') { this.cycleSkin(-1); return; }
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.cycleSkin(1); return; }
                 if (e.code === 'KeyO') { this.openSettings(); return; }
@@ -492,6 +512,8 @@ export class Game {
     triggerDeath() {
         if (this.state !== GAME_STATE.PLAYING) return;
 
+        // K5: ölüm nedenini kaydet (kenar / boss / mermi)
+        this.deathCause = CollisionSystem.deathCause(this.player, this.waveManager.boss);
         this.state = GAME_STATE.DEAD;
         this.touchControls.reset();
         this.player.setMoveInput(0, 0);
@@ -705,6 +727,8 @@ export class Game {
         } else if (this.state === GAME_STATE.DEAD) {
             this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player, {
                 reveal: this.deathReveal(),
+                cause: this.deathCause,
+                bossTitle: this.waveManager.boss ? this.waveManager.boss.title : '',
                 score: this.score,
                 waves: this.waveManager,
                 unlocked: this.lastUnlocked
@@ -749,7 +773,7 @@ export class Game {
         ctx.globalAlpha = 0.6;
         ctx.font = '700 9px "Fredoka", system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillStyle = THEME.PURPLE;
+        ctx.fillStyle = THEME.TEXT_PRIMARY;
         ctx.fillText(t('hud.ghost'), pos.x, pos.y - 16);
         ctx.restore();
     }

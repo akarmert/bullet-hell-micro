@@ -1,0 +1,10 @@
+/* Önizleme: sadece yeni sürüme uygulanan CSS farkları */
+
+/* "Yatay çevir" ipucu yalnızca dokunmatik cihazlarda; masaüstünde dar pencerede gereksiz */
+@media (orientation: portrait) and (any-pointer: fine) { #rotateHint { display: none; } }
+
+/* Pembe dolgulu HTML butonda koyu metin (beyaz: 2.58:1 → koyu: 4.39:1) */
+#shareButton { color: var(--ink); }
+
+/* Dokunmatik kontroller boştayken daha görünür (0.55 → 0.7) */
+#joystick, #dashButton { opacity: .7; }

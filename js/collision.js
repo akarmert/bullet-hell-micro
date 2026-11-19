@@ -114,6 +114,17 @@ export class CollisionSystem {
     }
 
     /**
+     * Ölüm nedeni: 'wall' (arena kenarı), 'boss' (boss gövdesi) veya 'bullet'
+     * @param {Player} player
+     * @param {Boss|null} boss
+     */
+    static deathCause(player, boss = null) {
+        if (this.checkPlayerArena(player)) return 'wall';
+        if (boss && boss.alive && boss.touches(player)) return 'boss';
+        return 'bullet';
+    }
+
+    /**
      * Geriye dönük uyumluluk için eski metod
      */
     static checkPlayerBullets(player, bullets) {

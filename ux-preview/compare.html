@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UX Karşılaştırma – Eski / Yeni</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap');
+  :root { --bg:#FFF6FA; --ink:#4B2A6E; --muted:#6F5A8C; --purple:#8E5BE8; --pink:#FF6FAE; --lav:#CDB8FF; --white:#fff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: 'Fredoka', system-ui, sans-serif; }
+  header { padding: 14px 16px 8px; }
+  h1 { margin: 0 0 4px; font-size: 20px; }
+  .sub { margin: 0; color: var(--muted); font-size: 14px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 16px; }
+  .bar .label { font-weight: 700; font-size: 13px; margin-right: 4px; }
+  button.chip { font: 600 14px 'Fredoka', sans-serif; color: var(--ink); background: var(--white); border: 2px solid var(--ink); border-radius: 999px; padding: 7px 14px; min-height: 40px; box-shadow: 0 3px 0 var(--ink); cursor: pointer; }
+  button.chip[aria-pressed="true"] { background: var(--lav); }
+  button.chip:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+  button.chip:focus-visible { outline: 3px solid #C2185B; outline-offset: 3px; }
+  label.toggle { display: inline-flex; gap: 6px; align-items: center; font-weight: 600; font-size: 14px; min-height: 40px; }
+  .panes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 8px 16px 16px; }
+  @media (max-width: 800px) { .panes { grid-template-columns: 1fr; } }
+  .pane h2 { margin: 0 0 6px; font-size: 16px; display: flex; gap: 8px; align-items: center; }
+  .tag { font-size: 12px; padding: 2px 10px; border-radius: 999px; border: 2px solid var(--ink); background: var(--white); }
+  .tag.new { background: var(--lav); }
+  .frame { position: relative; overflow: hidden; border: 2.5px solid var(--ink); border-radius: 14px; box-shadow: 0 5px 0 var(--ink); background: var(--white); }
+  .frame iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; }
+  .notes { margin: 0 16px 24px; padding: 14px 18px; background: var(--white); border: 2.5px solid var(--ink); border-radius: 18px; box-shadow: 0 5px 0 var(--ink); }
+  .notes h3 { margin: 0 0 8px; font-size: 16px; }
+  .notes table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  .notes th, .notes td { text-align: left; vertical-align: top; padding: 6px 8px; border-top: 1px solid #eadff3; }
+  .notes th { color: var(--muted); font-weight: 600; width: 120px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>UX Karşılaştırma — Eski (mevcut) ↔ Yeni (öneri)</h1>
+  <p class="sub">İki taraf da gerçek oyun kodunu çalıştırır; yeni taraf yalnızca bu klasördeki yamalarla farklıdır. Kayıtlarına hiçbir şey yazılmaz. Pencerelerin içinde oynayabilirsin.</p>
+</header>
+
+<div class="bar" role="group" aria-label="Cihaz">
+  <span class="label">Cihaz:</span>
+  <button class="chip" data-device="phone" aria-pressed="true">Telefon dikey 390×844</button>
+  <button class="chip" data-device="phoneLand" aria-pressed="false">Telefon yatay 844×390</button>
+  <button class="chip" data-device="desktop" aria-pressed="false">Masaüstü 1280×720</button>
+  <label class="toggle"><input type="checkbox" id="touch"> dokunmatik gibi göster</label>
+</div>
+<div class="bar" role="group" aria-label="Senaryo">
+  <span class="label">Senaryo:</span>
+  <button class="chip" data-scene="menu" aria-pressed="true">Ana menü</button>
+  <button class="chip" data-scene="settings" aria-pressed="false">Ayarlar</button>
+  <button class="chip" data-scene="play" aria-pressed="false">Oyun içi (HUD)</button>
+  <button class="chip" data-scene="pause" aria-pressed="false">Duraklatma</button>
+  <button class="chip" data-scene="deadBullet" aria-pressed="false">Ölüm: şeker</button>
+  <button class="chip" data-scene="deadWall" aria-pressed="false">Ölüm: kenar</button>
+</div>
+
+<div class="panes">
+  <section class="pane">
+    <h2><span class="tag">ESKİ</span> mevcut uygulama</h2>
+    <div class="frame" id="oldFrame"><iframe id="old" src="old.html" title="Eski tasarım"></iframe></div>
+  </section>
+  <section class="pane">
+    <h2><span class="tag new">YENİ</span> önerilen tasarım</h2>
+    <div class="frame" id="newFrame"><iframe id="new" src="new.html" title="Yeni tasarım"></iframe></div>
+  </section>
+</div>
+
+<section class="notes" aria-live="polite">
+  <h3 id="notesTitle"></h3>
+  <table><tbody id="notes"></tbody></table>
+  <p class="hint">İpucu: Yeni menüde ↑ ↓ / Tab ile gezinip Enter ile seçebilirsin; fareyle butonların üstüne gel. Eski menüde boş bir yere tıklamak oyunu başlatır, yenisinde başlatmaz.</p>
+</section>
+
+<script>
+const DEVICES = { phone: [390, 844], phoneLand: [844, 390], desktop: [1280, 720] };
+const NOTES = {
+  menu: {
+    title: 'Ana menü — K1, K2, K3, K4, D1, D2',
+    rows: [
+      ['Değişiklikler', 'Ekran oranına göre üç yerleşimden en büyüğü seçilir (kare / geniş iki sütun / dikey). Boş alana tıklamak oyunu başlatmaz. İkincil metin koyulaştı, pembe kartta koyu yazı ve ✓ işareti. ↑ ↓ / Tab ile odak çerçevesi. Fareyle üstüne gelince kalkma + el imleci. Cihaza göre ipucu metni; oynanmamış modlarda "henüz oynanmadı".'],
+      ['Gerekçe', 'Telefon dikeyde eski menü 600×600 alanı ekrana sığdırmak için %65’e küçülüyor: 11 px yazılar ~7 CSS px, ok butonları ~26 px, ayarlar butonu ~70×22 px oluyor. #9C86B8 ikincil metin 3.04:1, pembe üstünde beyaz 2.58:1 (WCAG küçük metin için 4.5:1 ister). Mod kartları klavye/gamepad ile seçilemiyor.'],
+      ['Kullanıcıya faydası', 'Yeni başlayanlar ve ileri yaştakiler için okunur metin; çocuklar için yanlışlıkla oyun başlamaz; klavye kullananlar ve motor güçlüğü olanlar için tüm menü erişilebilir; dokunmatikte anlamsız tuş ipuçları kalkar.']
+    ]
+  },
+  settings: {
+    title: 'Ayarlar — D3, K3',
+    rows: [
+      ['Değişiklikler', 'Panel kendi ölçeğiyle ekranın %94’üne kadar büyür; ikincil metin daha koyu.'],
+      ['Gerekçe', 'Eski panel menü ölçeğini kullandığı için telefonda satırlar ~27 px yükseklikte; 44 px dokunma hedefinin altında.'],
+      ['Kullanıcıya faydası', 'Ses, sarsıntı, dil gibi erişilebilirlik ayarları telefonda rahatça değiştirilebilir.']
+    ]
+  },
+  play: {
+    title: 'Oyun içi HUD — D4, K3',
+    rows: [
+      ['Değişiklikler', 'Tuval ekrana küçük ölçekte çiziliyorsa (ör. telefon yatay) HUD otomatik büyür. Skor hapında pembe üstünde koyu yazı.'],
+      ['Gerekçe', 'Telefon yatayda 1 mantıksal px ≈ 0.65 CSS px: 11 px HUD yazıları ~7 px. Dikey telefonda zaten büyük, değişmez.'],
+      ['Kullanıcıya faydası', 'Oynarken skor, kalkan ve yetenek durumu bir bakışta okunur.']
+    ]
+  },
+  pause: {
+    title: 'Duraklatma — (bilinçli olarak değişmedi)',
+    rows: [
+      ['Değişiklikler', 'Yok. Kart oyun alanının mantıksal ölçeğinde çiziliyor ve dikey telefonda yeterince büyük.'],
+      ['Not', 'Telefon yatayda bu kart da küçük kalıyor; uygulama aşamasında HUD ile aynı ölçek kuralı (D4) duraklatma kartına da uygulanmalı.'],
+      ['Kullanıcıya faydası', '—']
+    ]
+  },
+  deadBullet: {
+    title: 'Oyun bitti — K5, K6, D2, K3',
+    rows: [
+      ['Değişiklikler', 'Ölüm nedeni hapı. Açık "↻ TEKRAR OYNA" butonu; kartın dışına/yanına tıklamak artık yeniden başlatmaz. Kart ekran boyutuna göre ölçeklenir. Dokunmatikte klavye ipucu gizlenir. Küçük pembe/mor metinler koyulaştı.'],
+      ['Gerekçe', 'Eskide ekranın her yerine tıklamak 0.65 sn sonra yeni turu başlatıyor; oyun sırasında hızlı tıklayan oyuncu sonucunu göremeden yeni tura giriyor. Ölüm nedeni yazmıyor.'],
+      ['Kullanıcıya faydası', 'Oyuncu ne olduğunu anlar, sonucunu okur, bilinçli olarak tekrar başlar; çocuklar yanlışlıkla atlamaz.']
+    ]
+  },
+  deadWall: {
+    title: 'Oyun bitti (kenar) — K5',
+    rows: [
+      ['Değişiklikler', '"🧱 kenara çarptın" nedeni gösterilir.'],
+      ['Gerekçe', 'Kenara değince ölmek bu oyuna özgü ve sezgisel olmayan bir kural; ilk oyuncular mermiye değmedikleri hâlde neden öldüklerini anlamıyor (kod incelemesi: neden hiçbir yerde gösterilmiyor).'],
+      ['Kullanıcıya faydası', 'Kural ilk ölümde öğrenilir; "haksızlık" hissi azalır.']
+    ]
+  }
+};
+
+let device = 'phone';
+let scene = 'menu';
+const frames = { old: document.getElementById('old'), new: document.getElementById('new') };
+
+function layout() {
+  const [w, h] = DEVICES[device];
+  const panes = document.querySelector('.panes');
+  const twoCols = getComputedStyle(panes).gridTemplateColumns.split(' ').length > 1;
+  const avail = (panes.clientWidth - 32 - (twoCols ? 16 : 0)) / (twoCols ? 2 : 1);
+  const maxH = Math.max(320, window.innerHeight - 260);
+  const s = Math.min(1, avail / w, maxH / h);
+  for (const key of ['old', 'new']) {
+    const f = frames[key];
+    f.width = w; f.height = h;
+    f.style.transform = `scale(${s})`;
+    f.parentElement.style.width = (w * s) + 'px';
+    f.parentElement.style.height = (h * s) + 'px';
+  }
+}
+
+async function ready(f) {
+  for (let i = 0; i < 200; i++) {
+    const win = f.contentWindow;
+    if (win && win.game && win.uxScenario) return win;
+    await new Promise(r => setTimeout(r, 25));
+  }
+  return null;
+}
+
+async function run() {
+  const touch = document.getElementById('touch').checked;
+  await new Promise(r => setTimeout(r, 120)); // yeniden boyutlanma otursun
+  await Promise.all(Object.values(frames).map(async f => { const w = await ready(f); if (w) await w.uxScenario(scene, { touch }); }));
+  const n = NOTES[scene];
+  document.getElementById('notesTitle').textContent = n.title;
+  document.getElementById('notes').innerHTML = n.rows.map(([a, b]) => `<tr><th>${a}</th><td>${b}</td></tr>`).join('');
+}
+
+function press(group, attr, value) {
+  document.querySelectorAll(`[data-${attr}]`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === value)));
+}
+document.querySelectorAll('[data-device]').forEach(b => b.addEventListener('click', () => { device = b.dataset.device; press('d', 'device', device); layout(); run(); }));
+document.querySelectorAll('[data-scene]').forEach(b => b.addEventListener('click', () => { scene = b.dataset.scene; press('s', 'scene', scene); run(); }));
+document.getElementById('touch').addEventListener('change', run);
+window.addEventListener('resize', layout);
+layout();
+run();
+</script>
+</body>
+</html>

@@ -670,7 +670,7 @@ export class Boss {
         ctx.save();
         ctx.font = font(11, 700);
         ctx.textAlign = 'left';
-        ctx.fillStyle = THEME.PINK_DEEP;
+        ctx.fillStyle = THEME.TEXT_ACCENT;
         ctx.fillText(`${upper(this.title)} · ${this.stageName}`, x, y - 6);
         ctx.textAlign = 'right';
         ctx.fillStyle = THEME.MUTED;
