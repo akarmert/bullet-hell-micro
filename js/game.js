@@ -107,6 +107,9 @@ export class Game {
             this.score.onBossDefeat(boss.x, boss.y);
             const destroyed = this.bulletManager.destroyAll();
             this.effects.triggerBossDefeated(boss.x, boss.y, destroyed, boss.title);
+            // İkinci boss'a hazırlık: ilk zaferde ödül güçlendirmesi
+            const drop = GAME_CONFIG.BOSS_BREAK.DROP;
+            if (drop && this.waveManager.bossKills === 1) this.pickupManager.spawnAt(drop, boss.x, boss.y + 40);
         };
 
         this.touchControls = new TouchControls(() => {

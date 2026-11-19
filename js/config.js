@@ -132,23 +132,24 @@ export const GAME_CONFIG = {
         NAME: 'BOSS',
         KIND: 'cloud',
         TITLE: 'Pamuk Bulut',
-        DURATION: 20000,
+        DURATION: 24000,      // Jöle Kral'dan uzun dayanır
         MAX_HP: 100,
-        GRAZE_DAMAGE: 1.5,
-        RAM_DAMAGE: 7,
+        GRAZE_DAMAGE: 1.2,
+        RAM_DAMAGE: 6,
         RAM_REACH: 16,
         RADIUS: 30,
         HOVER_Y: 175,
         ENTRY_TIME: 1800,
         DEATH_TIME: 900,
-        STAGE_COOLDOWN: 800,
+        STAGE_COOLDOWN: 600,
         BULLET_RADIUS: 4,
         COLOR: '#B79BFF',
         GLOW: 'rgba(183, 155, 255, 0.25)',
         STAGES: [
-            { NAME: 'YAĞMUR', PATTERN: 'rain', INTERVAL: 95, SPEED: 165, GAP: 120 },
-            { NAME: 'DUVAR', PATTERN: 'walls', INTERVAL: 2300, SPEED: 135, GAP: 115, SPACING: 15, TELEGRAPH_TIME: 650 },
-            { NAME: 'GİRDAP', PATTERN: 'pull', PULL: 60, INTERVAL: 560, COUNT: 12, SPEED: 115, ROT_SPEED: 1.3 }
+            { NAME: 'YAĞMUR', PATTERN: 'rain', INTERVAL: 70, SPEED: 195, GAP: 100 },
+            { NAME: 'DUVAR', PATTERN: 'walls', INTERVAL: 1750, SPEED: 165, GAP: 100, SPACING: 15, TELEGRAPH_TIME: 550,
+              DRIZZLE: { INTERVAL: 300, SPEED: 150, GAP: 100 } },   // Duvarlar arasında hafif yağmur
+            { NAME: 'GİRDAP', PATTERN: 'pull', PULL: 80, INTERVAL: 440, COUNT: 14, SPEED: 130, ROT_SPEED: 1.5 }
         ]
     },
 
@@ -157,6 +158,17 @@ export const GAME_CONFIG = {
     BOSS_INTERVAL: 15000,     // ms: bir boss yenildikten sonra sıradakine kadar kaos arası
     BOSS_LEVEL_SPEED: 0.12,   // Her yeni turda mermi hızı +%12
     BOSS_LEVEL_DENSITY: 0.1,  // Her yeni turda atış sıklığı +%10
+
+    // İlk boss yenildikten sonra, ikinci boss gelene kadarki "nefes" molası
+    BOSS_BREAK: {
+        CALM_MS: 2500,        // Zaferden sonra hiç mermi gelmeyen süre
+        INTERVAL_MULT: 1.8,   // Kaos atışları %80 daha seyrek
+        SPEED_MULT: 0.8,      // %20 daha yavaş
+        PROGRESS_CAP: 0.4,    // Kaos rampası en fazla %40'a çıkar
+        BOUNCES: 1,           // Çubuklar 2 yerine 1 kez seker
+        AIM_INTERVAL: 2200,   // Nişanlı atış 1 sn yerine 2.2 sn'de bir
+        DROP: 'shield'        // Jöle Kral yenildiği yere kalkan düşürür
+    },
 
     // --- EFEKTLER ---
     EFFECTS: {

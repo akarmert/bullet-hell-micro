@@ -196,3 +196,77 @@ test('Pamuk Bulut: yağmurda güvenli koridor, duvarda tek geçit, girdapta çek
     boss.patternPull(C.STAGES[2], 0.5, 500, player);
     assert.equal(player.y, y);
 });
+
+// Kaos molasını ölçmek için: belli bir boss sayısında 10 sn içinde üretilen mermiler
+function chaosSample(bossKills, ms = 10000) {
+    const { bullets, waves } = bossWaves();
+    const player = new Player();
+    const spawned = [];
+    const orig = bullets.spawn.bind(bullets);
+    bullets.spawn = (p) => { spawned.push(p); return orig(p); };
+    const t0 = 60000;
+    waves.bossKills = bossKills;
+    waves.bossActive = false;
+    waves.bossDefeatedAt = t0;
+    waves.chaosStartMs = t0;
+    waves.nextBossAt = t0 + 999999;
+    waves.currentPhaseName = 'CHAOS';
+    for (let t = t0; t < t0 + ms; t += 16) {
+        waves.update(t, 0.016, player);
+    }
+    waves.updateTelegraphs(1000);
+    return { spawned, waves };
+}
+
+test('İlk boss sonrası mola: sakin başlangıç, daha az ve daha yavaş mermi, tek sekme', () => {
+    const K = GAME_CONFIG.BOSS_BREAK;
+    const calm = chaosSample(1, K.CALM_MS - 100);
+    assert.equal(calm.spawned.length, 0, 'zaferden sonraki ilk saniyelerde hiç mermi yok');
+    assert.equal(calm.waves.telegraphs.length, 0);
+
+    const relief = chaosSample(1).spawned;
+    const normal = chaosSample(2).spawned;
+    assert.ok(relief.length < normal.length * 0.5, `molada en az yarı yarıya az mermi (${relief.length} / ${normal.length})`);
+    const chaosOf = (list) => list.filter(b => b.type === 'chaos');
+    const avg = (list) => list.reduce((a, b) => a + b.speed, 0) / list.length;
+    assert.ok(avg(chaosOf(relief)) < avg(chaosOf(normal)) * 0.85, 'molada çubuklar daha yavaş');
+    assert.ok(chaosOf(relief).every(b => b.maxBounces === K.BOUNCES), 'molada tek sekme');
+    assert.ok(chaosOf(normal).every(b => b.maxBounces === GAME_CONFIG.PHASE_4.MAX_BOUNCES));
+});
+
+test('Pamuk Bulut eskisinden zor: daha uzun, daha yoğun yağmur, duvarlarda çisenti', () => {
+    const C = GAME_CONFIG.BOSS_CLOUD;
+    assert.ok(C.DURATION > B.DURATION, 'Jöle Kral\'dan uzun dayanır');
+    const { bullets, waves } = bossWaves();
+    const player = new Player();
+    waves.bossCount = 1;
+    run(waves, player, 30000, 30000 + C.ENTRY_TIME + 32);
+    const boss = waves.boss;
+    assert.equal(boss.kind, 'cloud');
+
+    // Yağmur: 3 sn'de eski ayarın (95 ms) belirgin üstünde damla
+    bullets.clear();
+    boss.timers.a = 0;
+    boss.patternRain(C.STAGES[0], 3000);
+    const oldExpected = (3000 / 95) * (1 - 120 / GAME_CONFIG.CANVAS.WIDTH);
+    assert.ok(bullets.count > oldExpected * 1.15, `yağmur daha yoğun (${bullets.count} > ${oldExpected.toFixed(0)})`);
+
+    // Duvar aşamasında duvar uyarısının yanında çisenti de yağar
+    bullets.clear();
+    waves.telegraphs.length = 0;
+    boss.timers.a = 0; boss.timers.b = 0;
+    boss.runPattern(C.STAGES[1], 1.5, 1500, player);
+    assert.ok(bullets.count > 0, 'çisenti damlaları');
+    assert.equal(waves.telegraphs.length, 0, 'ilk duvar henüz gelmedi');
+    boss.runPattern(C.STAGES[1], 0.4, 400, player);
+    assert.equal(waves.telegraphs.length, 1, 'duvar uyarısı');
+});
+
+test('Boss ödülü: güçlendirme istenen türde ve oynanabilir alanda düşer', async () => {
+    const { PickupManager } = await import('../js/pickup.js');
+    const pm = new PickupManager();
+    const p = pm.spawnAt('shield', -50, 20);
+    assert.equal(p.type, 'shield');
+    assert.ok(p.x >= 40 && p.y >= 160, 'kenar ve HUD dışında');
+    assert.equal(pm.spawnAt('yok', 100, 300), null);
+});

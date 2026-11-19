@@ -514,29 +514,43 @@ export class WaveManager {
     // ------------------------------------------------------------
     // FAZ 4: CHAOS & ENDLESS — Duvarlardan seken telegraflı lazer kapsüller
     // ------------------------------------------------------------
-    updateChaos(elapsedMs, dt, dtMs, player) {
-        const cfg = GAME_CONFIG.PHASE_4;
-        const chaosTime = elapsedMs - this.chaosStartMs;
-        const progress = Math.min(1, chaosTime / 20000);
+    /**
+     * İlk boss'tan sonraki, ikinci boss'a kadar süren kolaylaştırılmış mola mı?
+     */
+    isBreakRelief() {
+        return this.hasBoss() && this.bossKills === 1 && !this.bossActive;
+    }
 
-        const intervalMult = this.mode.getIntervalMultiplier(elapsedMs);
+    updateChaos(elapsedMs, dt, dtMs, player) {
+        const relief = this.isBreakRelief() ? GAME_CONFIG.BOSS_BREAK : null;
+        // Zaferden hemen sonra kısa bir nefes payı: hiç mermi yok
+        if (relief && this.bossDefeatedAt !== null && elapsedMs - this.bossDefeatedAt < relief.CALM_MS) return;
+
+        const base = GAME_CONFIG.PHASE_4;
+        const cfg = relief ? { ...base, MAX_BOUNCES: relief.BOUNCES } : base;
+        const chaosTime = elapsedMs - this.chaosStartMs;
+        let progress = Math.min(1, chaosTime / 20000);
+        if (relief) progress = Math.min(progress, relief.PROGRESS_CAP);
+
+        const modeInterval = this.mode.getIntervalMultiplier(elapsedMs);
+        const intervalMult = modeInterval * (relief ? relief.INTERVAL_MULT : 1);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.chaos += dtMs;
         while (this.timers.chaos >= currentInterval) {
             this.timers.chaos -= currentInterval;
-            this.spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs);
+            this.spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs, relief ? relief.SPEED_MULT : 1);
         }
 
         // Periyodik nişanlı mermi desteği
         this.timers.aim += dtMs;
-        if (this.timers.aim >= 1000 * intervalMult) {
+        if (this.timers.aim >= (relief ? relief.AIM_INTERVAL : 1000) * modeInterval) {
             this.timers.aim = 0;
             this.spawnAimedTelegraph(GAME_CONFIG.PHASE_3, player, elapsedMs);
         }
 
-        // ENDLESS Modu: Süre uzadıkça periyodik spiral dalgası da eklenir
-        if (this.mode.id === 'endless' && chaosTime > 5000) {
+        // ENDLESS Modu: Süre uzadıkça periyodik spiral dalgası da eklenir (molada yok)
+        if (!relief && this.mode.id === 'endless' && chaosTime > 5000) {
             this.spiralAngle += (GAME_CONFIG.PHASE_2.BASE_ROT_SPEED * 1.2) * dt;
             this.timers.spiral += dtMs;
             if (this.timers.spiral >= 1400 * intervalMult) {
@@ -546,7 +560,7 @@ export class WaveManager {
         }
     }
 
-    spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs = 0) {
+    spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs = 0, speedScale = 1) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
@@ -578,7 +592,7 @@ export class WaveManager {
         }
 
         const speedMult = this.mode.getSpeedMultiplier(elapsedMs);
-        const speed = (cfg.SPEED + progress * (cfg.MAX_SPEED - cfg.SPEED)) * speedMult;
+        const speed = (cfg.SPEED + progress * (cfg.MAX_SPEED - cfg.SPEED)) * speedMult * speedScale;
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
 

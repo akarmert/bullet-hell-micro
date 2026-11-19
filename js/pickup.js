@@ -145,6 +145,23 @@ export class PickupManager {
     /**
      * Rastgele güçlendirme tipi seçer ve arenaya yerleştirir
      */
+    /**
+     * Belirli bir güçlendirmeyi belirli bir yere bırakır (ör. boss ödülü)
+     * @param {string} typeId 'shield' | 'slowmo' | 'emp'
+     */
+    spawnAt(typeId, x, y) {
+        const typeConfig = Object.values(GAME_CONFIG.PICKUPS.TYPES).find(tc => tc.id === typeId);
+        if (!typeConfig) return null;
+        const margin = 40;
+        const pickup = new Pickup({
+            x: Math.max(margin, Math.min(GAME_CONFIG.CANVAS.WIDTH - margin, x)),
+            y: Math.max(160, Math.min(GAME_CONFIG.CANVAS.HEIGHT - margin, y)),
+            typeConfig
+        });
+        this.pickups.push(pickup);
+        return pickup;
+    }
+
     spawnRandom() {
         const types = Object.values(GAME_CONFIG.PICKUPS.TYPES);
         const selectedType = types[Math.floor(random() * types.length)];

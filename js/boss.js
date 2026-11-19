@@ -160,7 +160,9 @@ export class Boss {
             case 'fang': return this.patternFang(dtMs, player);
             case 'vortex': return this.patternVortex(dt, dtMs);
             case 'rain': return this.patternRain(stage, dtMs);
-            case 'walls': return this.patternWalls(stage, dtMs);
+            case 'walls':
+                if (stage.DRIZZLE) this.patternRain(stage.DRIZZLE, dtMs, 'b');
+                return this.patternWalls(stage, dtMs);
             case 'pull': return this.patternPull(stage, dt, dtMs, player);
             default: return undefined;
         }
@@ -332,13 +334,13 @@ export class Boss {
     }
 
     /** Pamuk Bulut 1 — YAĞMUR: tüm ekrana yağan damlalar, aralarında kayan güvenli koridor */
-    patternRain(s, dtMs) {
+    patternRain(s, dtMs, timer = 'a') {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         this.rainGap = w / 2 + Math.sin(this.age * 0.55) * w * 0.32;
         const interval = s.INTERVAL * this.intervalMult;
-        this.timers.a += dtMs;
-        while (this.timers.a >= interval) {
-            this.timers.a -= interval;
+        this.timers[timer] += dtMs;
+        while (this.timers[timer] >= interval) {
+            this.timers[timer] -= interval;
             const x = 12 + random() * (w - 24);
             if (Math.abs(x - this.rainGap) < s.GAP / 2) continue;
             const speed = s.SPEED * this.speedMult * (0.9 + random() * 0.25);
