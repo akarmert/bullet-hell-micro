@@ -19,7 +19,8 @@ const SETTINGS_LAYOUT = { x: 110, y: 104, w: 380, rowTop: 160, rowH: 42 };
 export const MENU_LAYOUTS = {
     square: {
         name: 'square', W: 600, H: 600,
-        settings: { x: 470, y: 14, w: 116, h: 40 },
+        settings: { x: 542, y: 12, w: 44, h: 44 },   // Sağ üst yuvarlak çark ("i"nin aynası)
+        candies: { x: 300, y: 21, size: 13 },          // Şeker bakiyesi: üstte ortada (başlığa değmez)
         info: { cx: 36, cy: 34, r: 22 },
         title: { x: 300, y: 72, size: 42 },
         pick: { x: 300, y: 108 },
@@ -34,7 +35,8 @@ export const MENU_LAYOUTS = {
     },
     wide: {
         name: 'wide', W: 920, H: 470,
-        settings: { x: 774, y: 12, w: 132, h: 54 },
+        settings: { x: 850, y: 12, w: 56, h: 56 },
+        candies: { x: 460, y: 40 },
         info: { cx: 42, cy: 40, r: 28 },
         title: { x: 250, y: 64, size: 44 },
         pick: { x: 250, y: 104 },
@@ -49,7 +51,8 @@ export const MENU_LAYOUTS = {
     },
     tall: {
         name: 'tall', W: 420, H: 790,
-        settings: { x: 286, y: 10, w: 124, h: 50 },
+        settings: { x: 359, y: 10, w: 50, h: 50 },
+        candies: { x: 210, y: 35 },
         info: { cx: 36, cy: 35, r: 25 },
         title: { x: 210, y: 104, size: 40 },
         pick: { x: 210, y: 152 },
@@ -409,17 +412,14 @@ export class UIManager {
         ctx.textBaseline = 'middle';
         ctx.lineJoin = 'round';
 
-        // Ayarlar butonu
+        // Ayarlar: "i" butonunun aynası, sağ üstte yuvarlak çark
         const sb = L.settings;
-        candyPanel(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2, THEME.SURFACE, { depth: 3, lineWidth: 2 });
-        ctx.font = font(15, 700);
-        ctx.fillStyle = THEME.TEXT;
-        ctx.fillText(t('menu.settings'), sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
+        UIManager.roundButton(ctx, sb.x + sb.w / 2, sb.y + sb.h / 2, sb.w / 2, '⚙');
         if (focus === 'settings') focusRing(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2);
 
-        // Şeker bakiyesi
+        // Şeker bakiyesi: üstte ortada
         if (this.progress) {
-            UIManager.pill(ctx, `🍬 ${formatScore(this.progress.candies)}`, sb.x - 10, sb.y + sb.h / 2, THEME.SURFACE, THEME.TEXT, 'right', 15);
+            UIManager.pill(ctx, `🍬 ${formatScore(this.progress.candies)}`, L.candies.x, L.candies.y, THEME.SURFACE, THEME.TEXT, 'center', L.candies.size || 15);
         }
 
         // Bilgi butonu (nasıl oynanır)

@@ -80,4 +80,7 @@ body.bar-idle #joystick, body.bar-idle #dashButton { visibility: hidden; }
 body.has-bar #menuButton, body.has-bar #shareButton { bottom: calc(var(--bar-h) / 2 - 22px + env(safe-area-inset-bottom, 0px)); }
 
 #rotateHint { display: none; position: absolute; top: calc(10px + var(--safe-top)); left: 50%; transform: translateX(-50%); padding: 4px 12px; text-align: center; font-size: 12px; font-weight: 600; color: var(--text); background: var(--glass-strong); border-radius: 999px; pointer-events: none; white-space: nowrap; }
-@media (orientation: portrait) { #rotateHint { display: block; } }
+/* Sadece gerçekten dikey (telefon) ekranlarda ve sadece oyun başlarken birkaç saniye (game.js showRotateHint) */
+@media (max-aspect-ratio: 4/5) { #rotateHint { display: block; opacity: 0; transition: opacity .6s ease; } }
+body.rotate-hint #rotateHint { opacity: 1; }
+body:not(.has-bar) #rotateHint { top: auto; bottom: calc(10px + var(--safe-bottom)); }

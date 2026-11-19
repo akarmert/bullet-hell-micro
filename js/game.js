@@ -592,6 +592,7 @@ export class Game {
 
     returnToMenu() {
         this.state = GAME_STATE.MENU;
+        this.hideRotateHint();
         this.ui.infoOpen = false;
         this.resumeCountdown = 0;
         this.touchControls.reset();
@@ -603,6 +604,7 @@ export class Game {
     startGame() {
         this.touchControls.reset();
         this.state = GAME_STATE.PLAYING;
+        this.showRotateHint();
         this.player.reset();
         this.bulletManager.clear();
         this.waveManager.setMode(this.currentMode);
@@ -639,6 +641,20 @@ export class Game {
 
     restartGame() {
         this.startGame();
+    }
+
+    /** "Cihazı çevir" ipucu: oyun başlarken görünür, birkaç saniye sonra söner (sadece dikey ekranda, CSS) */
+    showRotateHint(ms = 3500) {
+        if (typeof document === 'undefined') return;
+        document.body.classList.add('rotate-hint');
+        clearTimeout(this.rotateHintTimer);
+        this.rotateHintTimer = setTimeout(() => this.hideRotateHint(), ms);
+    }
+
+    hideRotateHint() {
+        if (typeof document === 'undefined') return;
+        clearTimeout(this.rotateHintTimer);
+        document.body.classList.remove('rotate-hint');
     }
 
     /**

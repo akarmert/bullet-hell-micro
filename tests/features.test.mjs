@@ -189,6 +189,8 @@ test('Dil: İngilizcede mod, boss, sayı ve tarih biçimi değişir; Türkçe b�
         assert.equal(t('missing.key', null, 'fallback'), 'fallback');
         setLang('tr');
         assert.equal(ModeRegistry.get('daily').label, 'GÜNLÜK');
+        assert.equal(ModeRegistry.get('classic').label, 'KLASİK');
+        assert.equal(ModeRegistry.get('hardcore').label, 'ZORLU');
         assert.equal(upper('jöle kral i'), 'JÖLE KRAL İ');
         assert.equal(dateLabel(new Date(2026, 10, 18)), '18 Kasım');
     } finally {
