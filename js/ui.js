@@ -20,6 +20,7 @@ export const MENU_LAYOUTS = {
     square: {
         name: 'square', W: 600, H: 600,
         settings: { x: 470, y: 14, w: 116, h: 40 },
+        info: { cx: 36, cy: 34, r: 22 },
         title: { x: 300, y: 72, size: 42 },
         pick: { x: 300, y: 108 },
         cards: [
@@ -28,13 +29,13 @@ export const MENU_LAYOUTS = {
             { id: 'daily', x: 90, y: 258, w: 420, h: 48, wide: true }
         ],
         desc: { x: 300, y: 334, maxW: 560 },
-        hints: { x: 300, y: 360, gap: 20, maxW: 580 },
         play: { x: 160, y: 396, w: 280, h: 68 },
         skin: { cx: 300, cy: 520, dx: 82, r: 24 }
     },
     wide: {
         name: 'wide', W: 920, H: 470,
         settings: { x: 774, y: 12, w: 132, h: 54 },
+        info: { cx: 42, cy: 40, r: 28 },
         title: { x: 250, y: 64, size: 44 },
         pick: { x: 250, y: 104 },
         cards: [
@@ -43,13 +44,13 @@ export const MENU_LAYOUTS = {
             { id: 'daily', x: 30, y: 264, w: 440, h: 56, wide: true }
         ],
         desc: { x: 250, y: 354, maxW: 450 },
-        hints: { x: 250, y: 384, gap: 21, maxW: 460 },
         play: { x: 540, y: 118, w: 300, h: 78 },
         skin: { cx: 690, cy: 290, dx: 104, r: 30 }
     },
     tall: {
         name: 'tall', W: 420, H: 790,
         settings: { x: 286, y: 10, w: 124, h: 50 },
+        info: { cx: 36, cy: 35, r: 25 },
         title: { x: 210, y: 104, size: 40 },
         pick: { x: 210, y: 152 },
         cards: [
@@ -58,7 +59,6 @@ export const MENU_LAYOUTS = {
             { id: 'daily', x: 10, y: 322, w: 400, h: 56, wide: true }
         ],
         desc: { x: 210, y: 404, maxW: 400 },
-        hints: { x: 210, y: 434, gap: 21, maxW: 404 },
         play: { x: 40, y: 530, w: 340, h: 78 },
         skin: { cx: 210, cy: 676, dx: 104, r: 28 }
     }
@@ -66,7 +66,7 @@ export const MENU_LAYOUTS = {
 const MAX_MENU_SCALE = 1.3;
 
 // K4: klavye odak sırası
-export const MENU_FOCUS_ORDER = ['classic', 'endless', 'hardcore', 'chaos', 'daily', 'play', 'skin', 'settings'];
+export const MENU_FOCUS_ORDER = ['info', 'classic', 'endless', 'hardcore', 'chaos', 'daily', 'play', 'skin', 'settings'];
 
 /**
  * Uzun ipucu metnini sıkıştırmadan " · " ayraçlarından bölerek satırlara dağıtır.
@@ -88,6 +88,24 @@ function drawWrapped(ctx, text, x, y, maxW, gap) {
     if (line) lines.push(line);
     lines.forEach((l, i) => ctx.fillText(l, x, y + i * gap, maxW));
     return lines.length;
+}
+
+/** Metni kelimelerden bölerek satırlara ayırır */
+function wrapWords(ctx, text, maxW) {
+    const words = text.split(' ');
+    const lines = [];
+    let line = '';
+    for (const word of words) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && ctx.measureText(next).width > maxW) {
+            lines.push(line);
+            line = word;
+        } else {
+            line = next;
+        }
+    }
+    if (line) lines.push(line);
+    return lines;
 }
 
 /** Kesikli odak çerçevesi */
@@ -246,6 +264,7 @@ export class UIManager {
         const inRect = (b) => x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
         for (const c of L.cards) if (inRect(c)) return { type: 'mode', id: c.id };
         if (inRect(L.settings)) return { type: 'settings' };
+        if (Math.hypot(x - L.info.cx, y - L.info.cy) <= L.info.r + 8) return { type: 'info' };
         if (inRect(L.play)) return { type: 'play' };
         const s = L.skin;
         if (Math.hypot(x - (s.cx - s.dx), y - s.cy) <= s.r + 10) return { type: 'skinPrev' };
@@ -284,8 +303,17 @@ export class UIManager {
             cy: this.safe.top + ah / 2,
             s,
             cw,
-            retry: { x: -rbw / 2, y: 122, w: rbw, h: 54 }
+            retry: { x: -rbw / 2, y: 122, w: rbw, h: 54 },
+            info: { cx: cw / 2 - 8, cy: -197, r: 20 }   // Kartın köşesine oturan rozet
         };
+    }
+
+    /** Sonuç kartındaki "i" butonuna mı dokunuldu? */
+    hitsDeadInfo(px, py) {
+        const L = this.getDeadLayout();
+        const x = (px - L.cx) / L.s;
+        const y = (py - L.cy) / L.s;
+        return Math.hypot(x - L.info.cx, y - L.info.cy) <= L.info.r + 8;
     }
 
     /** K6: sonuç ekranında nokta "tekrar oyna" butonunun üstünde mi? */
@@ -376,6 +404,10 @@ export class UIManager {
         ctx.fillText(t('menu.settings'), sb.x + sb.w / 2, sb.y + sb.h / 2 + 1);
         if (focus === 'settings') focusRing(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2);
 
+        // Bilgi butonu (nasıl oynanır)
+        UIManager.roundButton(ctx, L.info.cx, L.info.cy, L.info.r, 'i');
+        if (focus === 'info') focusRing(ctx, L.info.cx - L.info.r, L.info.cy - L.info.r, L.info.r * 2, L.info.r * 2, L.info.r);
+
         // Başlık
         const ti = L.title;
         const titleY = ti.y + Math.sin(now * 2) * 2;
@@ -436,8 +468,6 @@ export class UIManager {
         ctx.fillText(activeMode.description, L.desc.x, L.desc.y, L.desc.maxW);
         ctx.font = font(13, 600);
         ctx.fillStyle = THEME.MUTED;
-        const used = drawWrapped(ctx, t('menu.controls1'), L.hints.x, L.hints.y, L.hints.maxW, L.hints.gap);
-        drawWrapped(ctx, t('menu.controls2'), L.hints.x, L.hints.y + used * L.hints.gap, L.hints.maxW, L.hints.gap);
 
         // OYNA
         const pb = L.play;
@@ -457,6 +487,75 @@ export class UIManager {
         ctx.restore();
 
         if (this.settingsOpen) this.renderSettings(ctx);
+        if (this.infoOpen) this.renderInfo(ctx);
+    }
+
+    /**
+     * "Nasıl oynanır" paneli: cihaza göre kontroller, kurallar ve (masaüstünde) kısayollar
+     */
+    renderInfo(ctx) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const touch = !!this.touch;
+        const rows = [
+            ['🕹️', t('info.move.title'), t(touch ? 'info.move.touch' : 'info.move.mouse')],
+            ['✨', t('info.dash.title'), t(touch ? 'info.dash.touch' : 'info.dash.mouse')],
+            ['🍬', t('info.graze.title'), t('info.graze.text')],
+            ['🧱', t('info.edge.title'), t('info.edge.text')],
+            ['👑', t('info.boss.title'), t('info.boss.text')]
+        ];
+        if (!touch) rows.push(['⌨️', t('info.keys.title'), t('info.keys.text')]);
+
+        const aw = w - this.safe.left - this.safe.right;
+        const ah = h - this.safe.top - this.safe.bottom;
+        // Dar ekranda paneli küçültmek yerine daralt (yazı büyük kalsın)
+        let s = 1.15;
+        let PW = Math.min(400, aw * 0.94 / s);
+        if (PW < 300) { PW = 300; s = aw * 0.94 / PW; }
+        const textX = -PW / 2 + 64;
+        const textW = PW - 84;
+        // Satırları önce ölç (yükseklik metne göre)
+        ctx.save();
+        ctx.font = font(13, 500);
+        const wrapped = rows.map(([, , text]) => wrapWords(ctx, text, textW));
+        ctx.restore();
+        const rowHeights = wrapped.map(lines => 24 + lines.length * 18);
+        const PH = 74 + rowHeights.reduce((a, b) => a + b, 0) + 34;
+        s = Math.min(s, ah * 0.94 / PH);
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(255, 246, 250, 0.85)';
+        ctx.fillRect(0, 0, w, h);
+        ctx.translate(this.safe.left + aw / 2, this.safe.top + ah / 2);
+        ctx.scale(s, s);
+        candyPanel(ctx, -PW / 2, -PH / 2, PW, PH, 26, THEME.WHITE, { depth: 7, lineWidth: 2.5 });
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = font(26, 700);
+        ctx.fillStyle = THEME.PURPLE;
+        ctx.fillText(t('info.title'), 0, -PH / 2 + 36);
+
+        let y = -PH / 2 + 74;
+        rows.forEach(([icon, title, ], i) => {
+            ctx.textAlign = 'center';
+            ctx.font = font(20, 600);
+            ctx.fillText(icon, -PW / 2 + 34, y + 10);
+            ctx.textAlign = 'left';
+            ctx.font = font(15, 700);
+            ctx.fillStyle = THEME.INK;
+            ctx.fillText(title, textX, y + 8);
+            ctx.font = font(13, 500);
+            ctx.fillStyle = THEME.MUTED;
+            wrapped[i].forEach((line, j) => ctx.fillText(line, textX, y + 28 + j * 18, textW));
+            y += rowHeights[i];
+        });
+
+        ctx.textAlign = 'center';
+        ctx.font = font(12, 600);
+        ctx.fillStyle = THEME.TEXT_PRIMARY;
+        ctx.fillText(t(touch ? 'info.closeTouch' : 'info.close'), 0, PH / 2 - 20);
+        ctx.restore();
     }
 
     renderSkinPicker(ctx, time, L = this.layout, focused = false) {
@@ -836,10 +935,10 @@ export class UIManager {
         ctx.fillStyle = THEME.WHITE;
         ctx.fillText(t('dead.retryBtn'), 0, rb.y + rb.h / 2 + 1, rb.w - 20);
 
-        ctx.font = font(13, 600);
-        ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(t('dead.menu'), 0, 194, cw - 24);
+        // Bilgi butonu (kartın sağ üst köşesi)
+        UIManager.roundButton(ctx, D.info.cx, D.info.cy, D.info.r, 'i');
 
         ctx.restore();
+        if (this.infoOpen) this.renderInfo(ctx);
     }
 }

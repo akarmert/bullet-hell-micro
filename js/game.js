@@ -183,6 +183,12 @@ export class Game {
 
             const coords = getCanvasCoords(e.clientX, e.clientY);
 
+            // Bilgi paneli açıksa herhangi bir dokunuş kapatır
+            if (this.ui.infoOpen) {
+                this.ui.infoOpen = false;
+                return;
+            }
+
             if (this.state === GAME_STATE.MENU) {
                 if (this.ui.settingsOpen) {
                     const action = this.ui.getSettingsAction(coords.x, coords.y);
@@ -202,6 +208,8 @@ export class Game {
                     this.selectMode(action.id);
                 } else if (action.type === 'settings') {
                     this.openSettings();
+                } else if (action.type === 'info') {
+                    this.openInfo();
                 } else if (action.type === 'skinPrev' || action.type === 'skinNext') {
                     this.cycleSkin(action.type === 'skinNext' ? 1 : -1);
                 }
@@ -209,9 +217,9 @@ export class Game {
                 this.resumeGame();
             } else if (this.state === GAME_STATE.DEAD) {
                 // K6: sadece "tekrar oyna" butonu yeniden başlatır
-                if (this.deathScreenReady() && this.ui.hitsRetry(coords.x, coords.y)) {
-                    this.restartGame();
-                }
+                if (!this.deathScreenReady()) return;
+                if (this.ui.hitsDeadInfo(coords.x, coords.y)) this.openInfo();
+                else if (this.ui.hitsRetry(coords.x, coords.y)) this.restartGame();
             }
         });
 
@@ -219,6 +227,13 @@ export class Game {
         window.addEventListener('keydown', (e) => {
             this.effects.initAudio();
             this.keys[e.code] = true;
+
+            // Bilgi paneli açıkken ESC / Enter / Space / I kapatır, diğer tuşlar yutulur
+            if (this.ui.infoOpen) {
+                if (!e.repeat && ['Escape', 'Enter', 'Space', 'KeyI'].includes(e.code)) this.ui.infoOpen = false;
+                e.preventDefault();
+                return;
+            }
 
             // Duraklatma: P / ESC oynarken durdurur, duraklatılmışken devam ettirir
             if ((e.code === 'KeyP' || e.code === 'Escape') && !e.repeat) {
@@ -256,6 +271,7 @@ export class Game {
                     e.preventDefault();
                     if (focused === 'play') this.startGame();
                     else if (focused === 'settings') this.openSettings();
+                    else if (focused === 'info') this.openInfo();
                     else if (focused === 'skin') this.cycleSkin(1);
                     else this.selectMode(focused);
                     return;
@@ -263,6 +279,7 @@ export class Game {
                 if (e.code === 'ArrowLeft' || e.code === 'KeyA') { this.cycleSkin(-1); return; }
                 if (e.code === 'ArrowRight' || e.code === 'KeyD') { this.cycleSkin(1); return; }
                 if (e.code === 'KeyO') { this.openSettings(); return; }
+                if (e.code === 'KeyI') { this.openInfo(); return; }
             }
 
             // Space veya Enter
@@ -294,6 +311,8 @@ export class Game {
                 this.effects.triggerBanner(isSfxOn ? t('banner.sfxOn') : t('banner.sfxOff'), THEME.LAVENDER);
             } else if (e.code === 'KeyC' && this.state === GAME_STATE.DEAD) {
                 this.shareResult();
+            } else if (e.code === 'KeyI' && this.state === GAME_STATE.DEAD) {
+                this.openInfo();
             } else if (e.code === 'KeyM' || e.code === 'Escape') {
                 // Mod değiştirmek veya ana menüye dönmek için
                 if (this.state === GAME_STATE.DEAD) {
@@ -311,6 +330,13 @@ export class Game {
         this.currentMode = ModeRegistry.get(id);
         this.ui.setMode(this.currentMode);
         this.waveManager.setMode(this.currentMode);
+        this.effects.sound.playPhase();
+    }
+
+    /** "Nasıl oynanır" paneli (menüde ve sonuç ekranında) */
+    openInfo() {
+        this.ui.settingsOpen = false;
+        this.ui.infoOpen = true;
         this.effects.sound.playPhase();
     }
 
@@ -465,6 +491,7 @@ export class Game {
 
     returnToMenu() {
         this.state = GAME_STATE.MENU;
+        this.ui.infoOpen = false;
         this.resumeCountdown = 0;
         this.touchControls.reset();
         this.bulletManager.clear();
@@ -494,6 +521,7 @@ export class Game {
         this.currentHint = null;
         this.lastUnlocked = [];
         this.ui.settingsOpen = false;
+        this.ui.infoOpen = false;
         this.player.skin = this.progress.skin;
 
         // Hayalet: bu modun en iyi turu
@@ -564,6 +592,7 @@ export class Game {
         const showBar = this.touchControls.touchDevice && barStates.includes(this.state);
         this.touchControls.update(showBar, this.state === GAME_STATE.PLAYING, this.player);
         this.syncControlBar(showBar);
+        this.ui.touch = this.touchControls.touchDevice;
         const deadReady = this.state === GAME_STATE.DEAD && this.deathScreenReady();
         this.menuButton.hidden = !(deadReady || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
         this.shareButton.hidden = !deadReady;

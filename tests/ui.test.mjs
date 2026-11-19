@@ -56,17 +56,19 @@ test('K1: menüde boş alan hiçbir eylem döndürmez; butonlar doğru eşlenir'
 test('K4: klavye odağı tüm menü öğelerinde döner', () => {
     const ui = new UIManager();
     assert.equal(ui.focusedItem, null);
+    assert.equal(ui.moveFocus(1), 'info', 'sol üstteki bilgi butonu ilk sırada');
     assert.equal(ui.moveFocus(1), 'classic');
-    for (let i = 1; i < MENU_FOCUS_ORDER.length; i++) ui.moveFocus(1);
+    for (let i = 2; i < MENU_FOCUS_ORDER.length; i++) ui.moveFocus(1);
     assert.equal(ui.focusedItem, 'settings');
-    assert.equal(ui.moveFocus(1), 'classic', 'sondan başa döner');
+    assert.equal(ui.moveFocus(1), 'info', 'sondan başa döner');
     assert.equal(ui.moveFocus(-1), 'settings', 'geri gider');
     const fresh = new UIManager();
     assert.equal(fresh.moveFocus(-1), 'settings', 'ilk geri tuşu sondan başlar');
     // Her yerleşimde odak sırasındaki tüm kart kimlikleri var
     for (const L of Object.values(MENU_LAYOUTS)) {
         const ids = L.cards.map(c => c.id);
-        for (const id of MENU_FOCUS_ORDER.slice(0, 5)) assert.ok(ids.includes(id), `${L.name}: ${id}`);
+        for (const id of MENU_FOCUS_ORDER.slice(1, 6)) assert.ok(ids.includes(id), `${L.name}: ${id}`);
+        assert.ok(L.info && L.info.r > 0, `${L.name}: bilgi butonu`);
     }
 });
 
@@ -113,4 +115,23 @@ test('K3: küçük metin renkleri zeminde ≥ 4.5:1 kontrast verir', () => {
     }
     assert.ok(ratio(THEME.WHITE, THEME.TEXT_PRIMARY) >= 4.5, 'beyaz yazı koyu mor dolguda');
     assert.ok(ratio(THEME.INK, THEME.PINK) >= 4.3, 'koyu yazı pembe dolguda');
+});
+
+test('Bilgi ("i") butonları: menüde ve sonuç kartında dokunulabilir, ≥ 44 CSS px', () => {
+    const ui = new UIManager();
+    for (const [w, cssPerLogical] of [[PHONE_PORTRAIT, 844 / 600], [PHONE_LANDSCAPE, 390 / 600], [DESKTOP, 720 / 600]]) {
+        ui.setLayout(w, 600);
+        const L = ui.layout;
+        const x = ui.lOffX + L.info.cx * ui.lScale;
+        const y = ui.lOffY + L.info.cy * ui.lScale;
+        assert.equal(ui.getMenuAction(x, y).type, 'info', `${L.name} menü`);
+        if (w !== DESKTOP) assert.ok(L.info.r * 2 * ui.lScale * cssPerLogical >= 44, `${L.name} boyut`);
+
+        const D = ui.getDeadLayout();
+        const dx = D.cx + D.info.cx * D.s;
+        const dy = D.cy + D.info.cy * D.s;
+        assert.equal(ui.hitsDeadInfo(dx, dy), true, `${L.name} sonuç kartı`);
+        assert.equal(ui.hitsRetry(dx, dy), false, 'bilgi butonu yeniden başlatmaz');
+        assert.equal(ui.hitsDeadInfo(D.cx, D.cy + D.retry.y * D.s + 10), false);
+    }
 });
