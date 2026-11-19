@@ -321,7 +321,7 @@ export class UIManager {
             cy: this.safe.top + ah / 2,
             s,
             cw,
-            retry: { x: -rbw / 2, y: 122, w: rbw, h: 54 },
+            retry: { x: -rbw / 2, y: 114, w: rbw, h: 54 },
             info: { cx: cw / 2 - 8, cy: -197, r: 20 }   // Kartın köşesine oturan rozet
         };
     }
@@ -923,67 +923,69 @@ export class UIManager {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
+        // Başlık ve tek satırlık alt başlık (mod · ölüm nedeni) — etiket kutusu yok
         ctx.font = font(30, 700);
         ctx.fillStyle = THEME.PINK_SOFT;
-        ctx.fillText(t('dead.title'), 2, -170);
+        ctx.fillText(t('dead.title'), 2, -166);
         ctx.fillStyle = THEME.TEXT_ACCENT;
-        ctx.fillText(t('dead.title'), 0, -172);
-
+        ctx.fillText(t('dead.title'), 0, -168);
         const modeLabel = mode.id === 'daily' ? `${mode.label} · ${dateLabel()}` : mode.label;
-        UIManager.pill(ctx, modeLabel, 0, -138, THEME.LAVENDER, THEME.INK, 'center', 12);
-
-        // K5: ölüm nedeni
-        UIManager.pill(ctx, t(`dead.cause.${cause}`, { boss: bossTitle }), 0, -108, THEME.PINK_SOFT, THEME.INK, 'center', 13);
-
-        if (this.isNewRecord) {
-            const bounce = Math.abs(Math.sin(performance.now() * 0.005)) * 3;
-            UIManager.pill(ctx, t('dead.newRecord'), 0, -78 - bounce, THEME.PURPLE_DEEP, THEME.WHITE, 'center', 13);
-        }
-
-        // Skor
-        ctx.font = font(13, 600);
+        ctx.font = font(14, 600);
         ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(t('dead.score'), 0, -50);
-        ctx.font = font(38, 700);
-        outlinedText(ctx, formatScore(score ? score.total : 0), 0, -20, THEME.TEXT_ACCENT, THEME.TEXT_HALO, 5);
-        if (candies > 0) {
-            // Bu turda kazanılan şeker, "skor" etiketinin sağında
-            UIManager.pill(ctx, t('dead.candies', { n: candies }), 34, -50, THEME.PINK_SOFT, THEME.INK, 'left', 12);
-        }
+        ctx.fillText(`${modeLabel} · ${t(`dead.cause.${cause}`, { boss: bossTitle })}`, 0, -134, cw - 48);
 
-        // Süre · graze · seri
+        // Kahraman: büyük skor
+        ctx.font = font(52, 700);
+        outlinedText(ctx, formatScore(score ? score.total : 0), 0, -80, THEME.TEXT_ACCENT, THEME.TEXT_HALO, 6);
+
+        // Skorun altında tek satır: yeni rekor ya da en iyi + kazanılan şeker
+        const bits = [];
+        if (this.isNewRecord) bits.push(t('dead.newRecord'));
+        else bits.push(t('menu.best', { score: formatScore(this.getBestScore(mode.id)) }));
+        if (candies > 0) bits.push(t('dead.candies', { n: candies }));
+        const bounce = this.isNewRecord ? Math.abs(Math.sin(performance.now() * 0.005)) * 2 : 0;
+        ctx.font = font(14, 700);
+        ctx.fillStyle = this.isNewRecord ? THEME.TEXT_ACCENT : THEME.TEXT_PRIMARY;
+        ctx.fillText(bits.join('   ·   '), 0, -38 - bounce, cw - 40);
+
+        // Süre · graze · seri: tek yumuşak tepside, değer üstte etiket altta
+        const trayW = cw - 36;
+        ctx.beginPath();
+        ctx.roundRect(-trayW / 2, -14, trayW, 72, 18);
+        ctx.fillStyle = THEME.SURFACE_SOFT;
+        ctx.fill();
         const cols = [
             [t('dead.time'), UIManager.formatTime(finalTimeMs)],
             [t('dead.graze'), player ? String(player.grazeCount) : '0'],
             [t('dead.combo'), score ? String(score.bestCombo) : '0']
         ];
-        const colGap = Math.min(112, (cw - 24) / 3);
+        const colW = trayW / 3;
+        const valueSize = colW < 90 ? 16 : 20; // Dar kartta süre sıkışmasın
         cols.forEach(([label, value], i) => {
-            const x = (i - 1) * colGap;
-            ctx.font = font(13, 600);
-            ctx.fillStyle = THEME.MUTED;
-            ctx.fillText(label, x, 18, colGap - 4);
-            ctx.font = font(18, 700);
+            const x = (i - 1) * colW;
+            ctx.font = font(valueSize, 700);
             ctx.fillStyle = THEME.TEXT;
-            ctx.fillText(value, x, 40, colGap - 4);
+            ctx.fillText(value, x, 12, colW - 6);
+            ctx.font = font(12, 600);
+            ctx.fillStyle = THEME.MUTED;
+            ctx.fillText(label, x, 37, colW - 6);
         });
 
-        ctx.font = font(13, 700);
-        ctx.fillStyle = THEME.TEXT_PRIMARY;
-        ctx.fillText(t('dead.best', { score: formatScore(this.getBestScore(mode.id)), time: UIManager.formatTime(this.getHighScore(mode.id)) }), 0, 68, cw - 24);
-
-        let lineY = 92;
+        // İsteğe bağlı tek satırlar: boss sonucu, açılan kostüm
+        let lineY = 76;
         if (waves && waves.boss) {
             const parts = [];
             if (waves.bossKills > 0) parts.push(t('dead.bossKills', { n: waves.bossKills }));
             if (waves.bossActive) parts.push(t('dead.bossHp', { title: waves.boss.title, hp: Math.ceil(waves.boss.hpRatio * 100) }));
             ctx.font = font(13, 700);
             ctx.fillStyle = waves.bossActive ? THEME.TEXT_ACCENT : THEME.TEXT_PRIMARY;
-            ctx.fillText(parts.join(' · '), 0, lineY, cw - 24);
-            lineY += 22;
+            ctx.fillText(parts.join(' · '), 0, lineY, cw - 40);
+            lineY += 20;
         }
         if (unlocked.length) {
-            UIManager.pill(ctx, t('dead.unlocked', { names: unlocked.map(k => t(`skin.${k.id}.name`, null, k.name)).join(', ') }), 0, lineY, THEME.PINK, THEME.INK, 'center', 12);
+            ctx.font = font(13, 700);
+            ctx.fillStyle = THEME.TEXT_ACCENT;
+            ctx.fillText(t('dead.unlocked', { names: unlocked.map(k => t(`skin.${k.id}.name`, null, k.name)).join(', ') }), 0, lineY, cw - 40);
         }
 
         // K6: açık "tekrar oyna" butonu (sadece bu buton, Enter ve Space yeniden başlatır)

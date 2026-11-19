@@ -946,6 +946,9 @@ export class Game {
         if (body.classList.contains('has-bar') !== showBar) body.classList.toggle('has-bar', showBar);
         const idle = showBar && this.state !== GAME_STATE.PLAYING;
         if (body.classList.contains('bar-idle') !== idle) body.classList.toggle('bar-idle', idle);
+        // Sonuç ekranında süre/puan zaten kartta: şeridin ortası boş kalır
+        const dead = showBar && this.state === GAME_STATE.DEAD;
+        if (body.classList.contains('bar-dead') !== dead) body.classList.toggle('bar-dead', dead);
         if (!showBar) return;
         this.barTimeEl = this.barTimeEl || document.getElementById('barTime');
         this.barScoreEl = this.barScoreEl || document.getElementById('barScore');

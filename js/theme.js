@@ -15,6 +15,7 @@ const LIGHT = {
     TEXT: '#4B2A6E',        // Panel ve zemin üstündeki ana metin
     TEXT_HALO: '#FFFFFF',   // Konturlu metnin dış hattı
     SURFACE: '#FFFFFF',     // Kart, panel, hap dolgusu
+    SURFACE_SOFT: '#FBE8F2', // Kart içindeki yumuşak tepsi (sonuç istatistikleri)
     SCRIM: '255, 246, 250', // Panellerin arkasındaki perde (rgb)
     ROW_HIGHLIGHT: 'rgba(205, 184, 255, 0.45)',
     GRID_DOT: 'rgba(142, 91, 232, 0.16)',
@@ -46,6 +47,7 @@ const DARK = {
     TEXT: '#F6EAFF',        // Ay kremi
     TEXT_HALO: '#120B20',
     SURFACE: '#2E2150',
+    SURFACE_SOFT: '#241A3D',
     SCRIM: '21, 15, 34',
     ROW_HIGHLIGHT: 'rgba(205, 184, 255, 0.18)',
     GRID_DOT: 'rgba(205, 184, 255, 0.10)',
