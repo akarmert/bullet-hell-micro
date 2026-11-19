@@ -12,6 +12,12 @@ export class Player {
         this.radius = GAME_CONFIG.PLAYER.RADIUS;
         this.hitboxRadius = GAME_CONFIG.PLAYER.HITBOX_RADIUS;
         this.grazeRadius = GAME_CONFIG.PLAYER.GRAZE_RADIUS || 16;
+
+        // Ekşi şeker etkileri (oyuncunun zararına)
+        this.slowTimer = 0;      // Ağırlaşma kalan süre (ms)
+        this.growTimer = 0;      // Şişme kalan süre (ms)
+        this.sizeScale = 1;      // Görünen + çarpışma boyutu çarpanı (yumuşak geçişli)
+        this.mouseTarget = null; // Ağırken fare imleci hedefi (anında ışınlanmaz)
         this.color = GAME_CONFIG.PLAYER.COLOR;
         this.glow = GAME_CONFIG.PLAYER.GLOW;
 
@@ -52,6 +58,12 @@ export class Player {
     moveTo(targetX, targetY) {
         if (!this.alive) return;
         this.inputMode = 'mouse';
+        // Ağırken imleci anında izlemez, sınırlı hızla ona doğru yürür (update)
+        if (this.slowTimer > 0) {
+            this.mouseTarget = { x: targetX, y: targetY };
+            return;
+        }
+        this.mouseTarget = null;
         this.prevX = this.x;
         this.prevY = this.y;
         this.x = targetX;
@@ -151,6 +163,26 @@ export class Player {
         return '🛡️'.repeat(this.shieldCharges);
     }
 
+    /** Ekşi şeker: bir süre ağırlaşır (klavye/joystick yavaşlar, fare imleci geriden izler) */
+    applySlow(ms = GAME_CONFIG.DEBUFFS.TYPES.HEAVY.duration) {
+        this.slowTimer = Math.max(this.slowTimer, ms);
+    }
+
+    /** Ekşi şeker: bir süre şişip büyür (gövde, hitbox ve graze alanı birlikte) */
+    applyGrow(ms = GAME_CONFIG.DEBUFFS.TYPES.BIG.duration) {
+        this.growTimer = Math.max(this.growTimer, ms);
+    }
+
+    /** Boyut çarpanını uygular; büyüyünce duvara gömülmesin diye içeri itilir */
+    setSizeScale(scale) {
+        this.sizeScale = scale;
+        const P = GAME_CONFIG.PLAYER;
+        this.radius = P.RADIUS * scale;
+        this.hitboxRadius = P.HITBOX_RADIUS * scale;
+        this.grazeRadius = (P.GRAZE_RADIUS || 16) * scale;
+        this.clampToArena();
+    }
+
     /** Darbe almıyor mu? (dash ya da kalkan sonrası dokunulmazlık) */
     get isInvulnerable() {
         return this.isDashing || this.invulnTimer > 0;
@@ -174,6 +206,10 @@ export class Player {
         this.moveInput.x = 0;
         this.moveInput.y = 0;
         this.inputMode = 'mouse';
+        this.slowTimer = 0;
+        this.growTimer = 0;
+        this.mouseTarget = null;
+        this.setSizeScale(1);
     }
 
     /**
@@ -191,6 +227,37 @@ export class Player {
         // Kalkan sonrası dokunulmazlık
         if (this.invulnTimer > 0) {
             this.invulnTimer = Math.max(0, this.invulnTimer - dtMs);
+        }
+
+        // Ekşi şeker etkileri
+        // (ağırlık bitince imleç hedefi kalmışsa oraya hızlıca yürünür, ışınlanılmaz)
+        if (this.slowTimer > 0) this.slowTimer = Math.max(0, this.slowTimer - dtMs);
+        if (this.growTimer > 0) this.growTimer = Math.max(0, this.growTimer - dtMs);
+        const targetScale = this.growTimer > 0 ? GAME_CONFIG.DEBUFFS.TYPES.BIG.scale : 1;
+        if (Math.abs(this.sizeScale - targetScale) > 0.001) {
+            const k = Math.min(1, dt * 6);
+            this.setSizeScale(this.sizeScale + (targetScale - this.sizeScale) * k);
+        }
+
+        // Ağırken (ya da etki yeni bittiyse) fare hedefine sınırlı hızla yürü
+        if (this.inputMode === 'mouse' && this.mouseTarget) {
+            const H = GAME_CONFIG.DEBUFFS.TYPES.HEAVY;
+            const dx = this.mouseTarget.x - this.x;
+            const dy = this.mouseTarget.y - this.y;
+            const d = Math.hypot(dx, dy);
+            const step = (this.slowTimer > 0 ? H.mouseSpeed : H.mouseSpeed * 3) * (this.isDashing ? GAME_CONFIG.PLAYER.DASH.SPEED_MULT : 1) * dt;
+            this.prevX = this.x;
+            this.prevY = this.y;
+            if (d <= step) {
+                this.x = this.mouseTarget.x;
+                this.y = this.mouseTarget.y;
+                if (this.slowTimer === 0) this.mouseTarget = null;
+            } else {
+                this.x += (dx / d) * step;
+                this.y += (dy / d) * step;
+            }
+            this.vx = this.x - this.prevX;
+            this.vy = this.y - this.prevY;
         }
 
         // Dash durumları
@@ -230,7 +297,7 @@ export class Player {
             const normX = this.moveInput.x / mag;
             const normY = this.moveInput.y / mag;
 
-            const baseSpeed = GAME_CONFIG.PLAYER.KEYBOARD_SPEED;
+            const baseSpeed = GAME_CONFIG.PLAYER.KEYBOARD_SPEED * (this.slowTimer > 0 ? GAME_CONFIG.DEBUFFS.TYPES.HEAVY.factor : 1);
             const speed = this.isDashing ? baseSpeed * GAME_CONFIG.PLAYER.DASH.SPEED_MULT : baseSpeed;
 
             this.prevX = this.x;

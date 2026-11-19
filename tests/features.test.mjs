@@ -287,3 +287,23 @@ test('Şeker paralar: güvenli yerde doğar, toplanır, süresi dolunca kaybolur
     assert.equal(m4.coins.length, 0);
     assert.equal(m4.update(16, { x: c4.x, y: c4.y, radius: 5, alive: true }).length, 0);
 });
+
+test('Geliştirici modu: sadece adreste ?dev varsa açılır; ölümsüzken ölüm engellenir, "turu bitir" bir kez geçer', async () => {
+    const { isDevRequested, DevMode } = await import('../js/devMode.js');
+    assert.equal(isDevRequested(''), false);
+    assert.equal(isDevRequested('?mode=classic'), false);
+    assert.equal(isDevRequested('?dev'), true);
+    assert.equal(isDevRequested('?dev=1'), true);
+    assert.equal(isDevRequested('?dev=0'), false);
+
+    const dev = new DevMode({ state: 'MENU' });
+    assert.equal(dev.invincible, true, 'açılışta ölümsüz');
+    assert.equal(dev.blocksDeath(), true);
+    assert.equal(dev.blocksDeath(), true);
+    assert.equal(dev.hits, 1, 'aynı çarpmanın tekrarları tek sayılır');
+    dev.forceDeath = true;
+    assert.equal(dev.blocksDeath(), false, 'turu bitir ölümsüzlüğü bir kez aşar');
+    assert.equal(dev.blocksDeath(), true, 'sonra yine ölümsüz');
+    dev.toggleInvincible();
+    assert.equal(dev.blocksDeath(), false, 'kapatınca normal ölüm');
+});

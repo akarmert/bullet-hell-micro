@@ -118,7 +118,8 @@ export class Bullet {
         shape = 'circle',
         wobble = 0,
         wobbleFreq = 0,
-        spin = 0
+        spin = 0,
+        tag = null
     } = {}) {
         this.x = x;
         this.y = y;
@@ -143,6 +144,7 @@ export class Bullet {
         this.spin = spin;
         this.spinAngle = 0;
         this.age = 0;
+        this.tag = tag; // Boss'un takip ettiği mermiler (ör. patlayacak sakız balonu)
     }
 
     /**
@@ -269,6 +271,9 @@ export class Bullet {
                 break;
             case 'saw':
                 this.renderSaw(ctx);
+                break;
+            case 'bubble':
+                this.renderBubble(ctx);
                 break;
             case 'circle':
             default:
@@ -401,6 +406,22 @@ export class Bullet {
     /**
      * Spiral fazı için lavanta donut
      */
+    /** Sakız balonu: yarı saydam pembe balon; patlamaya yaklaştıkça titreyerek şişer */
+    renderBubble(ctx) {
+        const wob = this.age > 1.0 ? 1 + Math.sin(this.age * 22) * 0.07 + (this.age - 1.0) * 0.12 : 1;
+        const r = this.radius * wob;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 140, 190, 0.55)';
+        ctx.fill();
+        ctx.lineWidth = THEME.BULLET_OUTLINE;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(this.x - r * 0.35, this.y - r * 0.35, r * 0.28, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fill();
+    }
+
     renderRing(ctx) {
         const r = this.radius * 1.35;
         ctx.lineWidth = THEME.BULLET_OUTLINE * 0.85;

@@ -1,0 +1,5 @@
+
+# Android build
+www/
+node_modules/
+*.apk

@@ -20,6 +20,7 @@ export class WaveManager {
         this.telegraphs = [];
 
         // Spawn zamanlayıcıları (ms cinsinden birikim)
+        this.touchAssist = false;              // Dokunmatik oynanış dengesi (game.startGame ayarlar)
         this.timers = {
             warmup: 0,
             spiral: 0,
@@ -47,6 +48,21 @@ export class WaveManager {
     /**
      * Bu mod boss içeriyor mu? (CHAOS modu tüm sistemleri baştan açtığı için boss'suz)
      */
+    /**
+     * Dar arenada (dikey telefon) aynı mermi sayısı çok daha sıkışık olur:
+     * alan küçüldükçe kaos/boss atış aralıkları uzar (1 = değişiklik yok).
+     */
+    densityScale() {
+        const A = GAME_CONFIG.ARENA_DENSITY;
+        const area = GAME_CONFIG.CANVAS.WIDTH * GAME_CONFIG.CANVAS.HEIGHT;
+        return Math.max(A.MIN_SCALE, Math.min(1, area / A.REFERENCE_AREA));
+    }
+
+    /** Dokunmatik oynanışta kaos/boss mermileri biraz yavaş */
+    touchSpeedScale() {
+        return this.touchAssist ? GAME_CONFIG.ARENA_DENSITY.TOUCH_SPEED : 1;
+    }
+
     hasBoss() {
         return !(this.mode && this.mode.isSimultaneous());
     }
@@ -580,25 +596,35 @@ export class WaveManager {
         return this.hasBoss() && this.bossKills === 1 && !this.bossActive;
     }
 
+    /** Kaos ayarı (mola / dokunmatik sekme sınırı); her karede yeni nesne üretmesin diye önbellekli */
+    chaosConfig(relief) {
+        const base = GAME_CONFIG.PHASE_4;
+        let bounces = relief ? relief.BOUNCES : base.MAX_BOUNCES;
+        if (this.touchAssist) bounces = Math.min(bounces, GAME_CONFIG.ARENA_DENSITY.TOUCH_BOUNCES);
+        if (bounces === base.MAX_BOUNCES) return base;
+        this.chaosCfgCache = this.chaosCfgCache || {};
+        return (this.chaosCfgCache[bounces] = this.chaosCfgCache[bounces] || { ...base, MAX_BOUNCES: bounces });
+    }
+
     updateChaos(elapsedMs, dt, dtMs, player) {
         const relief = this.isBreakRelief() ? GAME_CONFIG.BOSS_BREAK : null;
         // Zaferden hemen sonra kısa bir nefes payı: hiç mermi yok
         if (relief && this.bossDefeatedAt !== null && elapsedMs - this.bossDefeatedAt < relief.CALM_MS) return;
 
-        const base = GAME_CONFIG.PHASE_4;
-        const cfg = relief ? { ...base, MAX_BOUNCES: relief.BOUNCES } : base;
+        const cfg = this.chaosConfig(relief);
         const chaosTime = elapsedMs - this.chaosStartMs;
         let progress = Math.min(1, chaosTime / 20000);
         if (relief) progress = Math.min(progress, relief.PROGRESS_CAP);
 
-        const modeInterval = this.mode.getIntervalMultiplier(elapsedMs);
+        // Dar ekranda atışlar seyrekleşir (mermi yoğunluğu alana göre)
+        const modeInterval = this.mode.getIntervalMultiplier(elapsedMs) / this.densityScale();
         const intervalMult = modeInterval * (relief ? relief.INTERVAL_MULT : 1);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.chaos += dtMs;
         while (this.timers.chaos >= currentInterval) {
             this.timers.chaos -= currentInterval;
-            this.spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs, relief ? relief.SPEED_MULT : 1);
+            this.spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs, (relief ? relief.SPEED_MULT : 1) * this.touchSpeedScale());
         }
 
         // Periyodik nişanlı mermi desteği

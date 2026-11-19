@@ -554,6 +554,15 @@ export class SoundSystem {
         [96, 91, 88, 84].forEach((m, i) => this.tone(midi(m), t + i * 0.045, { dur: 0.22, vol: 0.05, dest: out }));
     }
 
+    /** Ekşi şeker: aşağı kayan "vııın" + kısa bas tık (kötü bir şey oldu hissi) */
+    playDebuff(x = null) {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        const out = this.out(x);
+        this.tone(520, t, { dur: 0.32, vol: 0.18, glideTo: 170, dest: out });
+        this.tone(90, t, { dur: 0.12, vol: 0.25, glideTo: 60, dest: out });
+    }
+
     /** Güçlendirme: parlak üçlü çan */
     playPickup(x = null) {
         if (!this.ready()) return;

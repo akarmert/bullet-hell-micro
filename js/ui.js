@@ -562,6 +562,7 @@ export class UIManager {
             ['🧱', t('info.edge.title'), t('info.edge.text')],
             ['👑', t('info.boss.title'), t('info.boss.text')]
         ];
+        rows.push(['😖', t('info.sour.title'), t('info.sour.text')]);
         rows.push(['🍭', t('info.candy.title'), t('info.candy.text')]);
         if (!touch) rows.push(['⌨️', t('info.keys.title'), t('info.keys.text')]);
 
@@ -799,6 +800,15 @@ export class UIManager {
         if (pickupManager && pickupManager.isSlowmoActive()) {
             const remaining = (pickupManager.slowmoTimer / 1000).toFixed(1);
             UIManager.pill(ctx, t('hud.slowmo', { s: remaining }), right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
+            rowY += 24;
+        }
+        // Ekşi şeker etkileri (koyu mor hap: kötü durum)
+        if (player && player.slowTimer > 0) {
+            UIManager.pill(ctx, t('hud.heavy', { s: (player.slowTimer / 1000).toFixed(1) }), right, rowY, '#5B3A86', '#FFFFFF', 'right', 10);
+            rowY += 24;
+        }
+        if (player && player.growTimer > 0) {
+            UIManager.pill(ctx, t('hud.big', { s: (player.growTimer / 1000).toFixed(1) }), right, rowY, '#7A3E78', '#FFFFFF', 'right', 10);
         }
 
         // Alt orta: dash çubuğu (dokunmatikte buton halkası gösterir)

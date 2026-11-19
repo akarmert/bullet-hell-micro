@@ -281,7 +281,12 @@ export class EffectsManager {
      * Graze (teğet geçme) anında minik sarı kıvılcım parçacığı
      */
     triggerGraze(x, y, combo = null) {
-        this.sound.playGraze(x, combo);
+        // Yoğun anlarda her graze için ayrı ses düğümü açmak telefonu yorar: kısa aralıkla sınırla
+        const now = typeof performance !== 'undefined' ? performance.now() / 1000 : 0;
+        if (now - (this.lastGrazeSoundAt || 0) >= GAME_CONFIG.PERFORMANCE.GRAZE_SOUND_GAP) {
+            this.lastGrazeSoundAt = now;
+            this.sound.playGraze(x, combo);
+        }
         const colors = [THEME.PINK, THEME.LAVENDER];
         for (let i = 0; i < 3; i++) {
             this.particles.push(new Particle(x, y, colors[i % 2], 0.4, 0.4));
@@ -497,6 +502,18 @@ export class EffectsManager {
     /**
      * Reaktif ızgarayı çizer
      */
+    /** Sadece pastel bulutlar (arka plan katmanına çizilir) */
+    renderBlobs(ctx) {
+        if (THEME.highContrast) return;
+        for (const b of this.blobs) {
+            const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
+            g.addColorStop(0, `rgba(${b.color}, ${THEME.BLOB_ALPHA})`);
+            g.addColorStop(1, `rgba(${b.color}, 0)`);
+            ctx.fillStyle = g;
+            ctx.fillRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
+        }
+    }
+
     renderGrid(ctx, { dots = true } = {}) {
         if (THEME.highContrast) {
             if (dots) this.grid.render(ctx);

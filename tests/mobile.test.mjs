@@ -135,3 +135,56 @@ test('Kalkan: aynı karede iki mermi iki hak harcar, sonra gelen dokunulmazlıkt
     assert.equal(cluster.filter(b => !b.active).length, 2, 'iki mermi iki kalkanla engellendi');
     assert.ok(player.invulnTimer > 0);
 });
+
+test('Ekşi şeker AĞIR: klavye/joystick yavaşlar, fare imleci anında değil sınırlı hızla izlenir', async () => {
+    const H = GAME_CONFIG.DEBUFFS.TYPES.HEAVY;
+    const player = new Player();
+    player.setMoveInput(1, 0);
+    const x0 = player.x;
+    player.update(0.1);
+    const normal = player.x - x0;
+    player.x = x0;
+    player.applySlow(H.duration);
+    player.update(0.1);
+    assert.ok(Math.abs((player.x - x0) - normal * H.factor) < 0.5, 'joystick hızı yarıya iner');
+
+    const p2 = new Player();
+    p2.applySlow(H.duration);
+    p2.moveTo(p2.x + 200, p2.y);
+    assert.equal(p2.x, GAME_CONFIG.PLAYER.START_X, 'ağırken imlece ışınlanmaz');
+    p2.update(0.1);
+    assert.ok(p2.x > GAME_CONFIG.PLAYER.START_X && p2.x < GAME_CONFIG.PLAYER.START_X + 200, 'imlece doğru yürür');
+
+    p2.update(H.duration / 1000 + 0.5);
+    assert.equal(p2.slowTimer, 0, 'etki biter');
+});
+
+test('Ekşi şeker DEV: oyuncu gövdesi ve hitbox oransal büyür, süre bitince eski boyuna döner', () => {
+    const B = GAME_CONFIG.DEBUFFS.TYPES.BIG;
+    const player = new Player();
+    const r0 = player.hitboxRadius;
+    player.applyGrow(B.duration);
+    for (let i = 0; i < 30; i++) player.update(1 / 30);
+    assert.ok(player.hitboxRadius > r0 * (B.scale - 0.1), 'hitbox büyüdü');
+    assert.ok(player.radius > GAME_CONFIG.PLAYER.RADIUS * (B.scale - 0.1), 'gövde büyüdü');
+    for (let i = 0; i < Math.ceil(B.duration / 1000 * 30) + 60; i++) player.update(1 / 30);
+    assert.ok(Math.abs(player.hitboxRadius - r0) < 0.05, 'eski boyuna döndü');
+});
+
+test('Ekşi şeker: kalkan engellemez, sahada oyuncudan uzakta doğar ve ona doğru süzülür', async () => {
+    const { PickupManager } = await import('../js/pickup.js');
+    const pm = new PickupManager();
+    const player = new Player();
+    player.addShield();
+    const sour = pm.spawnDebuff(player, 'heavy');
+    assert.ok(sour.bad);
+    assert.ok(Math.hypot(sour.x - player.x, sour.y - player.y) >= 100, 'oyuncudan uzakta doğar');
+    const d0 = Math.hypot(sour.x - player.x, sour.y - player.y);
+    const effects = { sound: { playDebuff() {} }, triggerPickupEffect() {}, triggerBanner() {} };
+    pm.update(0.5, player, effects, null);
+    assert.ok(Math.hypot(sour.x - player.x, sour.y - player.y) < d0, 'oyuncuya yaklaşır');
+    sour.x = player.x; sour.y = player.y;
+    pm.update(0.016, player, effects, null);
+    assert.ok(player.slowTimer > 0, 'dokununca ağırlaşır');
+    assert.equal(player.shieldCharges, 1, 'kalkan harcanmaz');
+});

@@ -11,7 +11,10 @@ export function resizeArena(game) {
     GAME_CONFIG.CANVAS.HEIGHT = height;
     GAME_CONFIG.PLAYER.START_X = width / 2;
     GAME_CONFIG.PLAYER.START_Y = height / 2;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // Dokunmatik cihazlarda (telefon) çözünürlük tavanı daha düşük: çizim yükü ciddi azalır
+    const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+    const P = GAME_CONFIG.PERFORMANCE;
+    const dpr = Math.min(window.devicePixelRatio || 1, coarse ? P.MAX_DPR_TOUCH : P.MAX_DPR);
     game.canvas.width = Math.round(rect.width * dpr);
     game.canvas.height = Math.round(rect.height * dpr);
     game.ctx.setTransform(game.canvas.width / width, 0, 0, game.canvas.height / height, 0, 0);

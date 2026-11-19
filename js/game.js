@@ -17,6 +17,7 @@ import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
 import { THEME, setHighContrast, applyTheme, resolveTheme, systemPrefersDark } from './theme.js';
 import { MenuBackdrop } from './menuBackdrop.js';
+import { DevMode, isDevRequested } from './devMode.js';
 import { ScoreSystem, formatScore } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
@@ -38,7 +39,11 @@ export const GAME_STATE = {
 export class Game {
     constructor(canvas) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        // Tuval hep tam boyanır: saydamlık kapalı olunca tarayıcı daha hızlı birleştirir
+        this.ctx = canvas.getContext('2d', { alpha: false }) || canvas.getContext('2d');
+        this.bgLayer = null;      // Yarı çözünürlüklü arka plan katmanı (zemin + pastel bulutlar)
+        this.bgFrame = 0;
+        this.bgKey = '';
 
         resizeArena(this);
 
@@ -83,6 +88,8 @@ export class Game {
         // State & Zamanlama
         this.state = GAME_STATE.MENU;
         this.menuBackdrop = new MenuBackdrop(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
+        // Geliştirici modu: adrese ?dev eklenince (ölümsüzlük, boss'a atlama; kayıtlar kapalı)
+        this.dev = isDevRequested() ? new DevMode(this) : null;
         this.elapsedMs = 0;          // Simülasyon süresi: sadece oynanırken dt ile birikir
         this.resumeCountdown = 0;    // Devam ederken geri sayım (ms)
         this.deathTimestamp = 0;
@@ -354,6 +361,44 @@ export class Game {
         this.effects.sound.playPhase();
     }
 
+    /**
+     * Zemin rengi/geçişi ve büyük pastel bulutlar her karede tam ekran boyanmak yerine
+     * yarı çözünürlüklü bir katmana birkaç karede bir çizilir; her kare sadece kopyalanır.
+     * (Telefonlarda en büyük çizim yükü bu tam ekran degradelerdi.)
+     */
+    renderBackgroundLayer(ctx, w, h) {
+        const P = GAME_CONFIG.PERFORMANCE;
+        if (typeof document === 'undefined') return;
+        const lw = Math.max(1, Math.round(this.canvas.width * P.BG_SCALE));
+        const lh = Math.max(1, Math.round(this.canvas.height * P.BG_SCALE));
+        const key = `${lw}x${lh}|${THEME.mode}|${THEME.highContrast}`;
+        if (!this.bgLayer) {
+            this.bgLayer = document.createElement('canvas');
+            this.bgCtx = this.bgLayer.getContext('2d', { alpha: false }) || this.bgLayer.getContext('2d');
+        }
+        const dirty = key !== this.bgKey;
+        if (dirty) {
+            this.bgLayer.width = lw;
+            this.bgLayer.height = lh;
+            this.bgKey = key;
+        }
+        if (dirty || this.bgFrame++ % P.BG_REFRESH_FRAMES === 0) {
+            const b = this.bgCtx;
+            b.setTransform(lw / w, 0, 0, lh / h, 0, 0);
+            if (THEME.dark) {
+                const sky = b.createLinearGradient(0, 0, 0, h);
+                sky.addColorStop(0, THEME.BG_TOP);
+                sky.addColorStop(1, THEME.BG);
+                b.fillStyle = sky;
+            } else {
+                b.fillStyle = THEME.BG;
+            }
+            b.fillRect(0, 0, w, h);
+            this.effects.renderBlobs(b);
+        }
+        ctx.drawImage(this.bgLayer, 0, 0, w, h);
+    }
+
     /** Menüde boş alana dokunma: şeker patlat / kayan yıldız */
     tapMenuBackdrop(x, y) {
         const result = this.menuBackdrop.tap(x, y);
@@ -608,6 +653,7 @@ export class Game {
     startGame() {
         this.touchControls.reset();
         this.state = GAME_STATE.PLAYING;
+        this.waveManager.touchAssist = !!this.touchControls.touchDevice; // Mobil denge
         this.showRotateHint();
         this.player.reset();
         this.bulletManager.clear();
@@ -666,6 +712,7 @@ export class Game {
      */
     triggerDeath() {
         if (this.state !== GAME_STATE.PLAYING) return;
+        if (this.dev && this.dev.blocksDeath()) return; // Geliştirici modu: ölümsüz
         this.hideRotateHint();
 
         // K5: ölüm nedenini kaydet (kenar / boss / mermi)
@@ -678,6 +725,15 @@ export class Game {
 
         // Efektleri ateşle & BGM'yi sönümle
         this.effects.triggerDeath(this.player.x, this.player.y);
+
+        // Geliştirici modunda hiçbir şey kaydedilmez (rekor, hayalet, istatistik, şeker)
+        if (this.dev) {
+            this.ui.isNewRecord = false;
+            this.ui.isNewTimeRecord = false;
+            this.lastUnlocked = [];
+            this.lastCandies = 0;
+            return;
+        }
 
         // Rekorlar: süre ve skor ayrı tutulur; "yeni rekor" skoru gösterir
         this.ui.checkAndSaveHighScore(this.elapsedMs, this.currentMode);
@@ -855,27 +911,19 @@ export class Game {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
+        // Arka plan: zemin + pastel bulutlar önbellekli katmandan tek seferde.
+        // Sarsıntıdan ÖNCE çizilir: tuval saydam olmadığından kayan zemin kenarda siyah şerit bırakmasın
+        this.renderBackgroundLayer(ctx, w, h);
+
         // Ekran sarsıntısı varsa canvas matrisine uygula
         this.effects.preRender(ctx);
-
-        // Arka plan temizliği (koyu temada gece geçişi + serpinti yıldızlar)
-        if (THEME.dark) {
-            const sky = ctx.createLinearGradient(0, 0, 0, h);
-            sky.addColorStop(0, THEME.BG_TOP);
-            sky.addColorStop(1, THEME.BG);
-            ctx.fillStyle = sky;
-        } else {
-            ctx.fillStyle = THEME.BG;
-        }
-        ctx.fillRect(0, 0, w, h);
         if (this.state === GAME_STATE.MENU) {
             // Ana menü: etkileşimli şeker / gece arka planı
-            this.effects.renderGrid(ctx, { dots: false });
             this.menuBackdrop.render(ctx);
         } else {
             if (THEME.dark && !THEME.highContrast) this.renderStars(ctx, w, h);
-            // Reaktif Dinamik Yaylı Izgara
-            this.effects.renderGrid(ctx);
+            // Reaktif Dinamik Yaylı Izgara (benekler canlı, bulutlar katmanda)
+            this.effects.grid.render(ctx);
         }
 
         // Telegraf (Ön Uyarı Lazerleri)
@@ -960,6 +1008,10 @@ export class Game {
         const dead = showBar && this.state === GAME_STATE.DEAD;
         if (body.classList.contains('bar-dead') !== dead) body.classList.toggle('bar-dead', dead);
         if (!showBar) return;
+        // DOM'a her karede yazmak telefonda yerleşim hesabı yaptırır: saniyede en fazla 10 kez
+        const nowMs = performance.now();
+        if (this.state === GAME_STATE.PLAYING && nowMs - (this.barWrittenAt || 0) < GAME_CONFIG.PERFORMANCE.BAR_REFRESH_MS) return;
+        this.barWrittenAt = nowMs;
         this.barTimeEl = this.barTimeEl || document.getElementById('barTime');
         this.barScoreEl = this.barScoreEl || document.getElementById('barScore');
         const time = UIManager.formatTime(this.elapsedMs);

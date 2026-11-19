@@ -5,7 +5,7 @@ import { Player } from '../js/player.js';
 import { WaveManager } from '../js/waveManager.js';
 import { BulletManager } from '../js/bulletManager.js';
 import { ModeRegistry } from '../js/modes.js';
-import { BOSS_STATE } from '../js/boss.js';
+import { Boss, BOSS_STATE } from '../js/boss.js';
 
 const B = GAME_CONFIG.BOSS;
 
@@ -127,7 +127,7 @@ test('CHAOS modunda boss yok; reset boss durumunu temizler', () => {
     assert.equal(other.bossDefeatedAt, null);
 });
 
-test('Boss rotasyonu: Jöle Kral yenilince 30 sn sonra Pamuk Bulut gelir, sonra Jöle Kral daha zor döner', () => {
+test('Boss rotasyonu: Jöle Kral → Pamuk Bulut → Sakız Balon, sonra Jöle Kral daha zor döner', () => {
     const { waves } = bossWaves();
     const player = new Player();
     const titles = [];
@@ -150,6 +150,16 @@ test('Boss rotasyonu: Jöle Kral yenilince 30 sn sonra Pamuk Bulut gelir, sonra 
     assert.deepEqual(titles, ['Jöle Kral', 'Pamuk Bulut']);
     assert.equal(waves.bossKills, 2);
     assert.deepEqual(waves.bossesBeaten, ['jelly', 'cloud']);
+    assert.equal(waves.nextBossDef().KIND, 'gum');
+
+    t = run(waves, player, t, waves.nextBossAt + 50);
+    assert.equal(waves.boss.kind, 'gum');
+    const G = GAME_CONFIG.BOSS_GUM;
+    t = run(waves, player, t, t + G.ENTRY_TIME + 200);
+    waves.boss.damage(1000);
+    t = run(waves, player, t, t + G.DEATH_TIME + 100);
+    assert.deepEqual(titles, ['Jöle Kral', 'Pamuk Bulut', 'Sakız Balon']);
+    assert.deepEqual(waves.bossesBeaten, ['jelly', 'cloud', 'gum']);
 
     run(waves, player, t, waves.nextBossAt + 50);
     assert.equal(waves.boss.kind, 'jelly');
@@ -354,5 +364,69 @@ test('Şeker testereler: AIM fazında ilk kez görünür, boss sırasında gelme
         assert.ok(b.x >= b.radius && b.x <= GAME_CONFIG.CANVAS.WIDTH - b.radius);
         assert.ok(b.y >= b.radius && b.y <= GAME_CONFIG.CANVAS.HEIGHT - b.radius);
         assert.ok(Number.isFinite(b.vx) && Number.isFinite(b.vy));
+    }
+});
+
+test('Sakız Balon: balonlar halkaya patlar, toplar seker, patlamada oyuncu yönünde geniş boşluk olur', () => {
+    const { bullets, waves } = bossWaves();
+    const player = new Player();
+    player.x = 300; player.y = 520;
+    waves.nextBossAt = 30000;
+    waves.bossCount = 2; // Rotasyonda sıradaki: Sakız Balon
+    const G = GAME_CONFIG.BOSS_GUM;
+    let t = run(waves, player, 30000, 30000 + G.ENTRY_TIME + 32);
+    const boss = waves.boss;
+    assert.equal(boss.kind, 'gum');
+
+    // BALON: balon mermisi çıkar, süresi gelince küçük halkaya dönüşür
+    bullets.clear();
+    t = run(waves, player, t, t + G.STAGES[0].INTERVAL + 100);
+    const bubbles = bullets.getActiveBullets().filter(b => b.shape === 'bubble');
+    assert.ok(bubbles.length >= 1, 'balon çıktı');
+    t = run(waves, player, t, t + G.STAGES[0].POP_MS * 1.3);
+    const smalls = bullets.getActiveBullets().filter(b => b.shape === 'circle');
+    assert.ok(smalls.length >= G.STAGES[0].RING_COUNT, 'balon halkaya patladı');
+
+    // SEKME: seken toplar
+    boss.hp = boss.maxHp * 0.5;
+    bullets.clear();
+    t = run(waves, player, t, t + G.STAGE_COOLDOWN + G.STAGES[1].INTERVAL + 100);
+    assert.ok(bullets.getActiveBullets().some(b => b.bouncesRemaining > 0), 'seken top var');
+
+    // PATLAMA: şişer, sonra oyuncu yönünde boşluklu halka
+    boss.hp = boss.maxHp * 0.2;
+    bullets.clear();
+    const S = G.STAGES[2];
+    t = run(waves, player, t, t + G.STAGE_COOLDOWN + S.REST_MS + S.INFLATE_MS * 0.5);
+    assert.ok(boss.inflate > 0.2, 'patlamadan önce şişer');
+    assert.equal(bullets.getActiveBullets().filter(b => b.type === 'boss').length, 0, 'şişerken ateş yok');
+    t = run(waves, player, t, t + S.INFLATE_MS * 0.6);
+    const aim = Math.atan2(player.y - boss.y, player.x - boss.x);
+    const ring = bullets.getActiveBullets();
+    assert.ok(ring.length > 10, 'halka patladı');
+    const minDiff = Math.min(...ring.map(b => {
+        let d = Math.abs(Math.atan2(b.vy, b.vx) - aim) % (Math.PI * 2);
+        return d > Math.PI ? Math.PI * 2 - d : d;
+    }));
+    assert.ok(minDiff >= S.GAP / 2 - 0.01, 'oyuncu yönünde boşluk var');
+});
+
+test('Mobil denge: dar arenada kaos ve boss atışları seyrekleşir, dokunmatikte mermiler yavaşlar', () => {
+    const saved = { ...GAME_CONFIG.CANVAS };
+    try {
+        const { waves } = bossWaves();
+        assert.equal(waves.densityScale(), 1, 'kare/geniş ekranda değişiklik yok');
+        const wide = new Boss(waves, 30000, GAME_CONFIG.BOSS_GUM, 0);
+
+        GAME_CONFIG.CANVAS.WIDTH = 277; // dikey telefon
+        waves.touchAssist = true;
+        const narrow = waves.densityScale();
+        assert.ok(narrow < 1 && narrow >= GAME_CONFIG.ARENA_DENSITY.MIN_SCALE);
+        assert.equal(waves.touchSpeedScale(), GAME_CONFIG.ARENA_DENSITY.TOUCH_SPEED);
+        const phone = new Boss(waves, 30000, GAME_CONFIG.BOSS_GUM, 0);
+        assert.ok(phone.intervalMult > wide.intervalMult * 1.5, 'telefonda boss daha seyrek ateş eder');
+        assert.ok(phone.speedMult < wide.speedMult, 'dokunmatikte boss mermileri daha yavaş');
+    } finally {
+        Object.assign(GAME_CONFIG.CANVAS, saved);
     }
 });

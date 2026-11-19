@@ -94,7 +94,12 @@ export class TouchControls {
             this.visible = visible;
         }
         const ratio = player.getDashReadyRatio();
-        this.ring.style.strokeDashoffset = String(1 - ratio);
+        // Halka değeri yalnızca değişince yazılır (her karede stil yazmak telefonu yorar)
+        const offset = String(Math.round((1 - ratio) * 100) / 100);
+        if (offset !== this.lastRingOffset) {
+            this.lastRingOffset = offset;
+            this.ring.style.strokeDashoffset = offset;
+        }
         this.dash.classList.toggle('ready', ratio >= 1);
         this.dash.classList.toggle('pressed', performance.now() < this.pressedUntil);
     }
