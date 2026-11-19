@@ -492,7 +492,9 @@ export class WaveManager {
                 this.bossKills++;
                 if (!this.bossesBeaten.includes(boss.kind)) this.bossesBeaten.push(boss.kind);
                 this.bossDefeatedAt = this.lastElapsedMs;
-                this.nextBossAt = this.lastElapsedMs + GAME_CONFIG.BOSS_INTERVAL;
+                // Sıradaki boss: sabit saati varsa o saatte, ama en az BOSS_INTERVAL mola sonra
+                const scheduled = (GAME_CONFIG.BOSS_SCHEDULE || [])[this.bossCount] ?? 0;
+                this.nextBossAt = Math.max(this.lastElapsedMs + GAME_CONFIG.BOSS_INTERVAL, scheduled);
                 this.telegraphs.length = 0; // Bekleyen boss atışları iptal
                 this.timers.chaos = 0;
                 this.timers.aim = 0;

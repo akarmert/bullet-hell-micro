@@ -270,3 +270,30 @@ test('Boss ödülü: güçlendirme istenen türde ve oynanabilir alanda düşer'
     assert.ok(p.x >= 40 && p.y >= 160, 'kenar ve HUD dışında');
     assert.equal(pm.spawnAt('yok', 100, 300), null);
 });
+
+test('Pamuk Bulut oyun saatinde 1:15\'te gelir; geç yenilirse en az 15 sn mola korunur; sonrakiler 15 sn arayla', () => {
+    const defeatAt = (waves, player, from) => {
+        let t = run(waves, player, from, from + 2500);
+        waves.boss.damage(1000);
+        return run(waves, player, t, t + 1200);
+    };
+    const { waves } = bossWaves();
+    const player = new Player();
+    let t = defeatAt(waves, player, 30000); // Jöle Kral ~0:34'te yenilir
+    assert.equal(waves.nextBossAt, 75000);
+    t = run(waves, player, t, 74900);
+    assert.equal(waves.bossActive, false, '1:15\'ten önce gelmez');
+    t = run(waves, player, t, 75100);
+    assert.equal(waves.boss.kind, 'cloud');
+    t = defeatAt(waves, player, t);
+    assert.ok(Math.abs(waves.nextBossAt - (waves.bossDefeatedAt + GAME_CONFIG.BOSS_INTERVAL)) < 1, 'üçüncü boss 15 sn sonra');
+
+    // Jöle Kral geç yenilirse (ör. 1:05) yine de 15 sn mola kalır
+    const late = bossWaves().waves;
+    run(late, player, 30000, 30100);
+    late.boss.state = 'FIGHTING';
+    run(late, player, 30100, 64000);
+    if (late.bossActive) { late.boss.damage(1000); run(late, player, 64000, 65200); }
+    assert.ok(late.nextBossAt >= late.bossDefeatedAt + GAME_CONFIG.BOSS_INTERVAL - 1);
+    assert.ok(late.nextBossAt >= 75000);
+});

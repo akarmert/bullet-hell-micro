@@ -127,7 +127,7 @@ export const GAME_CONFIG = {
         ]
     },
 
-    // --- BOSS 2: PAMUK BULUT (Jöle Kral'dan 15 sn sonra) ---
+    // --- BOSS 2: PAMUK BULUT (oyun saatinde 1:15) ---
     BOSS_CLOUD: {
         NAME: 'BOSS',
         KIND: 'cloud',
@@ -155,7 +155,8 @@ export const GAME_CONFIG = {
 
     // Boss sırası: yenilen her boss'tan BOSS_INTERVAL sonra sıradaki gelir; tur döndükçe zorlaşır
     BOSS_ROTATION: ['BOSS', 'BOSS_CLOUD'],
-    BOSS_INTERVAL: 15000,     // ms: bir boss yenildikten sonra sıradakine kadar kaos arası
+    BOSS_INTERVAL: 15000,     // ms: bir boss yenildikten sonra sıradakine kadar en az bu kadar mola
+    BOSS_SCHEDULE: [30000, 75000], // Sabit geliş saatleri: 1. boss 0:30, 2. boss 1:15 (sonrakiler BOSS_INTERVAL ile)
     BOSS_LEVEL_SPEED: 0.12,   // Her yeni turda mermi hızı +%12
     BOSS_LEVEL_DENSITY: 0.1,  // Her yeni turda atış sıklığı +%10
 
