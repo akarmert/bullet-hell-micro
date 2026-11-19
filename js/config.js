@@ -161,12 +161,12 @@ export const GAME_CONFIG = {
 
     // İlk boss yenildikten sonra, ikinci boss gelene kadarki "nefes" molası
     BOSS_BREAK: {
-        CALM_MS: 2500,        // Zaferden sonra hiç mermi gelmeyen süre
-        INTERVAL_MULT: 1.8,   // Kaos atışları %80 daha seyrek
-        SPEED_MULT: 0.8,      // %20 daha yavaş
+        CALM_MS: 3000,        // Zaferden sonra hiç mermi gelmeyen süre
+        INTERVAL_MULT: 2.0,   // Kaos atışları 2 kat seyrek
+        SPEED_MULT: 0.75,     // %25 daha yavaş
         PROGRESS_CAP: 0.4,    // Kaos rampası en fazla %40'a çıkar
         BOUNCES: 1,           // Çubuklar 2 yerine 1 kez seker
-        AIM_INTERVAL: 2200,   // Nişanlı atış 1 sn yerine 2.2 sn'de bir
+        AIM_INTERVAL: 2600,   // Nişanlı atış 1 sn yerine 2.6 sn'de bir
         DROP: 'shield'        // Jöle Kral yenildiği yere kalkan düşürür
     },
 
