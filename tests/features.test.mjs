@@ -225,3 +225,63 @@ test('Şeker: tur ödülü, satın alma, yetersiz bakiye ve kalıcılık', async
     assert.ok(reloaded.isUnlocked('caramel'));
     assert.equal(reloaded.selected, 'caramel');
 });
+
+test('Şeker paralar: değer arttıkça daha nadir ve daha kısa ömürlü', async () => {
+    const { GAME_CONFIG } = await import('../js/config.js');
+    const { pickTier } = await import('../js/coins.js');
+    const T = GAME_CONFIG.COINS.TIERS;
+    assert.deepEqual(T.map(t => t.VALUE), [1, 5, 10, 50, 100]);
+    for (let i = 1; i < T.length; i++) {
+        assert.ok(T[i].LIFE < T[i - 1].LIFE, `${T[i].VALUE} daha kısa kalır`);
+        assert.ok(T[i].WEIGHT < T[i - 1].WEIGHT, `${T[i].VALUE} daha nadir`);
+    }
+    // 10.000 çekilişte dağılım ağırlıklarla uyumlu
+    seedRandom(99);
+    const counts = new Map();
+    for (let i = 0; i < 10000; i++) { const v = pickTier(T, random()).VALUE; counts.set(v, (counts.get(v) || 0) + 1); }
+    const total = T.reduce((a, t) => a + t.WEIGHT, 0);
+    for (const t of T) {
+        const expected = 10000 * t.WEIGHT / total;
+        assert.ok(Math.abs(counts.get(t.VALUE) - expected) < expected * 0.2 + 30, `${t.VALUE}: ${counts.get(t.VALUE)} ≈ ${expected.toFixed(0)}`);
+    }
+});
+
+test('Şeker paralar: güvenli yerde doğar, toplanır, süresi dolunca kaybolur, sahada sınırlı', async () => {
+    const { GAME_CONFIG } = await import('../js/config.js');
+    const { CoinManager } = await import('../js/coins.js');
+    const C = GAME_CONFIG.COINS;
+    const W = GAME_CONFIG.CANVAS.WIDTH;
+    const H = GAME_CONFIG.CANVAS.HEIGHT;
+    const player = new Player();
+    seedRandom(5);
+    const m = new CoinManager();
+    for (let i = 0; i < 50; i++) {
+        const c = m.spawn(player);
+        assert.ok(c.x >= C.MARGIN && c.x <= W - C.MARGIN && c.y >= C.TOP && c.y <= H - C.MARGIN, 'kenar ve HUD dışında');
+    }
+
+    // Sahada en fazla MAX_ON_FIELD
+    const far = { x: -999, y: -999, radius: 5, alive: true };
+    const m2 = new CoinManager();
+    for (let t = 0; t < 60000; t += 50) {
+        m2.update(50, far);
+        assert.ok(m2.coins.length <= C.MAX_ON_FIELD);
+    }
+
+    // Toplama
+    const m3 = new CoinManager();
+    const coin = m3.spawn(null);
+    const p = { x: coin.x, y: coin.y, radius: 5, alive: true };
+    const got = m3.update(16, p);
+    assert.equal(got.length, 1);
+    assert.equal(got[0].value, coin.value);
+    assert.equal(m3.coins.length, 0);
+
+    // Kaybolma: ömrü dolunca toplanamaz
+    const m4 = new CoinManager();
+    const c4 = m4.spawn(null);
+    m4.timer = 1e9;
+    m4.update(c4.maxLife + 10, far);
+    assert.equal(m4.coins.length, 0);
+    assert.equal(m4.update(16, { x: c4.x, y: c4.y, radius: 5, alive: true }).length, 0);
+});

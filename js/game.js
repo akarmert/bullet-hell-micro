@@ -19,6 +19,7 @@ import { THEME, setHighContrast } from './theme.js';
 import { ScoreSystem, formatScore } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
+import { CoinManager } from './coins.js';
 import { Settings, SETTING_ROWS } from './settings.js';
 import { SKINS, getSkin, drawMarshmallow } from './skins.js';
 import { seedRandom, dateKey, dateLabel } from './rng.js';
@@ -56,6 +57,8 @@ export class Game {
         this.score = new ScoreSystem();
         this.tutorial = new Tutorial();
         this.progress = new Progress();
+        this.coins = new CoinManager();
+        this.runCandies = 0;
         this.settings = new Settings();
         this.currentHint = null;
         this.lastUnlocked = [];
@@ -556,6 +559,8 @@ export class Game {
         this.currentHint = null;
         this.lastUnlocked = [];
         this.lastCandies = 0;
+        this.runCandies = 0;
+        this.coins.reset();
         this.ui.settingsOpen = false;
         this.ui.infoOpen = false;
         this.player.skin = this.progress.skin;
@@ -609,7 +614,7 @@ export class Game {
         });
 
         // Tur ödülü: şeker
-        this.lastCandies = this.progress.addCandies(Progress.runReward(this.score.total, this.waveManager.bossKills));
+        this.lastCandies = this.progress.addCandies(Progress.runReward(this.score.total, this.waveManager.bossKills) + this.runCandies);
 
         if (isRecord || this.lastUnlocked.length) {
             setTimeout(() => {
@@ -703,6 +708,15 @@ export class Game {
             // Güçlendirmeleri (Pickups) güncelle ve topla
             this.pickupManager.update(dt, this.player, this.effects, this.bulletManager);
 
+            // Şeker paralar: dünya zamanıyla yaşar (yavaş çekimde kaybolma süresi de yavaşlar);
+            // toplananlar tur sonunda bakiyeye eklenir
+            for (const coin of this.coins.update(dt * 1000 * speedFactor, this.player)) {
+                this.runCandies += coin.value;
+                this.score.popups.push({ x: coin.x, y: coin.y, text: `+${coin.value} 🍬`, multiplier: coin.value >= 50 ? 3 : 1, age: 0, big: coin.value >= 50 });
+                this.effects.triggerPickupEffect(coin.x, coin.y, coin.color);
+                this.effects.sound.playCoin(coin.value, coin.x);
+            }
+
             // Gelişmiş Çarpışma & Graze Sistemi
             const fatalBullet = CollisionSystem.processInteractions(
                 this.player,
@@ -767,6 +781,7 @@ export class Game {
 
         // Saha Güçlendirmeleri (Pickups)
         this.pickupManager.render(ctx);
+        if (this.state !== GAME_STATE.MENU) this.coins.render(ctx);
 
         // Boss
         if (this.state !== GAME_STATE.MENU) this.waveManager.renderBoss(ctx);
@@ -793,7 +808,7 @@ export class Game {
             this.ui.renderMenu(ctx, this.currentMode.id);
         } else if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
             this.renderEdgeWarning(ctx, w, h);
-            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score, !!this.barVisible);
+            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score, !!this.barVisible, this.runCandies);
             if (this.state === GAME_STATE.PLAYING) this.ui.renderHint(ctx, this.currentHint, this.player);
             if (this.waveManager.boss) this.waveManager.boss.renderHealthBar(ctx, this.ui.safe.top);
             if (this.state === GAME_STATE.PAUSED) {

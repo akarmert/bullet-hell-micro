@@ -198,6 +198,25 @@ export const GAME_CONFIG = {
         CONFIRM_MS: 2500      // Satın almada ikinci dokunuş için süre
     },
 
+    // --- SAHADA BELİREN ŞEKER PARALAR ---
+    // Değer arttıkça daha nadir çıkar ve sahada daha kısa kalır.
+    COINS: {
+        START_AFTER: 3000,    // İlk para (ms)
+        SPAWN_EVERY: 3500,    // Ortalama aralık (±%40)
+        MAX_ON_FIELD: 3,
+        MARGIN: 40,           // Kenarlardan uzaklık
+        TOP: 130,             // HUD'un altında kalsın
+        MIN_PLAYER_DIST: 70,  // Oyuncunun dibinde doğmasın
+        PICK_REACH: 4,        // Toplama toleransı
+        TIERS: [
+            { VALUE: 1,   WEIGHT: 50, LIFE: 9000, RADIUS: 9,  COLOR: '#FFC4DE', TEXT: '#4B2A6E' },
+            { VALUE: 5,   WEIGHT: 28, LIFE: 6500, RADIUS: 10, COLOR: '#CDB8FF', TEXT: '#4B2A6E' },
+            { VALUE: 10,  WEIGHT: 14, LIFE: 4500, RADIUS: 11, COLOR: '#FF6FAE', TEXT: '#4B2A6E' },
+            { VALUE: 50,  WEIGHT: 6,  LIFE: 2600, RADIUS: 12, COLOR: '#6A3FC8', TEXT: '#FFFFFF' },
+            { VALUE: 100, WEIGHT: 2,  LIFE: 1600, RADIUS: 13, COLOR: '#FFD86B', TEXT: '#4B2A6E', SPARKLE: true }
+        ]
+    },
+
     // --- EFEKTLER ---
     EFFECTS: {
         SHAKE_DURATION: 300,      // ms

@@ -714,7 +714,7 @@ export class UIManager {
     /**
      * @param {boolean} compact Dokunmatik şerit açıkken süre ve puan şeritte gösterilir; tuvalde tekrar edilmez
      */
-    renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null, score = null, compact = false) {
+    renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null, score = null, compact = false, runCandies = 0) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
         const left = 18 + this.safe.left;
@@ -730,6 +730,12 @@ export class UIManager {
         ctx.textAlign = 'left';
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText(t('hud.graze', { n: player ? player.grazeCount : 0 }), left + 2, 50);
+        if (runCandies > 0) {
+            // Bu turda toplanan şeker paralar
+            ctx.font = font(13, 700);
+            ctx.fillStyle = THEME.TEXT_ACCENT;
+            ctx.fillText(t('hud.candies', { n: formatScore(runCandies) }), left + 2, 70);
+        }
 
         let rowY = 24;
         if (!compact) {

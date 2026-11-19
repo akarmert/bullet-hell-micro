@@ -512,6 +512,20 @@ export class SoundSystem {
         [84, 88, 91, 96].forEach((m, i) => this.tone(midi(m), t + 0.05 + i * 0.04, { dur: 0.18, vol: 0.06, dest: out }));
     }
 
+    /** Şeker para: değer arttıkça tiz ve gösterişli */
+    playCoin(value = 1, x = null) {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        const out = this.out(x);
+        const step = value >= 100 ? 4 : value >= 50 ? 3 : value >= 10 ? 2 : value >= 5 ? 1 : 0;
+        const base = 79 + step * 2;
+        this.pluck(midi(base), t, 0.14, 0.25, out);
+        this.pluck(midi(base + 7), t + 0.05, 0.12, 0.3, out);
+        if (step >= 3) {
+            [12, 16, 19].forEach((d, i) => this.tone(midi(base + d), t + 0.1 + i * 0.05, { dur: 0.2, vol: 0.06, dest: out }));
+        }
+    }
+
     /** Güçlendirme: parlak üçlü çan */
     playPickup(x = null) {
         if (!this.ready()) return;

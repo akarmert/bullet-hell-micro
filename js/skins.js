@@ -26,13 +26,13 @@ export const SKINS = [
 
     // --- Şekerle alınan kostümler (başarımla açılmaz) ---
     { id: 'caramel', name: 'Karamel', body: '#F2D2A0', cheek: 'rgba(240, 70, 143, 0.5)', accessory: 'drizzle', drizzle: '#B5651D',
-      hint: 'şekerle alınır', price: 180, test: () => false },
+      hint: 'şekerle alınır', price: 400, test: () => false },
     { id: 'bubblegum', name: 'Sakız', body: '#FF9CCB', cheek: 'rgba(240, 70, 143, 0.65)', accessory: 'bubble',
-      hint: 'şekerle alınır', price: 300, test: () => false },
+      hint: 'şekerle alınır', price: 650, test: () => false },
     { id: 'night', name: 'Gece', body: '#C9B8EE', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'stars',
-      hint: 'şekerle alınır', price: 480, test: () => false },
+      hint: 'şekerle alınır', price: 1000, test: () => false },
     { id: 'chef', name: 'Şef', body: '#FFFFFF', cheek: 'rgba(255, 111, 174, 0.55)', accessory: 'chef',
-      hint: 'şekerle alınır', price: 720, test: () => false }
+      hint: 'şekerle alınır', price: 1500, test: () => false }
 ];
 
 export function getSkin(id) {
