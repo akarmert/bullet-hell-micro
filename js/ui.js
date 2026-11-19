@@ -54,16 +54,18 @@ export const MENU_LAYOUTS = {
         settings: { x: 359, y: 10, w: 50, h: 50 },
         candies: { x: 210, y: 35 },
         info: { cx: 36, cy: 35, r: 25 },
-        title: { x: 210, y: 104, size: 40 },
-        pick: { x: 210, y: 152 },
+        title: { x: 210, y: 100, size: 40 },
+        pick: { x: 210, y: 146 },
+        // Telefon: kenarlardan 22, kartlar arası 14 boşluk; dokunması ve okuması rahat
         cards: [
-            { id: 'classic', x: 10, y: 166, w: 195, h: 66 }, { id: 'endless', x: 215, y: 166, w: 195, h: 66 },
-            { id: 'hardcore', x: 10, y: 244, w: 195, h: 66 }, { id: 'chaos', x: 215, y: 244, w: 195, h: 66 },
-            { id: 'daily', x: 10, y: 322, w: 400, h: 56, wide: true }
+            { id: 'classic', x: 22, y: 164, w: 181, h: 70 }, { id: 'endless', x: 217, y: 164, w: 181, h: 70 },
+            { id: 'hardcore', x: 22, y: 248, w: 181, h: 70 }, { id: 'chaos', x: 217, y: 248, w: 181, h: 70 },
+            { id: 'daily', x: 22, y: 332, w: 376, h: 60, wide: true }
         ],
-        desc: { x: 210, y: 404, maxW: 400 },
-        play: { x: 40, y: 530, w: 340, h: 78 },
-        skin: { cx: 210, cy: 676, dx: 104, r: 28 }
+        desc: { x: 210, y: 424, maxW: 376 },
+        play: { x: 40, y: 484, w: 340, h: 78 },
+        skin: { cx: 210, cy: 662, dx: 104, r: 28 },
+        textScale: 1.15
     }
 };
 const MAX_MENU_SCALE = 1.3;
@@ -442,7 +444,8 @@ export class UIManager {
         ctx.restore();
 
         ctx.textBaseline = 'middle';
-        ctx.font = font(14, 600);
+        const fs = L.textScale || 1; // Telefonda kart yazıları biraz daha büyük
+        ctx.font = font(14 * fs, 600);
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText(t('menu.pickMode'), L.pick.x, L.pick.y);
 
@@ -455,21 +458,21 @@ export class UIManager {
             const label = ModeRegistry.get(c.id).label;
             if (c.wide) {
                 ctx.textAlign = 'left';
-                ctx.font = font(18, 700);
+                ctx.font = font(18 * fs, 700);
                 ctx.fillStyle = selected ? THEME.INK : THEME.TEXT;
                 ctx.fillText(`☀ ${label} · ${dateLabel()}`, c.x + 20, y + c.h / 2 + 1, c.w * 0.62);
                 ctx.textAlign = 'right';
-                ctx.font = font(13, 600);
+                ctx.font = font(13 * fs, 600);
                 ctx.fillStyle = selected ? THEME.INK : THEME.MUTED;
                 ctx.fillText(best, c.x + c.w - 20, y + c.h / 2 + 1, c.w * 0.34);
                 ctx.textAlign = 'center';
             } else {
-                ctx.font = font(19, 700);
+                ctx.font = font(19 * fs, 700);
                 ctx.fillStyle = selected ? THEME.INK : THEME.TEXT;
-                ctx.fillText(label, c.x + c.w / 2, y + c.h / 2 - 9, c.w - 16);
-                ctx.font = font(13, 600);
+                ctx.fillText(label, c.x + c.w / 2, y + c.h / 2 - 10 * fs, c.w - 16);
+                ctx.font = font(13 * fs, 600);
                 ctx.fillStyle = selected ? THEME.INK : THEME.MUTED;
-                ctx.fillText(best, c.x + c.w / 2, y + c.h / 2 + 14, c.w - 16);
+                ctx.fillText(best, c.x + c.w / 2, y + c.h / 2 + 14 * fs, c.w - 16);
             }
             if (selected) {
                 ctx.font = font(14, 700);
