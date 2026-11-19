@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gece Şekercisi — Karanlık Mod Taslağı</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #150F22; --panel: #241A3A; --ink: #F6EAFF; --muted: #B7A6D6; --pink: #FF8DC0; --purple: #B48CFF;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: "Fredoka", system-ui, sans-serif; }
+  main { max-width: 1240px; margin: 0 auto; padding: 28px 16px 60px; }
+  h1 { font-size: 30px; margin: 0 0 4px; font-weight: 700; }
+  h1 span { color: var(--pink); }
+  p.lead { margin: 0 0 24px; color: var(--muted); font-size: 16px; }
+  h2 { font-size: 18px; font-weight: 600; margin: 28px 0 10px; color: var(--purple); }
+  .frame { background: var(--panel); border: 2px solid #3A2C5C; border-radius: 22px; padding: 10px; box-shadow: 0 6px 0 #0B0714; }
+  canvas { display: block; width: 100%; height: auto; border-radius: 14px; }
+  .grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 18px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+  .sw { background: var(--panel); border: 2px solid #3A2C5C; border-radius: 16px; padding: 10px; display: flex; gap: 10px; align-items: center; }
+  .sw i { width: 34px; height: 34px; border-radius: 50%; border: 2px solid #0E0819; flex: none; }
+  .sw b { display: block; font-weight: 600; font-size: 14px; }
+  .sw small { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; }
+  ul.notes { color: var(--muted); line-height: 1.6; padding-left: 20px; margin: 0; }
+  ul.notes b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gece Şekercisi <span>· karanlık mod taslağı</span></h1>
+  <p class="lead">Marşmelov beyazı, mor ve sakız pembesi aynı kalıyor; zemin gece moruna dönüyor, mermiler ay ışığında parlayan şekerlere.</p>
+
+  <div class="grid">
+    <div>
+      <h2>Oyun içi · Jöle Kral savaşı</h2>
+      <div class="frame"><canvas id="game" width="900" height="600"></canvas></div>
+    </div>
+    <div>
+      <h2>Menü</h2>
+      <div class="frame"><canvas id="menu" width="560" height="600"></canvas></div>
+    </div>
+  </div>
+
+  <h2>Palet</h2>
+  <div class="swatches" id="swatches"></div>
+
+  <h2>Tasarım kararları</h2>
+  <ul class="notes">
+    <li><b>Zemin siyah değil, gece moru</b> (#1E1530 → #150F22). Tatlı havayı korur, OLED'de de göz yormaz.</li>
+    <li><b>Mermiler ışık kaynağı:</b> açık dolgu + koyu kontur aynen kalıyor, üstüne yumuşak renkli hale ve ince ay-kremi dış çizgi. Koyu zeminde ilk bakışta seçilen tek şey mermiler ve oyuncu.</li>
+    <li><b>Oyuncu en parlak nesne:</b> marşmelovun altında pembe bir "gece lambası" ışığı; parmağın altında bile yeri kaybolmuyor.</li>
+    <li><b>Metin ay kremi</b> (#F6EAFF), ikincil metin lavanta (#B7A6D6) — ikisi de zeminde 7:1 üstü kontrast.</li>
+    <li><b>Şeker paneller</b> aynı "çıkartma" biçiminde: koyu gövde, mor kontur, aşağıda gece gölgesi.</li>
+    <li><b>Dekor:</b> sarı yerine şeker serpintisinden yıldızlar ve köşede uyuyan marşmelov ay. Oynanışı etkilemeyecek kadar soluk.</li>
+  </ul>
+</main>
+
+<script>
+const D = {
+  BG_TOP: '#241838', BG_BOTTOM: '#150F22',
+  PANEL: '#2E2150', PANEL_SOFT: '#3A2C5C',
+  OUTLINE: '#120B20',          // şekillerin koyu konturu
+  RIM: 'rgba(255, 234, 250, 0.55)', // ay ışığı dış çizgisi
+  TEXT: '#F6EAFF', MUTED: '#B7A6D6',
+  WHITE: '#FFFDFE',
+  PURPLE: '#B48CFF', PURPLE_DEEP: '#8E5BE8', LAVENDER: '#D7C6FF',
+  PINK: '#FF8DC0', PINK_DEEP: '#FF5FA2', PINK_SOFT: '#FFC9E1',
+  GOLD: '#FFD36E', MINT: '#9FF3D3',
+  SHADOW: '#0B0714'
+};
+
+const swatchList = [
+  ['Gece zemini', D.BG_TOP], ['Derin gece', D.BG_BOTTOM], ['Şeker panel', D.PANEL],
+  ['Ay kremi (metin)', D.TEXT], ['Lavanta (ikincil)', D.MUTED], ['Mor', D.PURPLE],
+  ['Sakız pembesi', D.PINK], ['Açık pembe', D.PINK_SOFT], ['Altın şeker', D.GOLD], ['Nane', D.MINT]
+];
+document.getElementById('swatches').innerHTML = swatchList.map(([n, c]) =>
+  `<div class="sw"><i style="background:${c}"></i><div><b>${n}</b><small>${c}</small></div></div>`).join('');
+
+const font = (s, w = 600) => `${w} ${s}px "Fredoka", system-ui, sans-serif`;
+
+// ---------- ortak çizimler ----------
+function seeded(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+
+function background(ctx, w, h, t, seed = 7) {
+  const g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0, D.BG_TOP); g.addColorStop(1, D.BG_BOTTOM);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+
+  // Pamuk bulut silüetleri
+  ctx.fillStyle = 'rgba(180, 140, 255, 0.035)';
+  for (const [cx, cy, s] of [[w * 0.18, h * 0.78, 1], [w * 0.72, h * 0.9, 1.3], [w * 0.45, h * 0.35, 0.8]]) {
+    for (const [dx, dy, r] of [[-40, 0, 34], [0, -14, 44], [44, 0, 32], [10, 12, 36]]) {
+      ctx.beginPath(); ctx.arc(cx + dx * s, cy + dy * s, r * s, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
+  // Serpinti yıldızlar
+  const rnd = seeded(seed);
+  const cols = [D.PINK, D.PURPLE, D.LAVENDER, D.PINK_SOFT, D.WHITE];
+  for (let i = 0; i < 70; i++) {
+    const x = rnd() * w, y = rnd() * h, c = cols[i % 5], ph = rnd() * 6.28, big = rnd() < 0.15;
+    ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.6 + ph));
+    ctx.fillStyle = c;
+    if (big) { star(ctx, x, y, 4.2, 1.6); }
+    else { ctx.save(); ctx.translate(x, y); ctx.rotate(ph); ctx.beginPath(); ctx.roundRect(-3, -1, 6, 2, 1); ctx.fill(); ctx.restore(); }
+  }
+  ctx.globalAlpha = 1;
+}
+
+function star(ctx, x, y, R, r) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? r : R;
+    ctx[i ? 'lineTo' : 'moveTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+function glow(ctx, x, y, r, color, a = 0.45) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, color.replace(')', `, ${a})`).replace('rgb', 'rgba'));
+  g.addColorStop(1, color.replace(')', ', 0)').replace('rgb', 'rgba'));
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+}
+const rgb = hex => { const n = parseInt(hex.slice(1), 16); return `rgb(${n >> 16}, ${(n >> 8) & 255}, ${n & 255})`; };
+
+function moon(ctx, x, y, r, t) {
+  glow(ctx, x, y, r * 2.4, rgb('#FFE7F3'), 0.18);
+  ctx.save();
+  ctx.lineWidth = 3; ctx.strokeStyle = D.OUTLINE; ctx.lineJoin = 'round';
+  // Hilal: marşmelov ay
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#FFF1F8'; ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x + r * 0.55, y - r * 0.3, r * 0.82, 0, Math.PI * 2);
+  ctx.fillStyle = D.BG_TOP; ctx.fill();
+  // Uyuyan yüz
+  ctx.strokeStyle = D.OUTLINE; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.arc(x - r * 0.55, y + r * 0.05, r * 0.12, 0.2, Math.PI - 0.2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(x - r * 0.25, y + r * 0.45, r * 0.12, 0.2, Math.PI - 0.2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 111, 174, 0.55)';
+  ctx.beginPath(); ctx.ellipse(x - r * 0.62, y + r * 0.42, r * 0.1, r * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+  // Zzz
+  ctx.fillStyle = D.MUTED; ctx.font = font(13, 600);
+  const b = Math.sin(t * 1.4) * 3;
+  ctx.globalAlpha = 0.8; ctx.fillText('z', x - r * 1.35, y - r * 0.55 + b);
+  ctx.font = font(10, 600); ctx.fillText('z', x - r * 1.6, y - r * 0.95 + b * 1.4);
+  ctx.restore();
+}
+
+function candyPanel(ctx, x, y, w, h, r, fill, { stroke = D.OUTLINE, depth = 5, lw = 2.5 } = {}) {
+  ctx.beginPath(); ctx.roundRect(x, y + depth, w, h, r); ctx.fillStyle = D.SHADOW; ctx.fill();
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = lw; ctx.strokeStyle = stroke; ctx.stroke();
+  // üst parlama
+  ctx.save(); ctx.beginPath(); ctx.roundRect(x + 4, y + 3, w - 8, Math.min(10, h * 0.3), r * 0.7);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'; ctx.fill(); ctx.restore();
+}
+
+function pill(ctx, text, x, y, { align = 'center', fill = D.PANEL, color = D.TEXT, size = 15 } = {}) {
+  ctx.font = font(size, 600);
+  const w = ctx.measureText(text).width + 24, h = size + 14;
+  const left = align === 'center' ? x - w / 2 : align === 'right' ? x - w : x;
+  candyPanel(ctx, left, y, w, h, h / 2, fill, { stroke: D.PANEL_SOFT, depth: 3, lw: 2 });
+  ctx.fillStyle = color; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + w / 2, y + h / 2 + 1);
+  return w;
+}
+
+function outlined(ctx, text, x, y, size, fill, weight = 700) {
+  ctx.font = font(size, weight); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round'; ctx.lineWidth = size * 0.28; ctx.strokeStyle = D.OUTLINE;
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = fill; ctx.fillText(text, x, y);
+}
+
+function marshmallow(ctx, x, y, r, t, { scarf = null } = {}) {
+  // Gece lambası ışığı
+  glow(ctx, x, y + r * 0.3, r * 4.2, rgb(D.PINK), 0.32);
+  ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.ellipse(x, y + r * 0.95, r * 0.9, r * 0.32, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; ctx.fill();
+  const sq = 1 + Math.sin(t * 5) * 0.03;
+  ctx.beginPath(); ctx.ellipse(x, y, r / sq, r * sq, 0, 0, Math.PI * 2);
+  ctx.fillStyle = D.WHITE; ctx.fill();
+  ctx.lineWidth = Math.max(1.5, r * 0.2); ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  // ay ışığı kenarı
+  ctx.beginPath(); ctx.ellipse(x, y, r / sq + r * 0.17, r * sq + r * 0.17, 0, Math.PI * 1.1, Math.PI * 1.65);
+  ctx.strokeStyle = D.RIM; ctx.lineWidth = r * 0.1; ctx.stroke();
+  // yüz
+  const blink = (t % 3.2) < 0.12 ? 0.15 : 1;
+  ctx.fillStyle = D.OUTLINE;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + s * r * 0.32, y - r * 0.08, r * 0.1, r * 0.14 * blink, 0, 0, Math.PI * 2); ctx.fill(); }
+  ctx.strokeStyle = D.OUTLINE; ctx.lineWidth = r * 0.09;
+  ctx.beginPath(); ctx.arc(x, y + r * 0.12, r * 0.14, 0.2, Math.PI - 0.2); ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 111, 174, 0.6)';
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(x + s * r * 0.55, y + r * 0.18, r * 0.13, r * 0.08, 0, 0, Math.PI * 2); ctx.fill(); }
+  if (scarf) {
+    ctx.strokeStyle = scarf; ctx.lineWidth = r * 0.22;
+    ctx.beginPath(); ctx.arc(x, y + r * 0.1, r * 0.92, 0.45, Math.PI - 0.45); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function shieldBubble(ctx, x, y, r, n, t) {
+  const sr = r * 3.9;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(x, y, sr, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(180, 140, 255, 0.14)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(215, 198, 255, 0.75)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, sr - 4, t * 3.5, t * 3.5 + 0.9);
+  ctx.strokeStyle = D.WHITE; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+  for (let i = 0; i < n; i++) {
+    const a = -t * 2.1 + i * Math.PI * 2 / 3;
+    const px = x + Math.cos(a) * sr, py = y + Math.sin(a) * sr;
+    glow(ctx, px, py, 9, rgb(D.PINK), 0.6);
+    ctx.beginPath(); ctx.arc(px, py, 3.2, 0, Math.PI * 2);
+    ctx.fillStyle = D.PINK; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ---------- mermiler: açık dolgu + koyu kontur + renkli hale ----------
+function bulletCircle(ctx, x, y, r, fill, haloColor) {
+  glow(ctx, x, y, r * 2.6, rgb(haloColor), 0.5);
+  ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fillStyle = fill; ctx.fill();
+  ctx.lineWidth = 1.8; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x, y, r + 1.6, 0, Math.PI * 2);
+  ctx.lineWidth = 1; ctx.strokeStyle = D.RIM; ctx.stroke();
+  ctx.beginPath(); ctx.arc(x - r * 0.3, y - r * 0.3, r * 0.28, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.fill();
+}
+
+function bulletDiamond(ctx, x, y, r, a, fill, halo) {
+  glow(ctx, x, y, r * 2.6, rgb(halo), 0.5);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.beginPath(); ctx.moveTo(0, -r * 1.3); ctx.lineTo(r, 0); ctx.lineTo(0, r * 1.3); ctx.lineTo(-r, 0); ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill(); ctx.lineJoin = 'round'; ctx.lineWidth = 1.8; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  ctx.restore();
+}
+
+function bulletCapsule(ctx, x, y, r, a, fill, halo) {
+  glow(ctx, x, y, r * 3, rgb(halo), 0.45);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.beginPath(); ctx.roundRect(-r * 1.9, -r, r * 3.8, r * 2, r);
+  ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 1.8; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  ctx.beginPath(); ctx.roundRect(-r * 1.9, -r, r * 1.9, r * 2, [r, 0, 0, r]);
+  ctx.fillStyle = D.WHITE; ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function saw(ctx, x, y, r, a) {
+  glow(ctx, x, y, r * 3, rgb(D.PINK), 0.45);
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const ang = i * Math.PI / 3;
+    ctx.arc(Math.cos(ang) * r * 0.95, Math.sin(ang) * r * 0.95, r * 0.5, ang - 1.4, ang + 1.4);
+  }
+  ctx.closePath(); ctx.fillStyle = D.PINK; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  ctx.rotate(-a);
+  ctx.beginPath(); ctx.arc(0, 0, r * 0.75, 0, Math.PI * 2); ctx.fillStyle = D.PINK_SOFT; ctx.fill(); ctx.stroke();
+  ctx.fillStyle = D.OUTLINE;
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.arc(s * r * 0.25, -r * 0.08, r * 0.11, 0, Math.PI * 2); ctx.fill(); }
+  ctx.restore();
+}
+
+function coin(ctx, x, y, value, color, life, t) {
+  glow(ctx, x, y, 26, rgb(color), 0.5);
+  ctx.save();
+  const bob = Math.sin(t * 3 + x) * 2;
+  ctx.translate(x, y + bob);
+  // süre halkası
+  ctx.beginPath(); ctx.arc(0, 0, 15, -Math.PI / 2, -Math.PI / 2 + life * Math.PI * 2);
+  ctx.strokeStyle = D.LAVENDER; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2);
+  ctx.fillStyle = color; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 1.5);
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.font = font(11, 700); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 3; ctx.strokeStyle = D.OUTLINE; ctx.strokeText('+' + value, 0, -22);
+  ctx.fillStyle = D.TEXT; ctx.fillText('+' + value, 0, -22);
+  ctx.restore();
+}
+
+function pickupShield(ctx, x, y, t) {
+  const r = 11, bob = Math.sin(t * 4) * 2.5;
+  glow(ctx, x, y + bob, 34, rgb(D.PURPLE), 0.5);
+  ctx.save(); ctx.translate(x, y + bob); ctx.lineJoin = 'round';
+  ctx.strokeStyle = D.OUTLINE; ctx.lineWidth = 2;
+  ctx.save(); ctx.rotate(Math.sin(t * 3.2) * 0.25);
+  for (const s of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(s * r * 0.8, 0); ctx.lineTo(s * r * 1.75, -r * 0.65); ctx.lineTo(s * r * 1.75, r * 0.65); ctx.closePath();
+    ctx.fillStyle = D.LAVENDER; ctx.fill(); ctx.stroke();
+  }
+  ctx.restore();
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fillStyle = D.PURPLE_DEEP; ctx.fill(); ctx.stroke();
+  ctx.fillStyle = D.WHITE;
+  ctx.beginPath(); ctx.moveTo(0, -r * 0.55); ctx.lineTo(r * 0.45, -r * 0.35); ctx.lineTo(r * 0.35, r * 0.2);
+  ctx.lineTo(0, r * 0.55); ctx.lineTo(-r * 0.35, r * 0.2); ctx.lineTo(-r * 0.45, -r * 0.35); ctx.closePath(); ctx.fill();
+  ctx.font = font(10, 700); ctx.textAlign = 'center';
+  ctx.lineWidth = 3; ctx.strokeText('KALKAN', 0, -r * 1.6); ctx.fillStyle = D.TEXT; ctx.fillText('KALKAN', 0, -r * 1.6);
+  ctx.restore();
+}
+
+function jellyKing(ctx, x, y, t) {
+  const r = 52, wob = Math.sin(t * 2.4) * 0.05;
+  glow(ctx, x, y, r * 2.4, rgb(D.PURPLE), 0.35);
+  ctx.save(); ctx.translate(x, y); ctx.lineJoin = 'round';
+  // gövde (jöle kubbe)
+  ctx.beginPath();
+  ctx.moveTo(-r * (1 + wob), r * 0.55);
+  ctx.bezierCurveTo(-r * 1.15, -r * 0.6, -r * 0.6, -r * 1.05, 0, -r * 1.05);
+  ctx.bezierCurveTo(r * 0.6, -r * 1.05, r * 1.15, -r * 0.6, r * (1 + wob), r * 0.55);
+  for (let i = 4; i >= -4; i--) ctx.quadraticCurveTo(i * r * 0.25 + r * 0.125, r * (0.75 + (i % 2 ? 0.08 : 0)), i * r * 0.25, r * 0.55);
+  ctx.closePath();
+  const g = ctx.createLinearGradient(0, -r, 0, r * 0.6);
+  g.addColorStop(0, 'rgba(215, 198, 255, 0.95)'); g.addColorStop(1, 'rgba(142, 91, 232, 0.95)');
+  ctx.fillStyle = g; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  // jöle parlaması ve kabarcıklar
+  ctx.beginPath(); ctx.ellipse(-r * 0.45, -r * 0.55, r * 0.22, r * 0.1, -0.6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  for (const [bx, by, br] of [[0.5, 0.1, 0.07], [0.3, 0.32, 0.05], [-0.6, 0.25, 0.06]]) {
+    ctx.beginPath(); ctx.arc(bx * r, by * r + Math.sin(t * 2 + bx * 9) * 3, br * r, 0, Math.PI * 2); ctx.fill();
+  }
+  // yüz
+  ctx.fillStyle = D.OUTLINE;
+  for (const s of [-1, 1]) {
+    ctx.beginPath(); ctx.ellipse(s * r * 0.3, -r * 0.2, r * 0.09, r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = D.OUTLINE; ctx.beginPath();
+    ctx.moveTo(s * r * 0.45, -r * 0.42); ctx.lineTo(s * r * 0.17, -r * 0.34); ctx.stroke();
+  }
+  ctx.beginPath(); ctx.arc(0, r * 0.05, r * 0.16, Math.PI + 0.3, -0.3); ctx.stroke();
+  ctx.fillStyle = 'rgba(255, 141, 192, 0.7)';
+  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * r * 0.58, r * 0.02, r * 0.12, r * 0.07, 0, 0, Math.PI * 2); ctx.fill(); }
+  // taç
+  ctx.save(); ctx.translate(0, -r * 1.05); ctx.rotate(Math.sin(t * 2.4) * 0.06);
+  glow(ctx, 0, -8, 30, rgb(D.GOLD), 0.35);
+  ctx.beginPath(); ctx.moveTo(-r * 0.42, 0); ctx.lineTo(-r * 0.5, -r * 0.42); ctx.lineTo(-r * 0.22, -r * 0.2);
+  ctx.lineTo(0, -r * 0.52); ctx.lineTo(r * 0.22, -r * 0.2); ctx.lineTo(r * 0.5, -r * 0.42); ctx.lineTo(r * 0.42, 0); ctx.closePath();
+  ctx.fillStyle = D.GOLD; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = D.OUTLINE; ctx.stroke();
+  for (const [cx, c] of [[-r * 0.25, D.PINK], [0, D.MINT], [r * 0.25, D.PINK]]) {
+    ctx.beginPath(); ctx.arc(cx, -r * 0.1, 3.5, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill(); ctx.lineWidth = 1.2; ctx.stroke();
+  }
+  ctx.restore();
+  ctx.restore();
+}
+
+function bossBar(ctx, w, title, stage, hp) {
+  const bw = Math.min(420, w - 80), x = (w - bw) / 2, y = 64;
+  outlined(ctx, title, w / 2, y - 12, 17, D.TEXT, 700);
+  candyPanel(ctx, x, y, bw, 16, 8, D.PANEL, { stroke: D.OUTLINE, depth: 3, lw: 2 });
+  const g = ctx.createLinearGradient(x, 0, x + bw, 0);
+  g.addColorStop(0, D.PINK); g.addColorStop(1, D.PURPLE);
+  ctx.beginPath(); ctx.roundRect(x + 3, y + 3, (bw - 6) * hp, 10, 5); ctx.fillStyle = g; ctx.fill();
+  ctx.font = font(12, 600); ctx.fillStyle = D.MUTED; ctx.textAlign = 'center'; ctx.fillText(stage, w / 2, y + 30);
+}
+
+// ---------- oyun sahnesi ----------
+const game = document.getElementById('game'), gctx = game.getContext('2d');
+const W = game.width, H = game.height;
+
+function drawGame(t) {
+  const ctx = gctx;
+  background(ctx, W, H, t, 11);
+  moon(ctx, W - 70, 150, 26, t);
+
+  const bx = W / 2 + Math.sin(t * 0.7) * 60, by = 180;
+
+  // Fang dalgası: dönen spiral mermiler
+  for (let k = 0; k < 3; k++) {
+    for (let i = 0; i < 14; i++) {
+      const a = i * Math.PI * 2 / 14 + t * 0.6 + k * 0.22;
+      const d = 70 + ((t * 70 + k * 85) % 255);
+      const x = bx + Math.cos(a) * d, y = by + Math.sin(a) * d;
+      if (k === 1) bulletDiamond(ctx, x, y, 5.5, a + Math.PI / 2, D.LAVENDER, D.PURPLE);
+      else bulletCircle(ctx, x, y, 6, k === 0 ? D.PINK_SOFT : D.WHITE, k === 0 ? D.PINK : D.LAVENDER);
+    }
+  }
+  // Kenardan gelen kapsül yağmuru
+  for (let i = 0; i < 6; i++) {
+    const x = ((t * 140 + i * 160) % (W + 80)) - 40, y = 470 + Math.sin(i * 1.7) * 40;
+    bulletCapsule(ctx, x, y, 5, 0, D.PINK, D.PINK);
+  }
+  // Testereler
+  saw(ctx, 140 + Math.sin(t * 1.3) * 30, 380 + Math.cos(t * 1.1) * 20, 12, t * 9);
+  saw(ctx, W - 160 + Math.cos(t) * 25, 300 + Math.sin(t * 1.5) * 30, 12, -t * 9);
+
+  // Paralar ve güçlendirme
+  coin(ctx, 220, 520, 5, D.PINK_SOFT, 0.7, t);
+  coin(ctx, 690, 450, 50, D.MINT, 0.35, t);
+  coin(ctx, 600, 545, 100, D.GOLD, 0.2 + 0.1 * Math.sin(t), t);
+  pickupShield(ctx, 760, 520, t);
+
+  jellyKing(ctx, bx, by, t);
+
+  // Oyuncu
+  const px = W / 2 - 90 + Math.sin(t * 1.3) * 40, py = 430 + Math.cos(t * 0.9) * 20;
+  // dash izi
+  for (let i = 3; i > 0; i--) {
+    ctx.globalAlpha = 0.12 * i;
+    ctx.beginPath(); ctx.arc(px - i * 12, py + i * 4, 9, 0, Math.PI * 2); ctx.fillStyle = D.PINK_SOFT; ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  shieldBubble(ctx, px, py, 5, 2, t);
+  marshmallow(ctx, px, py, 11, t);
+
+  // graze kıvılcımları
+  for (let i = 0; i < 5; i++) {
+    const a = t * 6 + i * 1.3, d = 22 + (t * 40 + i * 9) % 16;
+    ctx.globalAlpha = 0.8 - ((t * 40 + i * 9) % 16) / 20;
+    ctx.fillStyle = i % 2 ? D.GOLD : D.PINK_SOFT;
+    star(ctx, px + Math.cos(a) * d, py + Math.sin(a) * d, 3.5, 1.3);
+  }
+  ctx.globalAlpha = 1;
+
+  // HUD
+  pill(ctx, '⏱ 01:07.4', W / 2, 12, { size: 16 });
+  pill(ctx, 'skor 18.420', 14, 12, { align: 'left' });
+  pill(ctx, 'seri 24', 14, 48, { align: 'left', fill: D.PINK_DEEP, color: D.WHITE, size: 13 });
+  pill(ctx, 'kalkan 🛡️🛡️', W - 14, 12, { align: 'right' });
+  pill(ctx, '🍬 37', W - 14, 48, { align: 'right', size: 13 });
+  bossBar(ctx, W, 'JÖLE KRAL', 'diş fırtınası · 2/3', 0.58);
+
+  // Afiş
+  const pulse = 1 + Math.sin(t * 4) * 0.03;
+  ctx.save(); ctx.translate(W / 2, H - 46); ctx.scale(pulse, pulse);
+  ctx.globalAlpha = 0.55 + 0.45 * Math.abs(Math.sin(t * 0.8));
+  outlined(ctx, 'POF! 🛡️', 0, 0, 26, D.PINK, 700);
+  ctx.restore();
+}
+
+// ---------- menü ----------
+const menu = document.getElementById('menu'), mctx = menu.getContext('2d');
+const MW = menu.width, MH = menu.height;
+const modes = [
+  ['CLASSIC', 'fazlar, bosslar ve kaos', D.PURPLE_DEEP, true],
+  ['ENDLESS', 'hız hiç durmaz', D.PANEL, false],
+  ['HARDCORE', 'tek hata, oyun biter', D.PANEL, false],
+  ['CHAOS', 'her şey birden', D.PANEL, false],
+  ['GÜNLÜK', 'herkes aynı desen · 19 Kas', D.PANEL, false]
+];
+
+function drawMenu(t) {
+  const ctx = mctx;
+  background(ctx, MW, MH, t, 23);
+  moon(ctx, MW - 60, 70, 22, t);
+
+  // Başlık
+  ctx.save(); ctx.translate(MW / 2, 92); ctx.rotate(-0.03);
+  outlined(ctx, 'BULLET HELL', 0, -18, 40, D.WHITE, 700);
+  outlined(ctx, 'micro', 0, 24, 30, D.PINK, 700);
+  ctx.restore();
+  marshmallow(ctx, MW / 2 + 118, 118, 16, t, { scarf: D.PURPLE });
+
+  // Üst sağ: bilgi ve şeker
+  candyPanel(ctx, 18, 18, 40, 40, 20, D.PANEL, { depth: 3, lw: 2 });
+  outlined(ctx, 'i', 38, 38, 20, D.TEXT, 700);
+  pill(ctx, '🍬 1.240', MW - 104, 140, { size: 14, align: 'center' });
+
+  ctx.font = font(13, 600); ctx.fillStyle = D.MUTED; ctx.textAlign = 'center';
+  ctx.fillText('mod seç', MW / 2, 178);
+
+  // Mod kartları
+  const cw = MW - 80, ch = 50;
+  modes.forEach(([name, desc, fill, sel], i) => {
+    const x = 40, y = 192 + i * 60;
+    candyPanel(ctx, x, y, cw, ch, 16, fill, { stroke: sel ? D.PINK : D.PANEL_SOFT, depth: 4, lw: sel ? 3 : 2 });
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.font = font(17, 700); ctx.fillStyle = D.TEXT; ctx.fillText(name, x + 18, y + 18);
+    ctx.font = font(12, 500); ctx.fillStyle = sel ? D.LAVENDER : D.MUTED; ctx.fillText(desc, x + 18, y + 36);
+    ctx.textAlign = 'right'; ctx.font = font(13, 600);
+    ctx.fillStyle = sel ? D.PINK_SOFT : D.MUTED;
+    ctx.fillText(['★ 02:41', '★ 01:58', '★ 00:47', '★ 01:12', '★ —'][i], x + cw - 18, y + ch / 2);
+  });
+
+  // Oyna
+  const by = 506, bounce = Math.sin(t * 3) * 1.5;
+  candyPanel(ctx, 40, by + bounce, MW - 80, 56, 22, D.PINK_DEEP, { depth: 6, lw: 3 });
+  outlined(ctx, 'OYNA ▶ CLASSIC', MW / 2, by + 29 + bounce, 22, D.WHITE, 700);
+
+  ctx.font = font(13, 600); ctx.fillStyle = D.MUTED; ctx.textAlign = 'left';
+  ctx.fillText('⚙ ayarlar · tema: koyu', 40, 586);
+  ctx.textAlign = 'right'; ctx.fillText('kostüm 5/12 ▸', MW - 40, 586);
+}
+
+function frame(ms) {
+  const t = ms / 1000;
+  drawGame(t);
+  drawMenu(t);
+  requestAnimationFrame(frame);
+}
+document.fonts.ready.then(() => requestAnimationFrame(frame));
+</script>
+</body>
+</html>
