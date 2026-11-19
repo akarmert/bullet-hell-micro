@@ -16,7 +16,7 @@ import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
 import { THEME, setHighContrast } from './theme.js';
-import { ScoreSystem } from './score.js';
+import { ScoreSystem, formatScore } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
 import { Settings, SETTING_ROWS } from './settings.js';
@@ -559,7 +559,11 @@ export class Game {
         // Kontrolcüleri tara (WASD & Gamepad)
         this.pollKeyboardAndGamepad();
 
-        this.touchControls.update(this.state === GAME_STATE.PLAYING, this.player);
+        // Dokunmatik kontrol şeridi: oyun, duraklatma ve oyun bitti ekranında görünür (menüde gizli)
+        const barStates = [GAME_STATE.PLAYING, GAME_STATE.PAUSED, GAME_STATE.DEAD];
+        const showBar = this.touchControls.touchDevice && barStates.includes(this.state);
+        this.touchControls.update(showBar, this.state === GAME_STATE.PLAYING, this.player);
+        this.syncControlBar(showBar);
         const deadReady = this.state === GAME_STATE.DEAD && this.deathScreenReady();
         this.menuButton.hidden = !(deadReady || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
         this.shareButton.hidden = !deadReady;
@@ -721,7 +725,7 @@ export class Game {
             this.ui.renderMenu(ctx, this.currentMode.id);
         } else if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
             this.renderEdgeWarning(ctx, w, h);
-            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score);
+            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score, !!this.barVisible);
             if (this.state === GAME_STATE.PLAYING) this.ui.renderHint(ctx, this.currentHint, this.player);
             if (this.waveManager.boss) this.waveManager.boss.renderHealthBar(ctx, this.ui.safe.top);
             if (this.state === GAME_STATE.PAUSED) {
@@ -751,6 +755,24 @@ export class Game {
     deathReveal() {
         const age = performance.now() - this.deathTimestamp - GAME_CONFIG.EFFECTS.DEATH_REVEAL;
         return Math.max(0, Math.min(1, age / GAME_CONFIG.EFFECTS.DEATH_FADE));
+    }
+
+    /**
+     * Şeridin görünürlüğünü ve içindeki süre/puanı günceller (yalnızca değişince DOM'a yazar)
+     */
+    syncControlBar(showBar) {
+        this.barVisible = showBar;
+        const body = document.body;
+        if (body.classList.contains('has-bar') !== showBar) body.classList.toggle('has-bar', showBar);
+        const idle = showBar && this.state !== GAME_STATE.PLAYING;
+        if (body.classList.contains('bar-idle') !== idle) body.classList.toggle('bar-idle', idle);
+        if (!showBar) return;
+        this.barTimeEl = this.barTimeEl || document.getElementById('barTime');
+        this.barScoreEl = this.barScoreEl || document.getElementById('barScore');
+        const time = UIManager.formatTime(this.elapsedMs);
+        const score = `★ ${formatScore(this.score.total)}`;
+        if (this.barTimeEl && this.barTimeEl.textContent !== time) this.barTimeEl.textContent = time;
+        if (this.barScoreEl && this.barScoreEl.textContent !== score) this.barScoreEl.textContent = score;
     }
 
     /** HTML butonları ve erişilebilirlik etiketlerini seçili dile çevirir */

@@ -11,14 +11,19 @@
 <body>
     <main class="game-container">
         <canvas id="gameCanvas" aria-label="Bullet Hell Micro oyun alanı"></canvas>
+        <!-- Dokunmatik kontrol şeridi: oyun alanının ALTINDA, parmaklar oyunu kapatmaz -->
         <div id="touchControls" hidden>
             <div id="joystick" aria-label="Hareket joystick'i"><span id="joystickKnob"></span></div>
+            <div id="barCenter">
+                <span id="barTime">00:00.000</span>
+                <span id="barScore">★ 0</span>
+                <button id="pauseButton" type="button" aria-label="Duraklat" hidden><span></span><span></span></button>
+            </div>
             <button id="dashButton" type="button" aria-label="Dash">
                 <svg viewBox="0 0 100 100" aria-hidden="true"><circle class="dash-track" cx="50" cy="50" r="45"/><circle id="dashRing" cx="50" cy="50" r="45" pathLength="1"/></svg>
                 <span>DASH</span>
             </button>
         </div>
-        <button id="pauseButton" type="button" aria-label="Duraklat" hidden><span></span><span></span></button>
         <button id="menuButton" type="button" hidden>ANA MENÜ</button>
         <button id="shareButton" type="button" hidden>PAYLAŞ</button>
         <p id="rotateHint">Yatay oynamak için cihazı çevir.</p>

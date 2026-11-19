@@ -567,7 +567,10 @@ export class UIManager {
     /**
      * HUD: mod, süre, skor, graze, güçlendirmeler ve dash çubuğu
      */
-    renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null, score = null) {
+    /**
+     * @param {boolean} compact Dokunmatik şerit açıkken süre ve puan şeritte gösterilir; tuvalde tekrar edilmez
+     */
+    renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null, score = null, compact = false) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
         const left = 18 + this.safe.left;
@@ -584,17 +587,21 @@ export class UIManager {
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText(t('hud.graze', { n: player ? player.grazeCount : 0 }), left + 2, 50);
 
-        // Orta: süre ve rekor
-        ctx.textAlign = 'center';
-        ctx.font = font(Math.min(36, w * 0.085), 700);
-        outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.INK, THEME.WHITE, 6);
-        ctx.font = font(11, 600);
-        ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(t('hud.best', { score: formatScore(this.getBestScore(mode.id)) }), w / 2, 70);
+        let rowY = 24;
+        if (!compact) {
+            // Orta: süre ve rekor
+            ctx.textAlign = 'center';
+            ctx.font = font(Math.min(36, w * 0.085), 700);
+            outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.INK, THEME.WHITE, 6);
+            ctx.font = font(11, 600);
+            ctx.fillStyle = THEME.MUTED;
+            ctx.fillText(t('hud.best', { score: formatScore(this.getBestScore(mode.id)) }), w / 2, 70);
 
-        // Sağ üst: skor ve aktif güçlendirmeler
-        UIManager.pill(ctx, `★ ${formatScore(score ? score.total : 0)}`, right, 24, THEME.PINK, THEME.INK, 'right', 13);
-        let rowY = 54;
+            // Sağ üst: skor
+            UIManager.pill(ctx, `★ ${formatScore(score ? score.total : 0)}`, right, 24, THEME.PINK, THEME.INK, 'right', 13);
+            rowY = 54;
+        }
+        // Sağ üst: aktif güçlendirmeler
         if (player && player.hasShield) {
             UIManager.pill(ctx, t('hud.shield'), right, rowY, THEME.TEXT_PRIMARY, THEME.WHITE, 'right', 10);
             rowY += 24;

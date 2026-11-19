@@ -36,5 +36,33 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg);
 #pauseButton span { width: 6px; height: 17px; background: var(--ink); border-radius: 3px; }
 button:focus-visible { outline: 3px solid var(--pink); outline-offset: 4px; }
 
+/* ---------- Dokunmatik kontrol şeridi (oyun sırasında, oyun alanının altında) ---------- */
+#barCenter { display: none; }
+body.has-bar .game-container { display: flex; flex-direction: column; --safe-bottom: 0px; --bar-h: clamp(120px, 18vh, 156px); }
+@media (orientation: landscape) { body.has-bar .game-container { --bar-h: clamp(86px, 25vh, 112px); } }
+body.has-bar #gameCanvas { flex: 1 1 auto; min-height: 0; height: auto; }
+body.has-bar #touchControls {
+    position: relative; inset: auto; flex: 0 0 auto;
+    height: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px));
+    padding: 8px calc(16px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    background: var(--white); border-top: 3px solid var(--ink); border-radius: 26px 26px 0 0;
+    box-shadow: 0 -4px 0 rgba(75, 42, 110, .12); pointer-events: auto; touch-action: none;
+}
+body.has-bar #joystick, body.has-bar #dashButton { position: relative; left: auto; right: auto; bottom: auto; flex: 0 0 auto; opacity: 1; background: var(--bg); }
+body.has-bar #joystick { --size: min(calc(var(--bar-h) - 16px), 31vw); width: var(--size); height: var(--size); }
+body.has-bar #dashButton { --size: min(calc(var(--bar-h) - 24px), 27vw); width: var(--size); height: var(--size); }
+body.has-bar #dashButton.ready { background: var(--pink-soft); }
+/* Orta: dikeyde süre / puan / duraklat alt alta, yatayda yan yana */
+body.has-bar #barCenter { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+@media (orientation: landscape) { body.has-bar #barCenter { flex-direction: row; gap: 14px; } }
+#barTime { font: 700 clamp(18px, 5.4vw, 32px) 'Fredoka', system-ui, sans-serif; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (orientation: landscape) { #barTime { font-size: clamp(22px, 7vh, 34px); } }
+#barScore { font: 700 15px 'Fredoka', system-ui, sans-serif; color: var(--ink); background: var(--pink); border: 2px solid var(--ink); border-radius: 999px; padding: 3px 14px; box-shadow: 0 2px 0 var(--ink); white-space: nowrap; }
+body.has-bar #pauseButton { position: static; transform: none; width: 44px; height: 44px; flex: 0 0 auto; opacity: 1; background: var(--bg); }
+/* Duraklatma ve oyun bitti: kontroller gizlenir, süre ve puan kalır; ANA MENÜ / PAYLAŞ şeridin köşelerine oturur */
+body.bar-idle #joystick, body.bar-idle #dashButton { visibility: hidden; }
+body.has-bar #menuButton, body.has-bar #shareButton { bottom: calc(var(--bar-h) / 2 - 22px + env(safe-area-inset-bottom, 0px)); }
+
 #rotateHint { display: none; position: absolute; top: calc(10px + var(--safe-top)); left: 50%; transform: translateX(-50%); padding: 4px 12px; text-align: center; font-size: 12px; font-weight: 600; color: var(--ink); background: rgba(255, 255, 255, .8); border-radius: 999px; pointer-events: none; white-space: nowrap; }
 @media (orientation: portrait) { #rotateHint { display: block; } }

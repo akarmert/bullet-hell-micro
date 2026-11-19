@@ -82,12 +82,16 @@ export class TouchControls {
         this.pressedUntil = 0;
     }
 
-    update(playing, player) {
-        const visible = playing && this.touchDevice;
+    /**
+     * @param {boolean} showBar Şerit görünsün mü (dokunmatik + oyun/duraklatma/oyun bitti)
+     * @param {boolean} interactive Joystick ve DASH girdi alsın mı (sadece oynarken)
+     */
+    update(showBar, interactive, player) {
+        if (this.layer.hidden === showBar) this.layer.hidden = !showBar;
+        const visible = showBar && interactive;
         if (this.visible !== visible) {
             this.reset();
             this.visible = visible;
-            this.layer.hidden = !visible;
         }
         const ratio = player.getDashReadyRatio();
         this.ring.style.strokeDashoffset = String(1 - ratio);
