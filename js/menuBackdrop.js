@@ -35,6 +35,7 @@ export class MenuBackdrop {
         this.popChain = 0;
         this.lastPopAt = -Infinity;
         this.nextShootingAt = 4;
+        this.opacity = 1;
         this.resize(width, height);
     }
 
@@ -247,8 +248,12 @@ export class MenuBackdrop {
         this.shooting = this.shooting.filter(s => s.life > 0);
     }
 
-    render(ctx) {
+    /**
+     * @param {number} opacity Genel saydamlık (sonuç kartında içerik önde kalsın diye soluk çizilir)
+     */
+    render(ctx, opacity = 1) {
         if (THEME.highContrast) return; // Yüksek kontrastta sade zemin
+        this.opacity = opacity;
         ctx.save();
         ctx.lineJoin = 'round';
         ctx.lineCap = 'round';
@@ -256,7 +261,7 @@ export class MenuBackdrop {
         else this.renderCandies(ctx);
 
         for (const r of this.ripples) {
-            ctx.globalAlpha = r.life * 0.7;
+            ctx.globalAlpha = (r.life * 0.7) * this.opacity;
             ctx.strokeStyle = r.c;
             ctx.lineWidth = 3 * r.life;
             ctx.beginPath();
@@ -264,7 +269,7 @@ export class MenuBackdrop {
             ctx.stroke();
         }
         for (const b of this.bursts) {
-            ctx.globalAlpha = Math.min(1, b.life * 1.5);
+            ctx.globalAlpha = (Math.min(1, b.life * 1.5)) * this.opacity;
             ctx.save();
             ctx.translate(b.x, b.y);
             ctx.rotate(b.rot);
@@ -279,7 +284,7 @@ export class MenuBackdrop {
 
     renderCandies(ctx) {
         for (const tr of this.trail) {
-            ctx.globalAlpha = tr.life * 0.7;
+            ctx.globalAlpha = (tr.life * 0.7) * this.opacity;
             ctx.save();
             ctx.translate(tr.x, tr.y);
             ctx.rotate(tr.rot);
@@ -289,9 +294,9 @@ export class MenuBackdrop {
             ctx.fill();
             ctx.restore();
         }
-        ctx.globalAlpha = 0.88;
+        ctx.globalAlpha = (0.88) * this.opacity;
         for (const c of this.candies) drawCandy(ctx, c);
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = (1) * this.opacity;
     }
 
     renderNight(ctx) {
@@ -312,7 +317,7 @@ export class MenuBackdrop {
         for (let i = 0; i < linked.length; i++) {
             const { s, d } = linked[i];
             const prev = i === 0 ? a : linked[i - 1].s;
-            ctx.globalAlpha = (1 - d / LINK_RADIUS) * linkAlpha;
+            ctx.globalAlpha = ((1 - d / LINK_RADIUS) * linkAlpha) * this.opacity;
             ctx.beginPath();
             ctx.moveTo(prev.x, prev.y);
             ctx.lineTo(s.x, s.y);
@@ -324,7 +329,7 @@ export class MenuBackdrop {
         for (const s of this.stars) {
             const lit = linkedSet.has(s) ? 0.55 : 0;
             const glow = Math.max(lit, s.flare);
-            ctx.globalAlpha = Math.min(1, 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(tw + s.ph)) + glow * 0.7);
+            ctx.globalAlpha = (Math.min(1, 0.2 + 0.25 * (0.5 + 0.5 * Math.sin(tw + s.ph)) + glow * 0.7)) * this.opacity;
             ctx.fillStyle = s.c;
             const r = (s.big ? 2.2 : 1.2) + glow * 2.2;
             if (glow > 0.3) drawStar(ctx, s.x, s.y, r * 1.9, r * 0.7);
@@ -341,7 +346,7 @@ export class MenuBackdrop {
             const g = ctx.createLinearGradient(s.x, s.y, s.x - s.vx * len, s.y - s.vy * len);
             g.addColorStop(0, 'rgba(255, 246, 250, 0.95)');
             g.addColorStop(1, 'rgba(255, 141, 192, 0)');
-            ctx.globalAlpha = Math.min(1, s.life * 1.6);
+            ctx.globalAlpha = (Math.min(1, s.life * 1.6)) * this.opacity;
             ctx.strokeStyle = g;
             ctx.lineWidth = 3;
             ctx.beginPath();
@@ -361,7 +366,7 @@ export class MenuBackdrop {
             const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R);
             g.addColorStop(0, `rgba(${color}, ${0.55 + pulse * 0.3})`);
             g.addColorStop(1, `rgba(${color}, 0)`);
-            ctx.globalAlpha = 1;
+            ctx.globalAlpha = (1) * this.opacity;
             ctx.fillStyle = g;
             ctx.fillRect(f.x - R, f.y - R, R * 2, R * 2);
             ctx.fillStyle = '#FFF6FA';
@@ -369,7 +374,7 @@ export class MenuBackdrop {
             ctx.arc(f.x, f.y, 1.4, 0, Math.PI * 2);
             ctx.fill();
         }
-        ctx.globalAlpha = 1;
+        ctx.globalAlpha = (1) * this.opacity;
     }
 }
 

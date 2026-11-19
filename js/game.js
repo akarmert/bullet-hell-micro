@@ -173,7 +173,7 @@ export class Game {
 
         this.canvas.addEventListener('pointermove', (e) => {
             // Menü arka planı her türlü imleci/parmağı izler
-            if (this.state === GAME_STATE.MENU) {
+            if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
                 const c = getCanvasCoords(e.clientX, e.clientY);
                 this.menuBackdrop.pointerMove(c.x, c.y);
             }
@@ -232,8 +232,12 @@ export class Game {
             } else if (this.state === GAME_STATE.DEAD) {
                 // K6: sadece "tekrar oyna" butonu yeniden başlatır
                 if (!this.deathScreenReady()) return;
-                if (this.ui.hitsDeadInfo(coords.x, coords.y)) this.openInfo();
-                else if (this.ui.hitsRetry(coords.x, coords.y)) this.restartGame();
+                const action = this.ui.deadAction(coords.x, coords.y);
+                if (action === 'info') this.openInfo();
+                else if (action === 'retry') this.restartGame();
+                else if (action === 'menu') this.returnToMenu();
+                else if (action === 'share') this.shareResult();
+                else this.tapMenuBackdrop(coords.x, coords.y); // Kartın boş yeri: şeker patlat / kayan yıldız
             }
         });
 
@@ -662,6 +666,7 @@ export class Game {
      */
     triggerDeath() {
         if (this.state !== GAME_STATE.PLAYING) return;
+        this.hideRotateHint();
 
         // K5: ölüm nedenini kaydet (kenar / boss / mermi)
         this.deathCause = CollisionSystem.deathCause(this.player, this.waveManager.boss);
@@ -711,14 +716,15 @@ export class Game {
         this.pollKeyboardAndGamepad();
 
         // Dokunmatik kontrol şeridi: oyun, duraklatma ve oyun bitti ekranında görünür (menüde gizli)
-        const barStates = [GAME_STATE.PLAYING, GAME_STATE.PAUSED, GAME_STATE.DEAD];
-        const showBar = this.touchControls.touchDevice && barStates.includes(this.state);
+        // Sonuç kartı tüm ekranı kullanır: kart belirince alt şerit kalkar (patlama anında ekran zıplamasın)
+        const inGame = this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED;
+        const showBar = this.touchControls.touchDevice && (inGame || (this.state === GAME_STATE.DEAD && !this.deathScreenReady()));
         this.touchControls.update(showBar, this.state === GAME_STATE.PLAYING, this.player);
         this.syncControlBar(showBar);
         this.ui.touch = this.touchControls.touchDevice;
-        const deadReady = this.state === GAME_STATE.DEAD && this.deathScreenReady();
-        this.menuButton.hidden = !(deadReady || (this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0));
-        this.shareButton.hidden = !deadReady;
+        // Sonuç ekranında ana menü / paylaş kartın içinde (canvas); HTML butonu sadece duraklatmada
+        this.menuButton.hidden = !(this.state === GAME_STATE.PAUSED && this.resumeCountdown <= 0);
+        this.shareButton.hidden = true;
         this.pauseButton.hidden = !(this.state === GAME_STATE.PLAYING && this.touchControls.touchDevice);
 
         // Müzik: menüde sakin tema, oyunda faz müziği, duraklatma/ölümde sessiz
@@ -749,7 +755,7 @@ export class Game {
 
         // Efektler ve Reaktif Izgara fiziği
         this.effects.update(dt, this.elapsedMs);
-        if (this.state === GAME_STATE.MENU) {
+        if (this.state === GAME_STATE.MENU || this.state === GAME_STATE.DEAD) {
             this.menuBackdrop.resize(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
             this.menuBackdrop.update(dt);
         }
@@ -918,12 +924,13 @@ export class Game {
                 score: this.score,
                 waves: this.waveManager,
                 unlocked: this.lastUnlocked,
-                candies: this.lastCandies || 0
+                candies: this.lastCandies || 0,
+                backdrop: this.menuBackdrop
             });
         }
 
-        // Arena sınır çerçevesi
-        this.renderArenaBorder(ctx, w, h);
+        // Arena sınır çerçevesi: sadece oyun içinde (menüde ve sonuç ekranında yok)
+        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) this.renderArenaBorder(ctx, w, h);
     }
 
     /** Ölüm patlaması bitti mi? (yeniden başlatma ve butonlar bundan sonra) */
@@ -1039,11 +1046,15 @@ export class Game {
      * Arena sınırlarını parlayan çizgi ile belirler
      */
     renderArenaBorder(ctx, w, h) {
+        // Ekranda her zaman ~6 CSS px kalınlık; alt şerit varken alt kenar şeridin üst çizgisine dönüşür
+        const cssH = this.canvas && this.canvas.clientHeight;
+        const lw = cssH ? 6 * h / cssH : 6;
         ctx.save();
-        ctx.strokeStyle = this.state === GAME_STATE.DEAD ? THEME.PINK : THEME.LAVENDER;
-        ctx.lineWidth = 6;
+        ctx.strokeStyle = THEME.FRAME;
+        ctx.lineWidth = lw;
         ctx.beginPath();
-        ctx.roundRect(3, 3, w - 6, h - 6, 18);
+        if (this.barVisible) ctx.roundRect(lw / 2, lw / 2, w - lw, h + lw * 2, [18, 18, 0, 0]);
+        else ctx.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
         ctx.stroke();
         ctx.restore();
     }

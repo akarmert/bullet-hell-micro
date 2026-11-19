@@ -78,7 +78,12 @@ test('K6: sonuç ekranında sadece "tekrar oyna" butonu yeniden başlatır; kart
         ui.setLayout(w, h);
         const D = ui.getDeadLayout();
         assert.ok(D.cw * D.s <= w, 'kart genişliği ekrana sığar');
-        assert.ok(410 * D.s <= h, 'kart yüksekliği ekrana sığar');
+        assert.ok(D.ch * D.s <= h, 'kart yüksekliği ekrana sığar');
+        for (const key of ['menu', 'share', 'retry']) {
+            const b = D[key];
+            assert.equal(ui.deadAction(D.cx + (b.x + b.w / 2) * D.s, D.cy + (b.y + b.h / 2) * D.s), key, `${key} butonu kartın içinde`);
+        }
+        assert.equal(ui.deadAction(D.cx, D.cy), null, 'kartın ortası bir şey yapmaz');
         const r = D.retry;
         const bx = D.cx + (r.x + r.w / 2) * D.s;
         const by = D.cy + (r.y + r.h / 2) * D.s;

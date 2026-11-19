@@ -11,7 +11,7 @@ import { formatScore } from './score.js';
 import { SKINS, drawMarshmallow } from './skins.js';
 import { SETTING_ROWS } from './settings.js';
 import { dateLabel } from './rng.js';
-import { t } from './i18n.js';
+import { t, upper } from './i18n.js';
 
 const SETTINGS_LAYOUT = { x: 110, y: 104, w: 380, rowTop: 160, rowH: 42 };
 
@@ -111,6 +111,17 @@ function wrapWords(ctx, text, maxW) {
     }
     if (line) lines.push(line);
     return lines;
+}
+
+/** Dört köşeli minik ışıltı (sersemleme yıldızları) */
+function drawSparkle(ctx, x, y, r) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.quadraticCurveTo(x, y, x - r, y);
+    ctx.quadraticCurveTo(x, y, x, y - r);
+    ctx.fill();
 }
 
 /** Kesikli odak çerçevesi */
@@ -312,18 +323,44 @@ export class UIManager {
         const h = this.height || GAME_CONFIG.CANVAS.HEIGHT;
         const aw = w - this.safe.left - this.safe.right;
         const ah = h - this.safe.top - this.safe.bottom;
-        let s = Math.min(ah * 0.94 / 430, 1.3);
-        let cw = Math.min(360, aw * 0.92 / s);
-        if (cw < 260) { s = aw * 0.92 / 260; cw = 260; }
-        const rbw = Math.min(250, cw - 30);
+        // Kart ekranı kaplar: telefonda neredeyse tam ekran, büyük ekranda ortada sınırlı
+        const MIN_W = 270;
+        const MIN_H = 500;
+        const s = Math.min(1.25, aw * 0.94 / MIN_W, ah * 0.95 / MIN_H);
+        const cw = Math.min(400, aw * 0.94 / s);
+        const ch = Math.min(620, ah * 0.95 / s);
+        const top = -ch / 2;
+        const pad = 18;
+        const rowH = 46;
+        const rowY = ch / 2 - 20 - rowH;
+        const half = (cw - pad * 2 - 12) / 2;
+        const retryH = 58;
         return {
             cx: this.safe.left + aw / 2,
             cy: this.safe.top + ah / 2,
             s,
             cw,
-            retry: { x: -rbw / 2, y: 114, w: rbw, h: 54 },
-            info: { cx: cw / 2 - 8, cy: -197, r: 20 }   // Kartın köşesine oturan rozet
+            ch,
+            top,
+            headerH: 121,
+            retry: { x: -cw / 2 + pad, y: rowY - 14 - retryH, w: cw - pad * 2, h: retryH },
+            menu: { x: -cw / 2 + pad, y: rowY, w: half, h: rowH },
+            share: { x: -cw / 2 + pad + half + 12, y: rowY, w: half, h: rowH },
+            info: { cx: cw / 2 - 28, cy: top + 28, r: 20 }  // Başlık bandının sağ üst köşesinde, ekrandan taşmaz
         };
+    }
+
+    /** Sonuç kartında dokunulan eylem: 'info' | 'retry' | 'menu' | 'share' | null */
+    deadAction(px, py) {
+        const L = this.getDeadLayout();
+        const x = (px - L.cx) / L.s;
+        const y = (py - L.cy) / L.s;
+        if (Math.hypot(x - L.info.cx, y - L.info.cy) <= L.info.r + 8) return 'info';
+        const inside = (r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+        if (inside(L.retry)) return 'retry';
+        if (inside(L.menu)) return 'menu';
+        if (inside(L.share)) return 'share';
+        return null;
     }
 
     /** Sonuç kartındaki "i" butonuna mı dokunuldu? */
@@ -905,7 +942,7 @@ export class UIManager {
      * @param {object} info { score, waves, unlocked: Skin[], reveal, cause, bossTitle }
      */
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, info = {}) {
-        const { score = null, waves = null, unlocked = [], reveal = 1, cause = 'bullet', bossTitle = '', candies = 0 } = info;
+        const { score = null, waves = null, unlocked = [], reveal = 1, cause = 'bullet', bossTitle = '', candies = 0, backdrop = null } = info;
         if (reveal <= 0) return; // Önce ölüm patlaması görünsün
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
@@ -916,84 +953,246 @@ export class UIManager {
         ctx.globalAlpha = reveal;
         ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.85)`;
         ctx.fillRect(0, 0, w, h);
+        const baseTransform = ctx.getTransform(); // Arka plan efekti arena koordinatında çizilir
         ctx.translate(D.cx, D.cy + (1 - reveal) * 24); // Kart hafifçe yukarı kayarak gelir
         ctx.scale(D.s, D.s);
 
-        candyPanel(ctx, -cw / 2, -205, cw, 410, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
+        const top = D.top;
+        const ch = D.ch;
+        candyPanel(ctx, -cw / 2, top, cw, ch, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        const now = performance.now() / 1000;
+        const bandH = D.headerH;
+        const yb = top + bandH;
 
-        // Başlık ve tek satırlık alt başlık (mod · ölüm nedeni) — etiket kutusu yok
-        ctx.font = font(30, 700);
-        ctx.fillStyle = THEME.PINK_SOFT;
-        ctx.fillText(t('dead.title'), 2, -166);
-        ctx.fillStyle = THEME.TEXT_ACCENT;
-        ctx.fillText(t('dead.title'), 0, -168);
-        const modeLabel = mode.id === 'daily' ? `${mode.label} · ${dateLabel()}` : mode.label;
-        ctx.font = font(14, 600);
-        ctx.fillStyle = THEME.MUTED;
-        ctx.fillText(`${modeLabel} · ${t(`dead.cause.${cause}`, { boss: bossTitle })}`, 0, -134, cw - 48);
-
-        // Kahraman: büyük skor
-        ctx.font = font(52, 700);
-        outlinedText(ctx, formatScore(score ? score.total : 0), 0, -80, THEME.TEXT_ACCENT, THEME.TEXT_HALO, 6);
-
-        // Skorun altında tek satır: yeni rekor ya da en iyi + kazanılan şeker
-        const bits = [];
-        if (this.isNewRecord) bits.push(t('dead.newRecord'));
-        else bits.push(t('menu.best', { score: formatScore(this.getBestScore(mode.id)) }));
-        if (candies > 0) bits.push(t('dead.candies', { n: candies }));
-        const bounce = this.isNewRecord ? Math.abs(Math.sin(performance.now() * 0.005)) * 2 : 0;
-        ctx.font = font(14, 700);
-        ctx.fillStyle = this.isNewRecord ? THEME.TEXT_ACCENT : THEME.TEXT_PRIMARY;
-        ctx.fillText(bits.join('   ·   '), 0, -38 - bounce, cw - 40);
-
-        // Süre · graze · seri: tek yumuşak tepside, değer üstte etiket altta
-        const trayW = cw - 36;
+        // Gövde: aşağı doğru pembeleşen zemin ve çok soluk serpintiler (kartın içine kırpılı)
+        ctx.save();
         ctx.beginPath();
-        ctx.roundRect(-trayW / 2, -14, trayW, 72, 18);
-        ctx.fillStyle = THEME.SURFACE_SOFT;
+        ctx.roundRect(-cw / 2 + 1.25, top + 1.25, cw - 2.5, ch - 2.5, 25);
+        ctx.clip();
+        const body = ctx.createLinearGradient(0, yb, 0, top + ch);
+        body.addColorStop(0, THEME.SURFACE);
+        body.addColorStop(1, THEME.SURFACE_SOFT);
+        ctx.fillStyle = body;
+        ctx.fillRect(-cw / 2, yb, cw, ch - bandH);
+        if (backdrop && reveal > 0.6) {
+            // Ana menüdeki etkileşimli arka plan, kartın gövdesinde (soluk, içerik önde kalır)
+            ctx.save();
+            ctx.setTransform(baseTransform);
+            backdrop.render(ctx, 0.6);
+            ctx.restore();
+        }
+        const sprinkleColors = [THEME.PINK, THEME.PURPLE, THEME.LAVENDER];
+        for (let i = 0; i < (backdrop ? 0 : 26); i++) {
+            const sx = -cw / 2 + ((i * 61 + 23) % 100) / 100 * cw;
+            const sy = yb + 16 + ((i * 43 + 7) % 100) / 100 * (ch - bandH - 24);
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(i * 0.9);
+            ctx.globalAlpha = THEME.dark ? 0.12 : 0.16;
+            ctx.fillStyle = sprinkleColors[i % 3];
+            ctx.beginPath();
+            ctx.roundRect(-4, -1.5, 8, 3, 1.5);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Başlık bandı: pembe→mor, alt kenarı krema damlası gibi dalgalı
+        const n = Math.max(8, Math.round(cw / 26));
+        const r = cw / (n * 2);
+        const bandPath = () => {
+            ctx.beginPath();
+            ctx.moveTo(-cw / 2, top);
+            ctx.lineTo(cw / 2, top);
+            ctx.lineTo(cw / 2, yb);
+            for (let i = n - 1; i >= 0; i--) ctx.arc(-cw / 2 + r + i * 2 * r, yb, r, 0, Math.PI, false);
+            ctx.closePath();
+        };
+        const band = ctx.createLinearGradient(-cw / 2, 0, cw / 2, 0);
+        band.addColorStop(0, THEME.PINK);
+        band.addColorStop(1, THEME.PURPLE);
+        bandPath();
+        ctx.fillStyle = band;
         ctx.fill();
+        ctx.save();
+        bandPath();
+        ctx.clip();
+        for (let i = 0; i < 16; i++) {
+            const sx = -cw / 2 + ((i * 53 + 17) % 100) / 100 * cw;
+            const sy = top + 7 + ((i * 37 + 11) % 100) / 100 * (bandH - 14);
+            ctx.save();
+            ctx.translate(sx, sy);
+            ctx.rotate(i * 1.3);
+            ctx.globalAlpha = 0.35;
+            ctx.fillStyle = i % 3 ? '#FFFFFF' : THEME.LAVENDER;
+            ctx.beginPath();
+            ctx.roundRect(-4, -1.5, 8, 3, 1.5);
+            ctx.fill();
+            ctx.restore();
+        }
+        // Bandın üstünde yumuşak parlama
+        const shine = ctx.createLinearGradient(0, top, 0, top + bandH * 0.5);
+        shine.addColorStop(0, 'rgba(255, 255, 255, 0.22)');
+        shine.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = shine;
+        ctx.fillRect(-cw / 2, top, cw, bandH * 0.5);
+        ctx.restore();
+        // Dalgalı kenarın konturu
+        ctx.beginPath();
+        for (let i = 0; i < n; i++) ctx.arc(-cw / 2 + r + i * 2 * r, yb, r, Math.PI, 0, true);
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.restore();
+
+        // Sersemlemiş marşmelov: arkasında yumuşak ışık halesi, başında dönen yıldızlar
+        const my = top + 35;
+        const halo = ctx.createRadialGradient(0, my, 6, 0, my, 46);
+        halo.addColorStop(0, 'rgba(255, 255, 255, 0.55)');
+        halo.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = halo;
+        ctx.fillRect(-46, my - 46, 92, 92);
+        drawMarshmallow(ctx, 0, my, 19, (player && player.skin) || SKINS[0], { blink: 0.12, squash: 1.06 });
+        ctx.fillStyle = '#FFFFFF';
+        for (let i = 0; i < 3; i++) {
+            const a = now * 2.4 + (i * Math.PI * 2) / 3;
+            const depth = 0.75 + Math.sin(a) * 0.25;
+            drawSparkle(ctx, Math.cos(a) * 30, my - 16 + Math.sin(a) * 7, 4.5 * depth);
+        }
+
+        ctx.font = font(30, 700);
+        outlinedText(ctx, t('dead.title'), 0, top + 77, '#FFFFFF', THEME.INK, 6);
+        const modeLabel = mode.id === 'daily' ? `${mode.label} · ${dateLabel()}` : mode.label;
+        ctx.font = font(13, 700);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.fillText(`${modeLabel} · ${t(`dead.cause.${cause}`, { boss: bossTitle })}`, 0, top + 102, cw - 40);
+
+        // --- Gövde: başlık ile "tekrar oyna" arasındaki alana ortalanan blok ---
+        // Uzun ekranda boşluk skora, satırlar arasına ve kenarlara paylaştırılır
+        const extraLines = (waves && waves.boss ? 1 : 0) + (unlocked.length ? 1 : 0);
+        const blockH = 140 + (extraLines ? 8 + extraLines * 18 : 0);
+        const areaTop = top + bandH;
+        const free = Math.max(28, D.retry.y - areaTop - blockH);
+        const scoreSize = Math.min(68, 50 + Math.max(0, free - 60) * 0.12);
+        const grow = scoreSize - 50;
+        const inner = Math.min(40, Math.max(0, free - grow - 28) * 0.18);
+        const b = areaTop + Math.max(14, (free - grow - inner * 2) * 0.45);
+
+        // Büyük skor: arkasında yumuşak pembe hale, üstünde ince çizgili küçük başlık
+        const scoreY = b + 26 + grow / 2;
+        const glowR = scoreSize * 1.6;
+        const glow = ctx.createRadialGradient(0, scoreY, 4, 0, scoreY, glowR);
+        glow.addColorStop(0, THEME.dark ? 'rgba(255, 141, 192, 0.16)' : 'rgba(255, 111, 174, 0.14)');
+        glow.addColorStop(1, 'rgba(255, 111, 174, 0)');
+        ctx.fillStyle = glow;
+        ctx.fillRect(-glowR, scoreY - glowR, glowR * 2, glowR * 2);
+        if (free > 70) {
+            const ly = scoreY - scoreSize * 0.62 - 6;
+            ctx.font = font(11, 700);
+            ctx.fillStyle = THEME.MUTED;
+            const label = upper(t('dead.score'));
+            ctx.fillText(label, 0, ly);
+            const lw = ctx.measureText(label).width / 2 + 8;
+            ctx.strokeStyle = THEME.MUTED;
+            ctx.globalAlpha = 0.45;
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(-lw - 22, ly); ctx.lineTo(-lw, ly);
+            ctx.moveTo(lw, ly); ctx.lineTo(lw + 22, ly);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+
+        ctx.font = font(scoreSize, 700);
+        ctx.fillStyle = THEME.dark ? THEME.INK : THEME.PINK_SOFT; // Koyu temada gölge koyu, açıkta pembe
+        ctx.fillText(formatScore(score ? score.total : 0), 3, b + 29 + grow / 2);
+        ctx.fillStyle = THEME.TEXT_ACCENT;
+        ctx.fillText(formatScore(score ? score.total : 0), 0, b + 26 + grow / 2);
+
+        // Yeni rekor rozeti ya da en iyi skor + bu turun şekeri
+        const parts = [this.isNewRecord ? t('dead.newRecord') : t('menu.best', { score: formatScore(this.getBestScore(mode.id)) })];
+        if (candies > 0) parts.push(t('dead.candies', { n: candies }));
+        if (this.isNewRecord) {
+            const bounce = Math.abs(Math.sin(now * 5)) * 2;
+            UIManager.pill(ctx, parts.join('  ·  '), 0, b + 64 + grow + inner - bounce, THEME.PURPLE_DEEP, '#FFFFFF', 'center', 13);
+        } else {
+            ctx.font = font(14, 700);
+            ctx.fillStyle = THEME.TEXT_PRIMARY;
+            ctx.fillText(parts.join('   ·   '), 0, b + 64 + grow + inner, cw - 40);
+        }
+
+        // Süre · graze · seri: üç küçük şeker çipi
         const cols = [
-            [t('dead.time'), UIManager.formatTime(finalTimeMs)],
-            [t('dead.graze'), player ? String(player.grazeCount) : '0'],
-            [t('dead.combo'), score ? String(score.bestCombo) : '0']
+            ['⏱', t('dead.time'), UIManager.formatTime(finalTimeMs)],
+            ['✨', t('dead.graze'), player ? String(player.grazeCount) : '0'],
+            ['🔥', t('dead.combo'), score ? String(score.bestCombo) : '0']
         ];
-        const colW = trayW / 3;
-        const valueSize = colW < 90 ? 16 : 20; // Dar kartta süre sıkışmasın
-        cols.forEach(([label, value], i) => {
-            const x = (i - 1) * colW;
+        const gap = 8;
+        const chipW = (cw - 36 - gap * 2) / 3;
+        const valueSize = chipW < 84 ? 15 : 18; // Dar kartta süre sığsın
+        const chipY = b + 86 + grow + inner * 2;
+        // Her çip kendi şeker tonunda: lavanta, pembe, şeftali; altta ince "kalınlık"
+        const tints = THEME.dark
+            ? [['rgba(205, 184, 255, 0.16)', 'rgba(205, 184, 255, 0.30)'], ['rgba(255, 141, 192, 0.16)', 'rgba(255, 141, 192, 0.32)'], ['rgba(255, 196, 140, 0.14)', 'rgba(255, 196, 140, 0.28)']]
+            : [['#F1EAFF', '#DCCBFF'], ['#FFE6F1', '#FFC4DE'], ['#FFF0E2', '#FFD7B5']];
+        cols.forEach(([icon, label, value], i) => {
+            const x = -cw / 2 + 18 + i * (chipW + gap);
+            ctx.beginPath();
+            ctx.roundRect(x, chipY + 3, chipW, 54, 16);
+            ctx.fillStyle = tints[i][1];
+            ctx.fill();
+            ctx.beginPath();
+            ctx.roundRect(x, chipY, chipW, 54, 16);
+            ctx.fillStyle = tints[i][0];
+            ctx.fill();
+            const cx = x + chipW / 2;
             ctx.font = font(valueSize, 700);
             ctx.fillStyle = THEME.TEXT;
-            ctx.fillText(value, x, 12, colW - 6);
-            ctx.font = font(12, 600);
+            ctx.fillText(value, cx, chipY + 18, chipW - 10);
+            ctx.font = font(11, 600);
             ctx.fillStyle = THEME.MUTED;
-            ctx.fillText(label, x, 37, colW - 6);
+            ctx.fillText(`${icon} ${label}`, cx, chipY + 39, chipW - 8);
         });
 
         // İsteğe bağlı tek satırlar: boss sonucu, açılan kostüm
-        let lineY = 76;
+        let lineY = chipY + 54 + 18;
         if (waves && waves.boss) {
-            const parts = [];
-            if (waves.bossKills > 0) parts.push(t('dead.bossKills', { n: waves.bossKills }));
-            if (waves.bossActive) parts.push(t('dead.bossHp', { title: waves.boss.title, hp: Math.ceil(waves.boss.hpRatio * 100) }));
-            ctx.font = font(13, 700);
+            const bits = [];
+            if (waves.bossKills > 0) bits.push(t('dead.bossKills', { n: waves.bossKills }));
+            if (waves.bossActive) bits.push(t('dead.bossHp', { title: waves.boss.title, hp: Math.ceil(waves.boss.hpRatio * 100) }));
+            ctx.font = font(12, 700);
             ctx.fillStyle = waves.bossActive ? THEME.TEXT_ACCENT : THEME.TEXT_PRIMARY;
-            ctx.fillText(parts.join(' · '), 0, lineY, cw - 40);
-            lineY += 20;
+            ctx.fillText(bits.join(' · '), 0, lineY, cw - 40);
+            lineY += 18;
         }
         if (unlocked.length) {
-            ctx.font = font(13, 700);
+            ctx.font = font(12, 700);
             ctx.fillStyle = THEME.TEXT_ACCENT;
             ctx.fillText(t('dead.unlocked', { names: unlocked.map(k => t(`skin.${k.id}.name`, null, k.name)).join(', ') }), 0, lineY, cw - 40);
         }
 
-        // K6: açık "tekrar oyna" butonu (sadece bu buton, Enter ve Space yeniden başlatır)
+        // K6: büyük "tekrar oyna" (sadece bu buton, Enter ve Space yeniden başlatır)
         const rb = D.retry;
         candyPanel(ctx, rb.x, rb.y, rb.w, rb.h, rb.h / 2, THEME.PURPLE, { depth: 5, lineWidth: 2.5 });
+        ctx.beginPath();
+        ctx.roundRect(rb.x + 22, rb.y + 8, rb.w - 44, 7, 3.5);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.fill();
         ctx.font = font(21, 700);
         ctx.fillStyle = THEME.WHITE;
         ctx.fillText(t('dead.retryBtn'), 0, rb.y + rb.h / 2 + 1, rb.w - 20);
+
+        // Kartın içinde: ana menü ve paylaş
+        const mb = D.menu;
+        candyPanel(ctx, mb.x, mb.y, mb.w, mb.h, mb.h / 2, THEME.SURFACE_SOFT, { depth: 4, lineWidth: 2 });
+        ctx.font = font(15, 700);
+        ctx.fillStyle = THEME.TEXT;
+        ctx.fillText(`⌂ ${t('dom.menu')}`, mb.x + mb.w / 2, mb.y + mb.h / 2 + 1, mb.w - 16);
+        const sb = D.share;
+        candyPanel(ctx, sb.x, sb.y, sb.w, sb.h, sb.h / 2, THEME.PINK, { depth: 4, lineWidth: 2 });
+        ctx.fillStyle = THEME.INK;
+        ctx.fillText(`↗ ${t('dom.share')}`, sb.x + sb.w / 2, sb.y + sb.h / 2 + 1, sb.w - 16);
 
         // Bilgi butonu (kartın sağ üst köşesi)
         UIManager.roundButton(ctx, D.info.cx, D.info.cy, D.info.r, 'i');

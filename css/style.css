@@ -14,6 +14,12 @@
     --text: #4B2A6E;
     --glass: rgba(255, 255, 255, .55);
     --glass-strong: rgba(255, 255, 255, .7);
+    --frame: #D9C8FF;
+    --surface-soft: #FBE8F2;
+    --pink-deep: #F0468F;
+    --sprinkle-1: rgba(255, 111, 174, .38);
+    --sprinkle-2: rgba(142, 91, 232, .28);
+    --sprinkle-3: rgba(205, 184, 255, .7);
 }
 
 /* Koyu tema "Gece Şekercisi" (theme.js applyTheme ile html[data-theme]) */
@@ -25,7 +31,15 @@
     --text: #F6EAFF;
     --glass: rgba(46, 33, 80, .7);
     --glass-strong: rgba(46, 33, 80, .85);
+    --frame: #4A3878;
+    --surface-soft: #241A3D;
+    --sprinkle-1: rgba(255, 141, 192, .28);
+    --sprinkle-2: rgba(205, 184, 255, .22);
+    --sprinkle-3: rgba(255, 246, 250, .14);
 }
+/* Sonuç ekranında çerçeve yok: şerit zemine karışır, sadece ANA MENÜ / PAYLAŞ kalır */
+body.has-bar.bar-dead #touchControls { border-color: transparent; background: transparent; }
+body.has-bar.bar-dead #touchControls::before { display: none; }
 
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; user-select: none; -webkit-user-select: none; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: 'Fredoka', system-ui, sans-serif; overscroll-behavior: none; }
@@ -61,21 +75,71 @@ body.has-bar #touchControls {
     height: calc(var(--bar-h) + env(safe-area-inset-bottom, 0px));
     padding: 8px calc(16px + env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) calc(16px + env(safe-area-inset-left, 0px));
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
-    background: var(--surface); border-top: 3px solid var(--ink); border-radius: 26px 26px 0 0;
-    box-shadow: 0 -4px 0 rgba(75, 42, 110, .12); pointer-events: auto; touch-action: none;
+    /* Oyun alanı çerçevesinin devamı: aynı renk ve kalınlık, köşesiz; tek parça şeker konsol.
+       Zemin: aşağı doğru pembeleşen şeker kutusu + soluk serpinti deseni */
+    background:
+        radial-gradient(circle at 20% 30%, var(--sprinkle-1) 0 2px, transparent 2.6px) 0 0 / 46px 38px,
+        radial-gradient(circle at 72% 72%, var(--sprinkle-2) 0 2px, transparent 2.6px) 0 0 / 46px 38px,
+        radial-gradient(circle at 45% 50%, var(--sprinkle-3) 0 1.6px, transparent 2.2px) 11px 7px / 31px 29px,
+        linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
+    border: 6px solid var(--frame); border-bottom: 0; border-radius: 0;
+    pointer-events: auto; touch-action: none;
+}
+/* Şeridin üst kenarından sarkan krema damlaları (çerçeve renginde) */
+body.has-bar #touchControls::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 0; height: 11px; pointer-events: none;
+    background: radial-gradient(circle at 50% 0, var(--frame) 0 8px, transparent 8.6px) 0 0 / 24px 11px repeat-x;
+}
+/* Ortadaki süre / puan için yumuşak bir şeker tabağı */
+body.has-bar #barCenter { position: relative; isolation: isolate; padding: 6px 0; }
+body.has-bar #barCenter::before {
+    content: ''; position: absolute; inset: 0 -8px; border-radius: 22px; pointer-events: none; z-index: -1;
+    background: var(--surface); box-shadow: inset 0 0 0 2px var(--sprinkle-3);
 }
 body.has-bar #joystick, body.has-bar #dashButton { position: relative; left: auto; right: auto; bottom: auto; flex: 0 0 auto; opacity: 1; background: var(--bg); }
+
+/* Joystick: şeker tabak — çıkartma gölgesi, iç çukur, dört serpinti yön işareti, sakız topu düğme */
+body.has-bar #joystick {
+    border: 3px solid var(--ink); box-shadow: 0 5px 0 var(--ink);
+    background: radial-gradient(circle, var(--surface) 0 34%, var(--surface-soft) 35% 100%);
+}
+body.has-bar #joystick::before {
+    content: ''; position: absolute; inset: 7%; border-radius: 50%; pointer-events: none;
+    background:
+        radial-gradient(circle, var(--lavender) 0 3.5px, transparent 4.5px) 50% 0 / 12px 12px no-repeat,
+        radial-gradient(circle, var(--pink) 0 3.5px, transparent 4.5px) 100% 50% / 12px 12px no-repeat,
+        radial-gradient(circle, var(--lavender) 0 3.5px, transparent 4.5px) 50% 100% / 12px 12px no-repeat,
+        radial-gradient(circle, var(--pink) 0 3.5px, transparent 4.5px) 0 50% / 12px 12px no-repeat;
+}
+body.has-bar #joystick::after {
+    content: ''; position: absolute; inset: 17%; border-radius: 50%; pointer-events: none;
+    border: 2px solid var(--lavender); opacity: .7; transition: border-color .15s, opacity .15s;
+}
+body.has-bar #joystick.active::after { border-color: var(--pink); opacity: 1; }
+body.has-bar #joystickKnob {
+    z-index: 1; width: 44%; height: 44%; left: 28%; top: 28%; border: 3px solid var(--ink);
+    background:
+        radial-gradient(circle at 34% 30%, rgba(255, 255, 255, .95) 0 13%, transparent 14%),
+        radial-gradient(circle at 50% 40%, var(--pink) 0 55%, var(--pink-deep) 100%);
+    box-shadow: 0 4px 0 var(--ink); transition: box-shadow .1s;
+}
+body.has-bar #joystick.active #joystickKnob { box-shadow: 0 2px 0 var(--ink); }
+
+/* DASH ve duraklat aynı çıkartma dilinde */
+body.has-bar #dashButton { border: 3px solid var(--ink); box-shadow: 0 5px 0 var(--ink); background: var(--surface-soft); }
+body.has-bar #dashButton.ready { color: var(--ink); }
+body.has-bar #dashButton.pressed { box-shadow: 0 2px 0 var(--ink); transform: translateY(3px); }
 body.has-bar #joystick { --size: min(calc(var(--bar-h) - 16px), 31vw); width: var(--size); height: var(--size); }
 body.has-bar #dashButton { --size: min(calc(var(--bar-h) - 24px), 27vw); width: var(--size); height: var(--size); }
 body.has-bar #dashButton.ready { background: var(--pink-soft); }
 /* Orta: dikeyde süre / puan / duraklat alt alta, yatayda yan yana */
-body.has-bar #barCenter { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 5px; }
+body.has-bar #barCenter { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
 @media (orientation: landscape) { body.has-bar #barCenter { flex-direction: row; gap: 14px; } }
 body.bar-dead #barCenter { visibility: hidden; }
-#barTime { font: 700 clamp(18px, 5.4vw, 32px) 'Fredoka', system-ui, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#barTime { font: 700 clamp(18px, 5.4vw, 26px) 'Fredoka', system-ui, sans-serif; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (orientation: landscape) { #barTime { font-size: clamp(22px, 7vh, 34px); } }
 #barScore { font: 700 15px 'Fredoka', system-ui, sans-serif; color: var(--ink); background: var(--pink); border: 2px solid var(--ink); border-radius: 999px; padding: 3px 14px; box-shadow: 0 2px 0 var(--ink); white-space: nowrap; }
-body.has-bar #pauseButton { position: static; transform: none; width: 44px; height: 44px; flex: 0 0 auto; opacity: 1; background: var(--bg); }
+body.has-bar #pauseButton { position: static; transform: none; width: 42px; height: 42px; flex: 0 0 auto; opacity: 1; background: var(--bg); box-shadow: 0 3px 0 var(--ink); }
 /* Duraklatma ve oyun bitti: kontroller gizlenir, süre ve puan kalır; ANA MENÜ / PAYLAŞ şeridin köşelerine oturur */
 body.bar-idle #joystick, body.bar-idle #dashButton { visibility: hidden; }
 body.has-bar #menuButton, body.has-bar #shareButton { bottom: calc(var(--bar-h) / 2 - 22px + env(safe-area-inset-bottom, 0px)); }
