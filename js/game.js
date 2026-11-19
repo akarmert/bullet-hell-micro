@@ -16,6 +16,7 @@ import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
 import { THEME, setHighContrast, applyTheme, resolveTheme, systemPrefersDark } from './theme.js';
+import { MenuBackdrop } from './menuBackdrop.js';
 import { ScoreSystem, formatScore } from './score.js';
 import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
@@ -81,6 +82,7 @@ export class Game {
 
         // State & Zamanlama
         this.state = GAME_STATE.MENU;
+        this.menuBackdrop = new MenuBackdrop(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
         this.elapsedMs = 0;          // Simülasyon süresi: sadece oynanırken dt ile birikir
         this.resumeCountdown = 0;    // Devam ederken geri sayım (ms)
         this.deathTimestamp = 0;
@@ -170,6 +172,11 @@ export class Game {
         };
 
         this.canvas.addEventListener('pointermove', (e) => {
+            // Menü arka planı her türlü imleci/parmağı izler
+            if (this.state === GAME_STATE.MENU) {
+                const c = getCanvasCoords(e.clientX, e.clientY);
+                this.menuBackdrop.pointerMove(c.x, c.y);
+            }
             if (e.pointerType !== 'mouse' || this.touchControls.pointers.size) return;
             handlePointerMove(e.clientX, e.clientY);
         });
@@ -205,7 +212,8 @@ export class Game {
                 const action = this.ui.getMenuAction(coords.x, coords.y);
                 this.ui.keyboardFocus = false;
                 if (!action) {
-                    // K1: boş alana tıklamak oyunu başlatmaz
+                    // K1: boş alana tıklamak oyunu başlatmaz; arka planla oynanır
+                    this.tapMenuBackdrop(coords.x, coords.y);
                 } else if (action.type === 'play') {
                     this.startGame();
                 } else if (action.type === 'mode') {
@@ -340,6 +348,16 @@ export class Game {
         this.ui.setMode(this.currentMode);
         this.waveManager.setMode(this.currentMode);
         this.effects.sound.playPhase();
+    }
+
+    /** Menüde boş alana dokunma: şeker patlat / kayan yıldız */
+    tapMenuBackdrop(x, y) {
+        const result = this.menuBackdrop.tap(x, y);
+        const sound = this.effects.sound;
+        if (result.type === 'pop') sound.playCandyPop(result.chain, x);
+        else if (result.type === 'star') sound.playStarChime(x);
+        else sound.playCandyPuff(x);
+        return result;
     }
 
     /** Ayardaki tema tercihini (sistem/açık/koyu) uygular */
@@ -715,6 +733,10 @@ export class Game {
 
         // Efektler ve Reaktif Izgara fiziği
         this.effects.update(dt, this.elapsedMs);
+        if (this.state === GAME_STATE.MENU) {
+            this.menuBackdrop.resize(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
+            this.menuBackdrop.update(dt);
+        }
 
         if (this.state === GAME_STATE.PLAYING) {
             this.ghostRecorder.sample(this.elapsedMs, this.player.x, this.player.y, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
@@ -824,10 +846,15 @@ export class Game {
             ctx.fillStyle = THEME.BG;
         }
         ctx.fillRect(0, 0, w, h);
-        if (THEME.dark && !THEME.highContrast) this.renderStars(ctx, w, h);
-
-        // Reaktif Dinamik Yaylı Izgara
-        this.effects.renderGrid(ctx);
+        if (this.state === GAME_STATE.MENU) {
+            // Ana menü: etkileşimli şeker / gece arka planı
+            this.effects.renderGrid(ctx, { dots: false });
+            this.menuBackdrop.render(ctx);
+        } else {
+            if (THEME.dark && !THEME.highContrast) this.renderStars(ctx, w, h);
+            // Reaktif Dinamik Yaylı Izgara
+            this.effects.renderGrid(ctx);
+        }
 
         // Telegraf (Ön Uyarı Lazerleri)
         this.waveManager.renderTelegraphs(ctx);

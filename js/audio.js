@@ -526,6 +526,34 @@ export class SoundSystem {
         }
     }
 
+    /**
+     * Menüde şeker patlatma: baloncuk "pop"; art arda patlatınca nota yükselir
+     * @param {number} chain 0 tabanlı seri
+     */
+    playCandyPop(chain = 0, x = null) {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        const out = this.out(x);
+        const m = GRAZE_SCALE[Math.min(chain, GRAZE_SCALE.length - 1)] + 12;
+        this.tone(midi(m) * 0.5, t, { dur: 0.06, vol: 0.18, glideTo: midi(m), attack: 0.002, dest: out });
+        this.noise(t, { dur: 0.05, vol: 0.08, type: 'bandpass', freq: 3200, q: 1.2, dest: out });
+    }
+
+    /** Menüde boşa dokunma: yumuşak "puf" */
+    playCandyPuff(x = null) {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        this.noise(t, { dur: 0.12, vol: 0.08, type: 'lowpass', freq: 1400, sweepTo: 500, dest: this.out(x) });
+    }
+
+    /** Koyu menüde kayan yıldız: aşağı süzülen ışıltı */
+    playStarChime(x = null) {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        const out = this.out(x);
+        [96, 91, 88, 84].forEach((m, i) => this.tone(midi(m), t + i * 0.045, { dur: 0.22, vol: 0.05, dest: out }));
+    }
+
     /** Güçlendirme: parlak üçlü çan */
     playPickup(x = null) {
         if (!this.ready()) return;

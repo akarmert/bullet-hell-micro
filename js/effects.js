@@ -497,9 +497,9 @@ export class EffectsManager {
     /**
      * Reaktif ızgarayı çizer
      */
-    renderGrid(ctx) {
+    renderGrid(ctx, { dots = true } = {}) {
         if (THEME.highContrast) {
-            this.grid.render(ctx);
+            if (dots) this.grid.render(ctx);
             return;
         }
         for (const b of this.blobs) {
@@ -509,7 +509,7 @@ export class EffectsManager {
             ctx.fillStyle = g;
             ctx.fillRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
         }
-        this.grid.render(ctx);
+        if (dots) this.grid.render(ctx);
     }
 
     /**
