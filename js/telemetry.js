@@ -302,11 +302,15 @@ export class PerfRecorder {
     status() {
         const p = Math.min(TARGET_S, this.playS[0]);
         const l = Math.min(TARGET_S, this.playS[1]);
+        const total = this.playS[0] + this.playS[1];
         return {
             portraitS: +this.playS[0].toFixed(1),
             landscapeS: +this.playS[1].toFixed(1),
+            totalS: +total.toFixed(1),
+            soakS: this.soakS || 0,
+            immortal: !!this.immortal,
             target: TARGET_S,
-            done: p >= TARGET_S && l >= TARGET_S,
+            done: this.soakS ? total >= this.soakS : p >= TARGET_S && l >= TARGET_S,
             frames: this.n,
             truncated: this.truncated,
             state: this.game.state,
@@ -320,9 +324,12 @@ export class PerfRecorder {
         if (!this.hud) return;
         const s = this.status();
         const part = (label, v) => `${label} ${Math.min(TARGET_S, Math.floor(v))}/${TARGET_S}${v >= TARGET_S ? ' ✓' : ''}`;
+        const mmss = (v) => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, '0')}`;
         this.hud.textContent = s.done
             ? '✓ KAYIT TAMAM · bilgisayara dönebilirsin'
-            : `● KAYIT · ${part('Dikey', s.portraitS)} · ${part('Yatay', s.landscapeS)}`;
+            : s.soakS
+                ? `● UZUN TEST · ${mmss(Math.min(s.totalS, s.soakS))} / ${mmss(s.soakS)}${s.immortal ? ' · ölümsüz' : ''}`
+                : `● KAYIT · ${part('Dikey', s.portraitS)} · ${part('Yatay', s.landscapeS)}`;
         this.hud.style.background = s.done ? 'rgba(20,120,60,0.85)' : 'rgba(30,10,40,0.72)';
     }
 
@@ -361,7 +368,22 @@ export function startTelemetry(game) {
     window.__perf = {
         status: () => rec.status(),
         export: () => rec.export(),
-        mark: (label) => rec.event('mark', { label: String(label) })
+        mark: (label) => rec.event('mark', { label: String(label) }),
+        /**
+         * Long (soak) session: `soakS` seconds of total play; `immortal` turns off death and
+         * saving for this app run only (a measurement run, not a real one).
+         */
+        configure: ({ soakS = 0, immortal = false } = {}) => {
+            rec.soakS = Math.max(0, Number(soakS) || 0);
+            if (immortal && !rec.immortal) {
+                rec.immortal = true;
+                game.triggerDeath = () => {};
+                if (game.progress) game.progress.save = () => {};
+            }
+            rec.event('mark', { label: `configure soak=${rec.soakS} immortal=${rec.immortal}` });
+            rec.updateHud();
+            return rec.status();
+        }
     };
     return rec;
 }

@@ -6,6 +6,7 @@
 //   npm run perf:collect -- --now     pull whatever was recorded so far
 //   npm run perf:collect -- --max 300 give up waiting after 300 s (default 600)
 //   npm run perf:collect -- --install install the perf APK first (keeps app data)
+//   npm run perf:collect -- --soak 600 --immortal   10-minute soak test, no deaths, nothing saved
 //
 // Needs: the perf APK (`npm run apk:perf`) running on a phone connected with USB
 // debugging. While the player plays, the script samples the phone every second
@@ -26,7 +27,10 @@ const PKG = 'com.bullethellmicro.app';
 const PORT = 9333;
 const args = process.argv.slice(2);
 const NOW = args.includes('--now');
-const MAX_WAIT_S = Number(args[args.indexOf('--max') + 1]) || 600;
+const flag = (name) => (args.includes(name) ? Number(args[args.indexOf(name) + 1]) : 0);
+const SOAK_S = flag('--soak');                  // long session: seconds of total play (e.g. 600)
+const IMMORTAL = args.includes('--immortal');   // turn off death + saving in this app run
+const MAX_WAIT_S = flag('--max') || (SOAK_S ? SOAK_S * 2 + 300 : 600);
 
 // ------------------------------------------------------------
 // adb helpers
@@ -304,6 +308,11 @@ async function main() {
         if (!hasPerf) await sleep(500);
     }
     if (!hasPerf) die('Oyunda kayıt modülü yok. Normal APK yüklü olabilir: `npm run apk:perf` ile derlenen APK gerekli.');
+    if (SOAK_S || IMMORTAL) {
+        const st = await cdp.eval(`window.__perf.configure ? window.__perf.configure(${JSON.stringify({ soakS: SOAK_S, immortal: IMMORTAL })}) : null`);
+        if (!st) die('Bu APK uzun test modunu desteklemiyor: `npm run apk:perf` ile yeniden derleyip --install ile yükle.');
+        console.log(`Uzun test: ${SOAK_S ? `${SOAK_S} sn oyun` : 'süre hedefi yok'}${IMMORTAL ? ' · ölümsüz (ölüm ve kayıt kapalı)' : ''}`);
+    }
 
     const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
     const dir = join(ROOT, 'perf-sessions', stamp);
@@ -346,10 +355,13 @@ async function main() {
         tick++;
         if (st) {
             const temp = hs.batteryTempC != null ? `${hs.batteryTempC.toFixed(1)}°C` : '?°C';
-            process.stdout.write(`\r  Dikey ${st.portraitS.toFixed(0).padStart(2)}/${st.target} · Yatay ${st.landscapeS.toFixed(0).padStart(2)}/${st.target}`
+            const progress = st.soakS
+                ? `Oyun ${String(Math.floor(st.totalS)).padStart(3)}/${st.soakS} sn`
+                : `Dikey ${st.portraitS.toFixed(0).padStart(2)}/${st.target} · Yatay ${st.landscapeS.toFixed(0).padStart(2)}/${st.target}`;
+            process.stdout.write(`\r  ${progress}`
                 + ` · ${st.state.padEnd(7)} · ${String(st.fps).padStart(5)} fps · q${st.q} · ${temp} · CPU ${hs.cpuPct ?? '?'}%   `);
             if (st.done) {
-                console.log('\n\n✓ İki yönde de 30 sn tamam. 3 sn daha örnekleniyor…');
+                console.log(st.soakS ? '\n\n✓ Uzun test tamam. 3 sn daha örnekleniyor…' : '\n\n✓ İki yönde de 30 sn tamam. 3 sn daha örnekleniyor…');
                 for (let i = 0; i < 3; i++) host.push(await hostSample(pid, t0, i === 2, renderers));
                 stop = true;
             }
@@ -364,7 +376,7 @@ async function main() {
             cdp = await connectWebView(pid).catch(() => cdp);
         } else {
             console.log('\n\n⚠ Oyun kapandı (çökme veya sistem tarafından öldürüldü). Logcat kaydedildi.');
-            writeFileSync(join(dir, 'host.json'), JSON.stringify({ info, samples: host, appDied: true }, null, 1));
+            writeFileSync(join(dir, 'host.json'), JSON.stringify({ info, startedAt: t0, samples: host, appDied: true }, null, 1));
             logcat.kill();
             syslog.kill();
             return;
@@ -381,7 +393,7 @@ async function main() {
     writeFileSync(join(dir, 'game.json'), json);
     const gfx = await sh(`dumpsys gfxinfo ${PKG}`);
     writeFileSync(join(dir, 'gfxinfo.txt'), gfx);
-    writeFileSync(join(dir, 'host.json'), JSON.stringify({ info, samples: host }, null, 1));
+    writeFileSync(join(dir, 'host.json'), JSON.stringify({ info, startedAt: t0, samples: host }, null, 1));
     cdp.close();
     await sleep(500);
     logcat.kill();

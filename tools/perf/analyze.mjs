@@ -227,8 +227,11 @@ export function analyzeSession(dir) {
         .map(([name, u]) => ({ name, count: u.count, MB: r2(u.bytes / 1048576) }))
         .sort((a, b) => b.MB - a.MB).slice(0, 12);
 
+    const timeline = game.durationMs > 180000 ? buildTimeline(game, host) : null;
+
     const summary = {
         session: dir,
+        timeline,
         exportedAt: game.exportedAt,
         durationS: r1(game.durationMs / 1000),
         status: game.status,
@@ -257,6 +260,85 @@ export function analyzeSession(dir) {
     const reportPath = join(dir, 'report.md');
     writeFileSync(reportPath, renderReport(summary));
     return { summary, reportPath };
+}
+
+// ------------------------------------------------------------
+// Long sessions: per-minute timeline + trends
+// ------------------------------------------------------------
+
+/** Least-squares slope (units per minute) of [minute, value] pairs. */
+function slope(points) {
+    const p = points.filter(([, v]) => Number.isFinite(v));
+    if (p.length < 3) return null;
+    const mx = mean(p.map(([x]) => x));
+    const my = mean(p.map(([, y]) => y));
+    let num = 0;
+    let den = 0;
+    for (const [x, y] of p) {
+        num += (x - mx) * (y - my);
+        den += (x - mx) ** 2;
+    }
+    return den ? num / den : null;
+}
+
+function buildTimeline(game, host) {
+    const F = game.frames;
+    const PLAY = game.stateCodes.PLAYING;
+    const gameT0 = new Date(game.exportedAt).getTime() - game.durationMs;
+    // Phone samples are timed from the collector start; shift them onto the game's clock
+    const hostShift = host && host.startedAt ? host.startedAt - gameT0 : 0;
+    const minutes = Math.ceil(game.durationMs / 60000);
+    const rows = [];
+    for (let m = 0; m < minutes; m++) {
+        const lo = m * 60000;
+        const hi = lo + 60000;
+        const idx = [];
+        for (let i = 0; i < F.t.length; i++) if (F.t[i] >= lo && F.t[i] < hi && F.state[i] === PLAY && F.dt[i] < 250) idx.push(i);
+        const dts = Float64Array.from(idx.map((i) => F.dt[i])).sort();
+        const playS = sum(idx.map((i) => F.dt[i])) / 1000;
+        const secs = game.seconds.filter((s) => s.t >= lo && s.t < hi);
+        const hs = host ? host.samples.filter((s) => s.t + hostShift >= lo && s.t + hostShift < hi) : [];
+        const pick = (arr) => arr.filter((v) => Number.isFinite(v));
+        const pss = pick(hs.map((s) => s.mem && s.mem.pssMB));
+        const gl = pick(hs.map((s) => s.mem && s.mem.glMtrackMB));
+        const ap = pick(hs.map((s) => s.thermal && s.thermal.temps && s.thermal.temps['cpu:AP']));
+        const skin = pick(hs.map((s) => s.thermal && s.thermal.temps && s.thermal.temps['skin:SKIN']));
+        const th = pick(hs.map((s) => s.thermal && s.thermal.status));
+        const cpu = pick(hs.map((s) => s.cpuPct));
+        const big = pick(hs.map((s) => s.cpuMHz && s.cpuMHz[s.cpuMHz.length - 1]));
+        rows.push({
+            minute: m + 1,
+            playS: r1(playS),
+            fps: playS > 1 ? r1(idx.length / playS) : null,
+            p99: r1(pct(dts, 99)),
+            maxMs: dts.length ? r1(dts[dts.length - 1]) : null,
+            slowPct: idx.length ? r1((100 * idx.filter((i) => F.dt[i] > 25).length) / idx.length) : null,
+            bulletsAvg: idx.length ? r1(mean(idx.map((i) => F.bullets[i]))) : null,
+            uploadMB: r1(sum(idx.map((i) => F.upKB[i])) / 1024),
+            baked: secs.length ? secs[secs.length - 1].baked : null,
+            heapMB: secs.length ? secs[secs.length - 1].heapMB : null,
+            q: secs.length ? secs[secs.length - 1].q : null,
+            pssMB: pss.length ? Math.max(...pss) : null,
+            glMB: gl.length ? Math.max(...gl) : null,
+            apC: ap.length ? r1(Math.max(...ap)) : null,
+            skinC: skin.length ? r1(Math.max(...skin)) : null,
+            thermal: th.length ? Math.max(...th) : null,
+            cpuPct: cpu.length ? Math.round(mean(cpu)) : null,
+            bigMHz: big.length ? Math.round(mean(big)) : null
+        });
+    }
+    const played = rows.filter((r) => r.playS > 20);
+    return {
+        rows,
+        hostShiftMs: hostShift,
+        trendPerMin: {
+            pssMB: r2(slope(played.map((r) => [r.minute, r.pssMB]))),
+            glMB: r2(slope(played.map((r) => [r.minute, r.glMB]))),
+            baked: r2(slope(played.map((r) => [r.minute, r.baked]))),
+            p99: r2(slope(played.map((r) => [r.minute, r.p99]))),
+            apC: r2(slope(played.map((r) => [r.minute, r.apC])))
+        }
+    };
 }
 
 // ------------------------------------------------------------
@@ -334,6 +416,19 @@ function renderReport(S) {
         L.push('### En çok yüklenen dokular (tüm oturum)', '', '| Doku | adet | MB |', '|---|---|---|');
         for (const u of S.uploadsTop) L.push(`| ${u.name} | ${u.count} | ${u.MB} |`);
         L.push('');
+    }
+
+    if (S.timeline) {
+        const T = S.timeline;
+        L.push('## Zaman çizelgesi (dakika dakika, oyun sırasındaki kareler)', '');
+        L.push('| dk | oyun sn | FPS | p99 | maks | >25ms | mermi ort | yükleme MB | pişmiş doku | PSS MB | GL MB | işlemci °C | yüzey °C | termal | CPU % | büyük çekirdek MHz | kalite |');
+        L.push('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+        const v = (x) => (x == null ? '–' : x);
+        for (const r of T.rows) {
+            L.push(`| ${r.minute} | ${v(r.playS)} | ${v(r.fps)} | ${v(r.p99)} | ${v(r.maxMs)} | ${r.slowPct == null ? '–' : r.slowPct + '%'} | ${v(r.bulletsAvg)} | ${v(r.uploadMB)} | ${v(r.baked)} | ${v(r.pssMB)} | ${v(r.glMB)} | ${v(r.apC)} | ${v(r.skinC)} | ${v(r.thermal)} | ${v(r.cpuPct)} | ${v(r.bigMHz)} | q${v(r.q)} |`);
+        }
+        const tr = T.trendPerMin;
+        L.push('', `Eğilim (oynanan dakikalar, dakika başına): PSS ${v(tr.pssMB)} MB · GL ${v(tr.glMB)} MB · pişmiş doku ${v(tr.baked)} · p99 ${v(tr.p99)} ms · işlemci ${v(tr.apC)} °C`, '');
     }
 
     const h = S.host;
