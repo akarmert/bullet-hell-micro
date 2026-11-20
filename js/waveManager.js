@@ -5,9 +5,8 @@
 
 import { GAME_CONFIG } from './config.js';
 import { ModeRegistry } from './modes.js';
-import { Boss, BOSS_STATE } from './boss.js';
+import { Boss } from './boss.js';
 import { random } from './rng.js';
-import { THEME } from './theme.js';
 
 export class WaveManager {
     constructor(bulletManager, mode = null) {
@@ -20,6 +19,7 @@ export class WaveManager {
         this.telegraphs = [];
 
         // Spawn zamanlayıcıları (ms cinsinden birikim)
+        this.touchAssist = false;              // Dokunmatik oynanış dengesi (game.startGame ayarlar)
         this.timers = {
             warmup: 0,
             spiral: 0,
@@ -47,6 +47,21 @@ export class WaveManager {
     /**
      * Bu mod boss içeriyor mu? (CHAOS modu tüm sistemleri baştan açtığı için boss'suz)
      */
+    /**
+     * Dar arenada (dikey telefon) aynı mermi sayısı çok daha sıkışık olur:
+     * alan küçüldükçe kaos/boss atış aralıkları uzar (1 = değişiklik yok).
+     */
+    densityScale() {
+        const A = GAME_CONFIG.ARENA_DENSITY;
+        const area = GAME_CONFIG.CANVAS.WIDTH * GAME_CONFIG.CANVAS.HEIGHT;
+        return Math.max(A.MIN_SCALE, Math.min(1, area / A.REFERENCE_AREA));
+    }
+
+    /** Dokunmatik oynanışta kaos/boss mermileri biraz yavaş */
+    touchSpeedScale() {
+        return this.touchAssist ? GAME_CONFIG.ARENA_DENSITY.TOUCH_SPEED : 1;
+    }
+
     hasBoss() {
         return !(this.mode && this.mode.isSimultaneous());
     }
@@ -103,7 +118,8 @@ export class WaveManager {
     addTelegraph(telegraph) {
         this.telegraphs.push({
             ...telegraph,
-            remaining: telegraph.duration
+            remaining: telegraph.duration,
+            arenaW: GAME_CONFIG.CANVAS.WIDTH   // fire callbacks captured coordinates in this width
         });
     }
 
@@ -119,59 +135,21 @@ export class WaveManager {
             t.remaining -= dtMs;
             if (t.remaining <= 0) {
                 if (typeof t.onFire === 'function') {
+                    const list = this.bulletManager && this.bulletManager.bullets;
+                    const first = list ? list.length : 0;
                     t.onFire();
+                    // The arena changed width since the warning appeared (phone rotated):
+                    // move what it fired by the same factor as everything else (arena.js)
+                    const f = GAME_CONFIG.CANVAS.WIDTH / (t.arenaW || GAME_CONFIG.CANVAS.WIDTH);
+                    if (list && f !== 1) {
+                        for (let k = first; k < list.length; k++) list[k].x *= f;
+                    }
                 }
             } else {
                 this.telegraphs[activeCount++] = t;
             }
         }
         this.telegraphs.length = activeCount;
-    }
-
-    /**
-     * Telegraf çizgilerini canvas üzerine çizer (kesikli lazer uyarısı)
-     * @param {CanvasRenderingContext2D} ctx 
-     */
-    renderTelegraphs(ctx) {
-        if (this.telegraphs.length === 0) return;
-
-        ctx.save();
-        ctx.lineCap = 'round';
-        for (let i = 0; i < this.telegraphs.length; i++) {
-            const t = this.telegraphs[i];
-            const progress = 1 - Math.max(0, t.remaining / t.duration);
-
-            // Geniş yumuşak şerit: ateşlemeye yaklaştıkça koyulaşır
-            ctx.beginPath();
-            ctx.moveTo(t.x1, t.y1);
-            ctx.lineTo(t.x2, t.y2);
-            ctx.strokeStyle = t.color;
-            ctx.globalAlpha = 0.12 + progress * 0.2;
-            ctx.lineWidth = 10;
-            ctx.setLineDash([]);
-            ctx.stroke();
-
-            // Noktalı şeker çizgisi
-            ctx.beginPath();
-            ctx.moveTo(t.x1, t.y1);
-            ctx.lineTo(t.x2, t.y2);
-            ctx.globalAlpha = 0.45 + progress * 0.55;
-            ctx.strokeStyle = t.color;
-            ctx.lineWidth = 3;
-            ctx.setLineDash([1, 9]);
-            ctx.lineDashOffset = -progress * 40;
-            ctx.stroke();
-
-            // Başlangıçta küçülen halka
-            ctx.setLineDash([]);
-            ctx.globalAlpha = 1;
-            ctx.beginPath();
-            ctx.arc(t.x1, t.y1, 4 + (1 - progress) * 10, 0, Math.PI * 2);
-            ctx.strokeStyle = THEME.INK;
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-        }
-        ctx.restore();
     }
 
     /**
@@ -563,13 +541,6 @@ export class WaveManager {
         this.boss.update(dt, player);
     }
 
-    /**
-     * Boss'u çizer (yenildiyse hiçbir şey çizmez)
-     */
-    renderBoss(ctx) {
-        if (this.boss && this.boss.state !== BOSS_STATE.DEAD) this.boss.render(ctx);
-    }
-
     // ------------------------------------------------------------
     // FAZ 4: CHAOS & ENDLESS — Duvarlardan seken telegraflı lazer kapsüller
     // ------------------------------------------------------------
@@ -580,25 +551,35 @@ export class WaveManager {
         return this.hasBoss() && this.bossKills === 1 && !this.bossActive;
     }
 
+    /** Kaos ayarı (mola / dokunmatik sekme sınırı); her karede yeni nesne üretmesin diye önbellekli */
+    chaosConfig(relief) {
+        const base = GAME_CONFIG.PHASE_4;
+        let bounces = relief ? relief.BOUNCES : base.MAX_BOUNCES;
+        if (this.touchAssist) bounces = Math.min(bounces, GAME_CONFIG.ARENA_DENSITY.TOUCH_BOUNCES);
+        if (bounces === base.MAX_BOUNCES) return base;
+        this.chaosCfgCache = this.chaosCfgCache || {};
+        return (this.chaosCfgCache[bounces] = this.chaosCfgCache[bounces] || { ...base, MAX_BOUNCES: bounces });
+    }
+
     updateChaos(elapsedMs, dt, dtMs, player) {
         const relief = this.isBreakRelief() ? GAME_CONFIG.BOSS_BREAK : null;
         // Zaferden hemen sonra kısa bir nefes payı: hiç mermi yok
         if (relief && this.bossDefeatedAt !== null && elapsedMs - this.bossDefeatedAt < relief.CALM_MS) return;
 
-        const base = GAME_CONFIG.PHASE_4;
-        const cfg = relief ? { ...base, MAX_BOUNCES: relief.BOUNCES } : base;
+        const cfg = this.chaosConfig(relief);
         const chaosTime = elapsedMs - this.chaosStartMs;
         let progress = Math.min(1, chaosTime / 20000);
         if (relief) progress = Math.min(progress, relief.PROGRESS_CAP);
 
-        const modeInterval = this.mode.getIntervalMultiplier(elapsedMs);
+        // Dar ekranda atışlar seyrekleşir (mermi yoğunluğu alana göre)
+        const modeInterval = this.mode.getIntervalMultiplier(elapsedMs) / this.densityScale();
         const intervalMult = modeInterval * (relief ? relief.INTERVAL_MULT : 1);
         const currentInterval = (cfg.BASE_INTERVAL - progress * (cfg.BASE_INTERVAL - cfg.MIN_INTERVAL)) * intervalMult;
 
         this.timers.chaos += dtMs;
         while (this.timers.chaos >= currentInterval) {
             this.timers.chaos -= currentInterval;
-            this.spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs, relief ? relief.SPEED_MULT : 1);
+            this.spawnChaosBulletWithTelegraph(cfg, progress, elapsedMs, (relief ? relief.SPEED_MULT : 1) * this.touchSpeedScale());
         }
 
         // Periyodik nişanlı mermi desteği

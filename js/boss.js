@@ -1,5 +1,5 @@
 // ============================================================
-// boss.js — Boss Varlıkları (Jöle Kral, Pamuk Bulut)
+// boss.js — Boss Varlıkları (Jöle Kral, Pamuk Bulut, Sakız Balon)
 // Oyuncu ateş etmez: boss'un enerjisi zamanla söner; Graze ve
 // Dash ile gövdesinden geçmek (ram) enerjisini hızla düşürür.
 // Her boss config'teki üç aşamayı (PATTERN) sırayla oynar.
@@ -35,9 +35,17 @@ export class Boss {
         // Endless ölçeklemesi boss sırasında tırmanmasın: çarpanlar geliş anında sabitlenir
         this.speedMult = waves.mode.getSpeedMultiplier(startMs) * (1 + level * (GAME_CONFIG.BOSS_LEVEL_SPEED || 0));
         this.intervalMult = waves.mode.getIntervalMultiplier(startMs) / (1 + level * (GAME_CONFIG.BOSS_LEVEL_DENSITY || 0));
+        // Dar ekran / dokunmatik dengesi (bkz. GAME_CONFIG.ARENA_DENSITY)
+        if (waves.densityScale) this.intervalMult /= waves.densityScale();
+        if (waves.touchSpeedScale) this.speedMult *= waves.touchSpeedScale();
         this.wallDir = 0;
         this.rainGap = GAME_CONFIG.CANVAS.WIDTH / 2;
         this.pulling = false;
+        this.bubbles = [];       // Sakız Balon: patlayacak balon mermileri {tag, bullet, popAt}
+        this.bubbleSerial = 0;
+        this.inflate = 0;        // Sakız Balon PATLAMA: 0 → 1 şişme
+        this.burstPhase = 'rest';
+        this.burstTimer = 0;
 
         this.x = GAME_CONFIG.CANVAS.WIDTH / 2;
         this.y = -cfg.RADIUS * 2;
@@ -117,6 +125,11 @@ export class Boss {
         if (this.kind === 'cloud') {
             this.x = w / 2 + Math.sin(this.age * 0.45) * w * 0.28;
             this.y = this.cfg.HOVER_Y + Math.sin(this.age * 0.9) * 12;
+        } else if (this.kind === 'gum') {
+            // Balon gibi hafif sallanır; şişerken yerinde durur (patlama yönü okunsun)
+            const sway = this.burstPhase === 'inflate' ? 0.15 : 1;
+            this.x = w / 2 + Math.sin(this.age * 0.6) * w * 0.2 * sway;
+            this.y = this.cfg.HOVER_Y + Math.sin(this.age * 1.8) * 10;
         } else {
             this.x = w / 2 + Math.sin(this.age * 0.7) * w * 0.22;
             this.y = this.cfg.HOVER_Y + Math.sin(this.age * 1.4) * 22;
@@ -164,6 +177,9 @@ export class Boss {
                 if (stage.DRIZZLE) this.patternRain(stage.DRIZZLE, dtMs, 'b');
                 return this.patternWalls(stage, dtMs);
             case 'pull': return this.patternPull(stage, dt, dtMs, player);
+            case 'bubbles': return this.patternBubbles(stage, dtMs, player);
+            case 'bounce': return this.patternBounce(stage, dtMs, player);
+            case 'burst': return this.patternBurst(stage, dtMs, player);
             default: return undefined;
         }
     }
@@ -414,12 +430,126 @@ export class Boss {
         }
     }
 
+    /** Sakız balonlarını zamanı gelince küçük halkaya patlatır (yok olmuşsa sessizce bırakır) */
+    updateBubbles(s) {
+        if (!this.bubbles.length) return;
+        const now = this.age;
+        const keep = [];
+        for (const b of this.bubbles) {
+            const alive = b.bullet.active && b.bullet.tag === b.tag;
+            if (!alive) continue;
+            if (now < b.popAt) { keep.push(b); continue; }
+            const { x, y } = b.bullet;
+            b.bullet.active = false;
+            const speed = s.RING_SPEED * this.speedMult;
+            const offset = random() * Math.PI;
+            for (let i = 0; i < s.RING_COUNT; i++) {
+                const a = offset + (i * Math.PI * 2) / s.RING_COUNT;
+                this.spawn({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed, shape: 'circle' });
+            }
+        }
+        this.bubbles = keep;
+    }
+
+    /** Sakız Balon 1 — BALON: yavaş süzülen balonlar; titreyip şişer, sonra küçük halkaya patlar */
+    patternBubbles(s, dtMs, player) {
+        this.updateBubbles(s);
+        const interval = s.INTERVAL * this.intervalMult;
+        this.timers.a += dtMs;
+        if (this.timers.a < interval) return;
+        this.timers.a = 0;
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const speed = s.SPEED * this.speedMult;
+        for (let i = 0; i < s.COUNT; i++) {
+            // Oyuncunun çevresine ama tam üstüne değil: sahanın farklı yerlerinde patlasın
+            const tx = Math.max(30, Math.min(w - 30, (player ? player.x : w / 2) + (random() * 2 - 1) * w * 0.45));
+            const ty = Math.max(this.y + 60, Math.min(h - 40, (player ? player.y : h / 2) + (random() * 2 - 1) * 120));
+            const a = Math.atan2(ty - this.y, tx - this.x);
+            const tag = `gum-${++this.bubbleSerial}`;
+            const bullet = this.waves.bulletManager.spawn({
+                x: this.x, y: this.y,
+                vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed,
+                radius: s.BUBBLE_RADIUS, color: '#FF8CBE', glow: this.cfg.GLOW,
+                shape: 'bubble', type: 'boss', tag
+            });
+            this.bubbles.push({ tag, bullet, popAt: this.age + (s.POP_MS / 1000) * (0.85 + random() * 0.3) });
+        }
+    }
+
+    /** Sakız Balon 2 — SEKME: duvarlardan seken sakız topları + seyrek yavaş halka */
+    patternBounce(s, dtMs, player) {
+        this.updateBubbles(this.cfg.STAGES[0]); // Önceki aşamadan kalan balonlar yine patlar
+        const interval = s.INTERVAL * this.intervalMult;
+        this.timers.a += dtMs;
+        if (this.timers.a >= interval) {
+            this.timers.a = 0;
+            const speed = s.SPEED * this.speedMult;
+            const aim = player ? Math.atan2(player.y - this.y, player.x - this.x) : Math.PI / 2;
+            for (let i = 0; i < s.COUNT; i++) {
+                // Doğrudan oyuncuya değil, iki yana açılarak: seker ve geri döner
+                const a = aim + (i % 2 ? 1 : -1) * (0.55 + random() * 0.35);
+                this.spawn({
+                    x: this.x, y: this.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed,
+                    radius: s.BALL_RADIUS, shape: 'circle', maxBounces: s.BOUNCES, trailLength: 5
+                });
+            }
+        }
+        this.timers.b += dtMs;
+        if (this.timers.b >= s.RING_INTERVAL * this.intervalMult) {
+            this.timers.b = 0;
+            this.angle += 0.35;
+            const speed = s.RING_SPEED * this.speedMult;
+            for (let i = 0; i < s.RING_COUNT; i++) {
+                const a = this.angle + (i * Math.PI * 2) / s.RING_COUNT;
+                this.spawn({ x: this.x, y: this.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed, shape: 'ring' });
+            }
+        }
+    }
+
+    /**
+     * Sakız Balon 3 — PATLAMA: boss şişer (uyarı), sonra büyük bir halkaya patlar.
+     * Halkada oyuncunun o anki yönünde GENİŞ bir boşluk vardır: yerinde kal ya da boşluğa gir.
+     */
+    patternBurst(s, dtMs, player) {
+        this.updateBubbles(this.cfg.STAGES[0]);
+        this.burstTimer += dtMs;
+        if (this.burstPhase === 'rest') {
+            this.inflate = Math.max(0, this.inflate - dtMs / 200);
+            if (this.burstTimer >= s.REST_MS * this.intervalMult) {
+                this.burstPhase = 'inflate';
+                this.burstTimer = 0;
+            }
+            return;
+        }
+        this.inflate = Math.min(1, this.burstTimer / s.INFLATE_MS);
+        if (this.burstTimer < s.INFLATE_MS) return;
+        this.burstPhase = 'rest';
+        this.burstTimer = 0;
+        const speed = s.SPEED * this.speedMult;
+        const aim = player ? Math.atan2(player.y - this.y, player.x - this.x) : Math.PI / 2;
+        for (let i = 0; i < s.COUNT; i++) {
+            const a = aim + (i * Math.PI * 2) / s.COUNT;
+            let diff = Math.abs(a - aim) % (Math.PI * 2);
+            if (diff > Math.PI) diff = Math.PI * 2 - diff;
+            if (diff < s.GAP / 2) continue; // Oyuncu tarafında güvenli boşluk
+            this.spawn({
+                x: this.x + Math.cos(a) * this.radius, y: this.y + Math.sin(a) * this.radius,
+                vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed, shape: 'circle'
+            });
+        }
+    }
+
     // ------------------------------------------------------------
     // ÇİZİM
     // ------------------------------------------------------------
 
     render(ctx) {
         if (this.state === BOSS_STATE.DEAD) return;
+        if (this.kind === 'gum') {
+            this.renderGum(ctx);
+            return;
+        }
         if (this.kind === 'cloud') {
             this.renderCloud(ctx);
             return;
@@ -517,6 +647,107 @@ export class Boss {
     /**
      * Pamuk Bulut: birleşik konturlu kabarık bulut, uykulu/kızgın yüz, girdap halkaları
      */
+    /** Sakız Balon: parlak pembe balon, düğümlü ip, sakız damlaları; PATLAMA'da şişip titrer */
+    renderGum(ctx) {
+        const t = this.age;
+        const dying = this.state === BOSS_STATE.DYING;
+        const inflate = this.stage === 2 ? this.inflate : 0;
+        const shake = inflate > 0.6 ? (Math.random() * 2 - 1) * inflate * 2.5 : 0;
+        const r = this.radius * (1 + inflate * 0.35) * (dying ? 1 + this.stateTimer / this.cfg.DEATH_TIME * 0.6 : 1);
+        ctx.save();
+        ctx.translate(this.x + shake, this.y);
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        if (dying) ctx.globalAlpha = Math.max(0, 1 - this.stateTimer / this.cfg.DEATH_TIME);
+
+        // Gölge
+        ctx.beginPath();
+        ctx.ellipse(0, r + 22, r * 0.75, 6, 0, 0, Math.PI * 2);
+        ctx.fillStyle = THEME.SHADOW;
+        ctx.fill();
+
+        // İp
+        ctx.beginPath();
+        ctx.moveTo(0, r + 4);
+        ctx.quadraticCurveTo(Math.sin(t * 3) * 8, r + 14, Math.sin(t * 3 + 1) * 4, r + 24);
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Şişme uyarısı: düz pembe hale (kesik çizgi yok)
+        if (inflate > 0) {
+            ctx.beginPath();
+            ctx.arc(0, 0, r + 8 + inflate * 6, 0, Math.PI * 2);
+            ctx.strokeStyle = `rgba(240, 70, 143, ${0.25 + inflate * 0.5})`;
+            ctx.lineWidth = 3 + inflate * 2;
+            ctx.stroke();
+        }
+
+        // Gövde
+        const fill = this.hitFlash > 0.05 ? THEME.PINK_SOFT : '#FF8CBE';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, r * (1 + Math.sin(t * 2.4) * 0.03), r * (1 - Math.sin(t * 2.4) * 0.03), 0, 0, Math.PI * 2);
+        ctx.fillStyle = fill;
+        ctx.fill();
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Düğüm
+        ctx.beginPath();
+        ctx.moveTo(-5, r - 1);
+        ctx.lineTo(5, r - 1);
+        ctx.lineTo(0, r + 6);
+        ctx.closePath();
+        ctx.fillStyle = THEME.PINK_DEEP;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Parlamalar
+        ctx.beginPath();
+        ctx.ellipse(-r * 0.42, -r * 0.45, r * 0.22, r * 0.12, -0.7, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(-r * 0.12, -r * 0.62, r * 0.06, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Yüz: şişerken yanakları kızarır, gözleri sıkılır
+        ctx.fillStyle = THEME.INK;
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2.5;
+        for (const s of [-1, 1]) {
+            if (inflate > 0.4) {
+                ctx.beginPath();
+                ctx.moveTo(s * r * 0.42, -r * 0.18);
+                ctx.lineTo(s * r * 0.22, -r * 0.08);
+                ctx.lineTo(s * r * 0.42, r * 0.02);
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.ellipse(s * r * 0.3, -r * 0.1, r * 0.08, r * 0.12, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        if (inflate > 0.4) {
+            ctx.beginPath();
+            ctx.ellipse(0, r * 0.28, r * 0.13, r * 0.16, 0, 0, Math.PI * 2);
+            ctx.fill();
+        } else {
+            ctx.beginPath();
+            ctx.arc(0, r * 0.18, r * 0.14, 0.15, Math.PI - 0.15);
+            ctx.stroke();
+        }
+        ctx.fillStyle = `rgba(240, 70, 143, ${0.45 + inflate * 0.4})`;
+        for (const s of [-1, 1]) {
+            ctx.beginPath();
+            ctx.ellipse(s * r * 0.55, r * 0.15, r * 0.13, r * 0.08, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
     renderCloud(ctx) {
         const c = this.cfg;
         const dying = this.state === BOSS_STATE.DYING;
@@ -638,7 +869,23 @@ export class Boss {
      * Üst orta enerji barı (şeker çubuğu)
      * @param {number} topOffset Safe-area üst boşluğu
      */
-    renderHealthBar(ctx, topOffset = 0) {
+    /** Bar geometry (arena coordinates) */
+    healthBarRect(topOffset = 0) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const barW = Math.min(280, w - 80);
+        return { x: (w - barW) / 2, y: topOffset + 110, w: barW, h: 10 };
+    }
+
+    /** Fill ratio shown by the bar (entry animation, then remaining energy) */
+    get healthBarFill() {
+        return this.state === BOSS_STATE.ENTERING ? Math.min(1, this.stateTimer / this.cfg.ENTRY_TIME) : this.hpRatio;
+    }
+
+    /**
+     * Boss energy bar. part: 'all' | 'base' (labels + empty bar) | 'overlay' (stage marks + outline);
+     * the renderer draws the fill itself between 'base' and 'overlay'.
+     */
+    renderHealthBar(ctx, topOffset = 0, part = 'all') {
         if (this.state === BOSS_STATE.DEAD) return;
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const barW = Math.min(280, w - 80);
@@ -650,20 +897,26 @@ export class Boss {
             : this.hpRatio;
 
         ctx.save();
-        ctx.font = font(11, 700);
-        ctx.textAlign = 'left';
-        ctx.fillStyle = THEME.TEXT_ACCENT;
-        ctx.fillText(`${upper(this.title)} · ${this.stageName}`, x, y - 6);
-        ctx.textAlign = 'right';
-        ctx.fillStyle = THEME.MUTED;
-        ctx.font = font(10, 600);
-        ctx.fillText(t('boss.barHint'), x + barW, y - 6);
+        if (part !== 'overlay') {
+            ctx.font = font(11, 700);
+            ctx.textAlign = 'left';
+            ctx.fillStyle = THEME.TEXT_ACCENT;
+            ctx.fillText(`${upper(this.title)} · ${this.stageName}`, x, y - 6);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = THEME.MUTED;
+            ctx.font = font(10, 600);
+            ctx.fillText(t('boss.barHint'), x + barW, y - 6);
 
-        ctx.beginPath();
-        ctx.roundRect(x, y, barW, barH, barH / 2);
-        ctx.fillStyle = THEME.SURFACE;
-        ctx.fill();
-        if (fill > 0) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, barW, barH, barH / 2);
+            ctx.fillStyle = THEME.SURFACE;
+            ctx.fill();
+        }
+        if (part === 'base') {
+            ctx.restore();
+            return;
+        }
+        if (part === 'all' && fill > 0) {
             ctx.save();
             ctx.clip();
             ctx.fillStyle = this.hitFlash > 0.05 ? THEME.LAVENDER : THEME.PINK;

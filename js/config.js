@@ -42,6 +42,22 @@ export const GAME_CONFIG = {
         }
     },
 
+    // --- EKŞİ ŞEKERLER (oyuncunun ZARARINA) ---
+    // Koyu mor, dikenli ambalajlı, somurtkan şekerler. Oyuncuya doğru yavaşça süzülür;
+    // dokunursan bir süre ağırlaşırsın ya da şişip büyürsün. Kalkan bunları engellemez.
+    DEBUFFS: {
+        START_AFTER: 12000,    // İlk ekşi şeker (ms) — oyuncu oyunu tanısın
+        SPAWN_INTERVAL: 10000, // Ortalama aralık (±1.5 sn)
+        MAX_ON_FIELD: 1,
+        LIFETIME: 7500,
+        DRIFT: 28,             // Oyuncuya doğru süzülme hızı (px/s)
+        MIN_PLAYER_DIST: 140,  // Oyuncunun dibinde doğmaz
+        TYPES: {
+            HEAVY: { id: 'heavy', color: '#5B3A86', label: 'AĞIR', duration: 4500, factor: 0.5, mouseSpeed: 230 },
+            BIG:   { id: 'big',   color: '#7A3E78', label: 'DEV',  duration: 5000, scale: 1.7 }
+        }
+    },
+
     // --- FAZLAR & TEMEL DALGA SİSTEMİ ---
     PHASE_1: {
         NAME: 'WARM UP',
@@ -158,8 +174,39 @@ export const GAME_CONFIG = {
         ]
     },
 
+    // --- BOSS 3: SAKIZ BALON (Pamuk Bulut'tan sonra) ---
+    // Mobilde okunaklı olsun diye yavaş, büyük ve önceden belli olan saldırılar.
+    BOSS_GUM: {
+        NAME: 'BOSS',
+        KIND: 'gum',
+        TITLE: 'Sakız Balon',
+        DURATION: 22000,
+        MAX_HP: 100,
+        GRAZE_DAMAGE: 1.3,
+        RAM_DAMAGE: 7,
+        RAM_REACH: 16,
+        RADIUS: 27,
+        HOVER_Y: 170,
+        ENTRY_TIME: 1800,
+        DEATH_TIME: 900,
+        STAGE_COOLDOWN: 700,
+        BULLET_RADIUS: 4,
+        COLOR: '#FF6FAE',
+        GLOW: 'rgba(255, 111, 174, 0.25)',
+        STAGES: [
+            // Yavaş süzülen balonlar bir süre sonra küçük halkaya patlar (şişerek uyarır)
+            { NAME: 'BALON', PATTERN: 'bubbles', INTERVAL: 1500, COUNT: 2, SPEED: 70, POP_MS: 1700, BUBBLE_RADIUS: 10,
+              RING_COUNT: 8, RING_SPEED: 110 },
+            // Duvarlardan seken sakız topları + seyrek halka
+            { NAME: 'SEKME', PATTERN: 'bounce', INTERVAL: 1300, COUNT: 2, SPEED: 150, BOUNCES: 3, BALL_RADIUS: 6,
+              RING_INTERVAL: 2400, RING_COUNT: 10, RING_SPEED: 90 },
+            // Boss şişer ve patlar: oyuncunun olduğu yöne bakan GENİŞ bir boşluklu halka
+            { NAME: 'PATLAMA', PATTERN: 'burst', INFLATE_MS: 1300, REST_MS: 900, COUNT: 26, SPEED: 135, GAP: 1.0 }
+        ]
+    },
+
     // Boss sırası: yenilen her boss'tan BOSS_INTERVAL sonra sıradaki gelir; tur döndükçe zorlaşır
-    BOSS_ROTATION: ['BOSS', 'BOSS_CLOUD'],
+    BOSS_ROTATION: ['BOSS', 'BOSS_CLOUD', 'BOSS_GUM'],
     BOSS_INTERVAL: 15000,     // ms: bir boss yenildikten sonra sıradakine kadar en az bu kadar mola
     BOSS_SCHEDULE: [30000, 75000], // Sabit geliş saatleri: 1. boss 0:30, 2. boss 1:15 (sonrakiler BOSS_INTERVAL ile)
     BOSS_LEVEL_SPEED: 0.12,   // Her yeni turda mermi hızı +%12
@@ -174,6 +221,27 @@ export const GAME_CONFIG = {
         BOUNCES: 1,           // Çubuklar 2 yerine 1 kez seker
         AIM_INTERVAL: 2600,   // Nişanlı atış 1 sn yerine 2.6 sn'de bir
         DROP: 'shield'        // Jöle Kral yenildiği yere kalkan düşürür
+    },
+
+    // --- PERFORMANS ---
+    PERFORMANCE: {
+        MAX_DPR: 2,            // Masaüstünde en fazla 2x çözünürlük
+        MAX_DPR_TOUCH: 1.5,    // Telefonda 1.5x: çizilen piksel ~%44 azalır, görüntü yine keskin
+        MAX_DPR_TOUCH_LANDSCAPE: 1.75, // Yatay telefonda oyun alanı kısa (≈411 px): biraz daha keskin, toplam piksel dikey menü kadar
+        BG_SCALE: 0.5,         // Arka plan katmanı yarı çözünürlükte (yumuşak bulutlar fark edilmez)
+        BG_REFRESH_FRAMES: 4,  // Arka plan katmanı 4 karede bir yenilenir (bulutlar çok yavaş süzülür)
+        BAR_REFRESH_MS: 100,   // Alt şeritteki süre/puan DOM'a en fazla saniyede 10 kez yazılır
+        GRAZE_SOUND_GAP: 0.045 // Graze sesleri arası en az süre (s): yoğun anlarda ses düğümü yağmuru olmasın
+    },
+
+    // --- MOBİL / KÜÇÜK EKRAN DENGESİ ---
+    // Mermi sayısı zamana bağlı; dar (dikey telefon) arenada aynı sayı çok daha sıkışık olur.
+    // Kaos ve boss atışları arena alanına göre seyrekleşir, dokunmatikte biraz yavaşlar.
+    ARENA_DENSITY: {
+        REFERENCE_AREA: 600 * 600, // Bu alan ve üstünde değişiklik yok
+        MIN_SCALE: 0.55,           // En dar ekranda atışlar en fazla ~1.8 kat seyrekleşir
+        TOUCH_SPEED: 0.9,          // Dokunmatikte mermiler %10 yavaş (kaos + boss)
+        TOUCH_BOUNCES: 1           // Dokunmatikte kaos çubukları en fazla 1 kez seker
     },
 
     // --- ŞEKER TESTERELER ---

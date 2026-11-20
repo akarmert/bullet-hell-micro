@@ -5,7 +5,7 @@
 // ============================================================
 
 import { GAME_CONFIG } from './config.js';
-import { THEME, font, candyPanel } from './theme.js';
+import { THEME } from './theme.js';
 import { SoundSystem } from './audio.js';
 import { t, upper } from './i18n.js';
 
@@ -42,27 +42,6 @@ class Particle {
         this.rotation += this.spin * dt;
     }
 
-    render(ctx) {
-        if (this.life <= 0) return;
-        const alpha = Math.min(1, (this.life / this.maxLife) * 1.8);
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
-        ctx.beginPath();
-        if (this.round) {
-            ctx.arc(0, 0, this.width * 0.9, 0, Math.PI * 2);
-        } else {
-            ctx.roundRect(-this.length / 2, -this.width / 2, this.length, this.width, this.width / 2);
-        }
-        ctx.fillStyle = this.color;
-        ctx.fill();
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = THEME.INK_SOFT;
-        ctx.stroke();
-        ctx.restore();
-    }
 }
 
 /**
@@ -138,24 +117,6 @@ class SpringGrid {
                 pt.y += pt.vy * dt;
             }
         }
-    }
-
-    /**
-     * Esneyen benekli zemin: itilen benekler büyür ve pembeleşir
-     */
-    render(ctx) {
-        ctx.save();
-        for (let c = 0; c < this.cols; c++) {
-            for (let r = 0; r < this.rows; r++) {
-                const pt = this.points[c][r];
-                const d = Math.min(24, Math.abs(pt.x - pt.baseX) + Math.abs(pt.y - pt.baseY));
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 2 + d * 0.14, 0, Math.PI * 2);
-                ctx.fillStyle = d > 3 ? 'rgba(255, 111, 174, 0.55)' : THEME.GRID_DOT;
-                ctx.fill();
-            }
-        }
-        ctx.restore();
     }
 
     reset() {
@@ -281,7 +242,12 @@ export class EffectsManager {
      * Graze (teğet geçme) anında minik sarı kıvılcım parçacığı
      */
     triggerGraze(x, y, combo = null) {
-        this.sound.playGraze(x, combo);
+        // Yoğun anlarda her graze için ayrı ses düğümü açmak telefonu yorar: kısa aralıkla sınırla
+        const now = typeof performance !== 'undefined' ? performance.now() / 1000 : 0;
+        if (now - (this.lastGrazeSoundAt || 0) >= GAME_CONFIG.PERFORMANCE.GRAZE_SOUND_GAP) {
+            this.lastGrazeSoundAt = now;
+            this.sound.playGraze(x, combo);
+        }
         const colors = [THEME.PINK, THEME.LAVENDER];
         for (let i = 0; i < 3; i++) {
             this.particles.push(new Particle(x, y, colors[i % 2], 0.4, 0.4));
@@ -484,83 +450,7 @@ export class EffectsManager {
         this.particles.length = activeCount;
     }
 
-    /**
-     * Çizim başlamadan önce canvas'a sarsıntı ofsetini uygular
-     */
-    preRender(ctx) {
-        ctx.save();
-        if (this.motionEnabled && (this.shakeX !== 0 || this.shakeY !== 0)) {
-            ctx.translate(this.shakeX, this.shakeY);
-        }
-    }
-
-    /**
-     * Reaktif ızgarayı çizer
-     */
-    renderGrid(ctx, { dots = true } = {}) {
-        if (THEME.highContrast) {
-            if (dots) this.grid.render(ctx);
-            return;
-        }
-        for (const b of this.blobs) {
-            const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-            g.addColorStop(0, `rgba(${b.color}, ${THEME.BLOB_ALPHA})`);
-            g.addColorStop(1, `rgba(${b.color}, 0)`);
-            ctx.fillStyle = g;
-            ctx.fillRect(b.x - b.r, b.y - b.r, b.r * 2, b.r * 2);
-        }
-        if (dots) this.grid.render(ctx);
-    }
-
-    /**
-     * Çizim bittikten sonra parçacıkları, şok dalgalarını, flaşı ve banner'ı çizer
-     */
-    postRender(ctx) {
-        // Şok dalgaları: kalın yumuşak halkalar
-        for (let i = 0; i < this.shockwaves.length; i++) {
-            const sw = this.shockwaves[i];
-            ctx.save();
-            ctx.globalAlpha = sw.alpha * 0.8;
-            ctx.beginPath();
-            ctx.arc(sw.x, sw.y, sw.radius, 0, Math.PI * 2);
-            ctx.strokeStyle = sw.color;
-            ctx.lineWidth = 6 * sw.alpha + 1;
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        // Şeker serpintisi
-        for (let i = 0; i < this.particles.length; i++) {
-            this.particles[i].render(ctx);
-        }
-
-        // Pembe flaş
-        if (this.motionEnabled && this.flashAlpha > 0.01) {
-            ctx.save();
-            ctx.fillStyle = `rgba(255, 196, 222, ${this.flashAlpha})`;
-            ctx.fillRect(0, 0, GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
-            ctx.restore();
-        }
-
-        // Bildirim: şeker etiketi
-        if (this.bannerTimer > 0) {
-            ctx.save();
-            ctx.globalAlpha = Math.min(1, this.bannerTimer / 300);
-            ctx.font = font(16, 700);
-            const tw = ctx.measureText(this.bannerText).width;
-            const cx = GAME_CONFIG.CANVAS.WIDTH / 2;
-            const cy = 148; // Sayaç ve boss barının altında
-            ctx.translate(cx, cy);
-            candyPanel(ctx, -tw / 2 - 16, -15, tw + 32, 30, 15, THEME.SURFACE, { depth: 3, shadow: this.bannerColor });
-            ctx.fillStyle = THEME.TEXT;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(this.bannerText, 0, 1);
-            ctx.restore();
-        }
-
-        ctx.restore(); // preRender'daki ctx.save'i kapatır
-    }
+ 
 
     /**
      * Yeni tur başladığında efektleri temizler

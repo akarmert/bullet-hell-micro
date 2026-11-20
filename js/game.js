@@ -15,6 +15,8 @@ import { UIManager } from './ui.js';
 import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
+import { PixiRenderer } from './render/pixiRenderer.js';
+import { AdaptiveQuality } from './quality.js';
 import { THEME, setHighContrast, applyTheme, resolveTheme, systemPrefersDark } from './theme.js';
 import { MenuBackdrop } from './menuBackdrop.js';
 import { ScoreSystem, formatScore } from './score.js';
@@ -22,7 +24,7 @@ import { Tutorial } from './tutorial.js';
 import { Progress } from './progress.js';
 import { CoinManager } from './coins.js';
 import { Settings, SETTING_ROWS } from './settings.js';
-import { SKINS, getSkin, drawMarshmallow } from './skins.js';
+import { SKINS } from './skins.js';
 import { seedRandom, dateKey, dateLabel } from './rng.js';
 import { GhostRecorder, loadGhost, saveGhost } from './ghost.js';
 import { buildShareText, shareText } from './share.js';
@@ -38,7 +40,10 @@ export const GAME_STATE = {
 export class Game {
     constructor(canvas) {
         this.canvas = canvas;
-        this.ctx = canvas.getContext('2d');
+        // PixiJS (WebGL) renderer; initialised asynchronously, the loop waits for `ready`
+        this.quality = new AdaptiveQuality();
+        this.renderer = new PixiRenderer(canvas);
+        this.ready = this.renderer.init().then(() => resizeArena(this));
 
         resizeArena(this);
 
@@ -83,6 +88,16 @@ export class Game {
         // State & Zamanlama
         this.state = GAME_STATE.MENU;
         this.menuBackdrop = new MenuBackdrop(GAME_CONFIG.CANVAS.WIDTH, GAME_CONFIG.CANVAS.HEIGHT);
+        // Geliştirici modu: adrese ?dev eklenince (ölümsüzlük, boss'a atlama; kayıtlar kapalı)
+        this.dev = null;
+        // Dev mode is compiled out of production builds unless VITE_ENABLE_DEV_MODE=true.
+        // Written literally so Vite replaces it at build time and drops the dev-mode chunk
+        const devAllowed = import.meta.env.DEV || import.meta.env.VITE_ENABLE_DEV_MODE === 'true';
+        if (devAllowed && typeof location !== 'undefined' && new URLSearchParams(location.search).has('dev')) {
+            import('./devMode.js').then(({ DevMode, isDevRequested }) => {
+                if (isDevRequested()) this.dev = new DevMode(this);
+            });
+        }
         this.elapsedMs = 0;          // Simülasyon süresi: sadece oynanırken dt ile birikir
         this.resumeCountdown = 0;    // Devam ederken geri sayım (ms)
         this.deathTimestamp = 0;
@@ -132,6 +147,10 @@ export class Game {
         this.initInputListeners();
         resizeArena(this);
         new ResizeObserver(() => resizeArena(this)).observe(this.canvas);
+        // Some WebViews skip ResizeObserver on rotation: also listen to the window events
+        window.addEventListener('resize', () => { this.checkOrientation(); resizeArena(this); });
+        window.addEventListener('orientationchange', () => setTimeout(() => { this.checkOrientation(); resizeArena(this); }, 50));
+        this.landscape = window.innerWidth > window.innerHeight;
         // Odak kaybında oyunu otomatik duraklat (sekme değişimi, bildirim, uygulama değişimi)
         window.addEventListener('blur', () => { this.keys = {}; this.pauseGame(); });
         document.addEventListener('visibilitychange', () => { if (document.hidden) this.pauseGame(); });
@@ -378,29 +397,6 @@ export class Game {
         }
     }
 
-    /** Koyu tema dekoru: yavaşça parıldayan şeker serpintisi yıldızlar (oynanışı etkilemez) */
-    renderStars(ctx, w, h) {
-        if (!this.stars || this.stars.w !== w) {
-            let seed = 1337;
-            const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-            const list = [];
-            for (let i = 0; i < Math.round(w / 14); i++) {
-                list.push({ x: rnd() * w, y: rnd() * h, ph: rnd() * 6.28, big: rnd() < 0.15, c: THEME.SPRINKLES[i % THEME.SPRINKLES.length] });
-            }
-            this.stars = { w, list };
-        }
-        const now = performance.now() * 0.0016;
-        ctx.save();
-        for (const s of this.stars.list) {
-            ctx.globalAlpha = 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(now + s.ph));
-            ctx.fillStyle = s.c;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, s.big ? 2.2 : 1.2, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.restore();
-    }
-
     /** Kalkan bir darbeyi engellediğinde: kalan hak ya da "patladı" */
     shieldBannerText() {
         return this.player.shieldCharges > 0
@@ -576,6 +572,18 @@ export class Game {
     /**
      * Oyunu dondurur; simülasyon süresi ilerlemez, müzik durur
      */
+    /**
+     * Rotating the phone mid-run pauses the game: the arena changes shape and every texture is
+     * re-baked at the new resolution, which measured as 150–180 ms of frozen frames on a
+     * phone (enough to die to a bullet you could not see).
+     */
+    checkOrientation() {
+        const landscape = window.innerWidth > window.innerHeight;
+        if (landscape === this.landscape) return;
+        this.landscape = landscape;
+        if (this.state === GAME_STATE.PLAYING) this.pauseGame();
+    }
+
     pauseGame() {
         if (this.state === GAME_STATE.PAUSED) { this.resumeCountdown = 0; return; }
         if (this.state !== GAME_STATE.PLAYING) return;
@@ -608,6 +616,7 @@ export class Game {
     startGame() {
         this.touchControls.reset();
         this.state = GAME_STATE.PLAYING;
+        this.waveManager.touchAssist = !!this.touchControls.touchDevice; // Mobil denge
         this.showRotateHint();
         this.player.reset();
         this.bulletManager.clear();
@@ -666,6 +675,7 @@ export class Game {
      */
     triggerDeath() {
         if (this.state !== GAME_STATE.PLAYING) return;
+        if (this.dev && this.dev.blocksDeath()) return; // Geliştirici modu: ölümsüz
         this.hideRotateHint();
 
         // K5: ölüm nedenini kaydet (kenar / boss / mermi)
@@ -678,6 +688,15 @@ export class Game {
 
         // Efektleri ateşle & BGM'yi sönümle
         this.effects.triggerDeath(this.player.x, this.player.y);
+
+        // Geliştirici modunda hiçbir şey kaydedilmez (rekor, hayalet, istatistik, şeker)
+        if (this.dev) {
+            this.ui.isNewRecord = false;
+            this.ui.isNewTimeRecord = false;
+            this.lastUnlocked = [];
+            this.lastCandies = 0;
+            return;
+        }
 
         // Rekorlar: süre ve skor ayrı tutulur; "yeni rekor" skoru gösterir
         this.ui.checkAndSaveHighScore(this.elapsedMs, this.currentMode);
@@ -851,89 +870,8 @@ export class Game {
      * Arenayı, varlıkları, efektleri ve arayüzü çizer
      */
     render() {
-        const ctx = this.ctx;
-        const w = GAME_CONFIG.CANVAS.WIDTH;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
-
-        // Ekran sarsıntısı varsa canvas matrisine uygula
-        this.effects.preRender(ctx);
-
-        // Arka plan temizliği (koyu temada gece geçişi + serpinti yıldızlar)
-        if (THEME.dark) {
-            const sky = ctx.createLinearGradient(0, 0, 0, h);
-            sky.addColorStop(0, THEME.BG_TOP);
-            sky.addColorStop(1, THEME.BG);
-            ctx.fillStyle = sky;
-        } else {
-            ctx.fillStyle = THEME.BG;
-        }
-        ctx.fillRect(0, 0, w, h);
-        if (this.state === GAME_STATE.MENU) {
-            // Ana menü: etkileşimli şeker / gece arka planı
-            this.effects.renderGrid(ctx, { dots: false });
-            this.menuBackdrop.render(ctx);
-        } else {
-            if (THEME.dark && !THEME.highContrast) this.renderStars(ctx, w, h);
-            // Reaktif Dinamik Yaylı Izgara
-            this.effects.renderGrid(ctx);
-        }
-
-        // Telegraf (Ön Uyarı Lazerleri)
-        this.waveManager.renderTelegraphs(ctx);
-
-        // Saha Güçlendirmeleri (Pickups)
-        this.pickupManager.render(ctx);
-        if (this.state !== GAME_STATE.MENU) this.coins.render(ctx);
-
-        // Boss
-        if (this.state !== GAME_STATE.MENU) this.waveManager.renderBoss(ctx);
-
-        // Hayalet (en iyi tur), mermilerin altında
-        if (this.ghost && (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED)) {
-            this.renderGhost(ctx, w, h);
-        }
-
-        // Mermiler ve Oyuncu
-        this.bulletManager.render(ctx);
-        if (this.state !== GAME_STATE.MENU) {
-            this.player.render(ctx);
-        }
-        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.ui.renderComboAndPopups(ctx, this.player, this.score);
-        }
-
-        // Post-render görsel efektler (Parçacıklar, Şok dalgaları, Flaş, Banner)
-        this.effects.postRender(ctx);
-
-        // UI Katmanı
-        if (this.state === GAME_STATE.MENU) {
-            this.ui.renderMenu(ctx, this.currentMode.id);
-        } else if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.renderEdgeWarning(ctx, w, h, { linePart: false });
-            this.ui.renderHUD(ctx, this.elapsedMs, this.currentMode, this.player, this.pickupManager, this.score, !!this.barVisible, this.runCandies);
-            if (this.state === GAME_STATE.PLAYING) this.ui.renderHint(ctx, this.currentHint, this.player);
-            if (this.waveManager.boss) this.waveManager.boss.renderHealthBar(ctx, this.ui.safe.top);
-            if (this.state === GAME_STATE.PAUSED) {
-                this.ui.renderPaused(ctx, this.resumeCountdown, this.touchControls.touchDevice);
-            }
-        } else if (this.state === GAME_STATE.DEAD) {
-            this.ui.renderDead(ctx, this.elapsedMs, this.currentMode, this.player, {
-                reveal: this.deathReveal(),
-                cause: this.deathCause,
-                bossTitle: this.waveManager.boss ? this.waveManager.boss.title : '',
-                score: this.score,
-                waves: this.waveManager,
-                unlocked: this.lastUnlocked,
-                candies: this.lastCandies || 0,
-                backdrop: this.menuBackdrop
-            });
-        }
-
-        // Arena sınır çerçevesi: sadece oyun içinde (menüde ve sonuç ekranında yok)
-        if (this.state === GAME_STATE.PLAYING || this.state === GAME_STATE.PAUSED) {
-            this.renderArenaBorder(ctx, w, h);
-            this.renderEdgeWarning(ctx, w, h, { glowPart: false }); // Çerçevenin yaklaşılan parçası pembe yanar
-        }
+        // All drawing goes through PixiJS (js/render/); the game only provides state
+        this.renderer.render(this);
     }
 
     /** Ölüm patlaması bitti mi? (yeniden başlatma ve butonlar bundan sonra) */
@@ -952,6 +890,9 @@ export class Game {
      */
     syncControlBar(showBar) {
         this.barVisible = showBar;
+        // Landscape phones put the controls in side columns (css/style.css): no bar under the arena
+        this.landscapeMq = this.landscapeMq || (typeof matchMedia === 'function' ? matchMedia('(orientation: landscape)') : null);
+        this.barBelow = showBar && !(this.landscapeMq && this.landscapeMq.matches);
         const body = document.body;
         if (body.classList.contains('has-bar') !== showBar) body.classList.toggle('has-bar', showBar);
         const idle = showBar && this.state !== GAME_STATE.PLAYING;
@@ -960,6 +901,10 @@ export class Game {
         const dead = showBar && this.state === GAME_STATE.DEAD;
         if (body.classList.contains('bar-dead') !== dead) body.classList.toggle('bar-dead', dead);
         if (!showBar) return;
+        // DOM'a her karede yazmak telefonda yerleşim hesabı yaptırır: saniyede en fazla 10 kez
+        const nowMs = performance.now();
+        if (this.state === GAME_STATE.PLAYING && nowMs - (this.barWrittenAt || 0) < GAME_CONFIG.PERFORMANCE.BAR_REFRESH_MS) return;
+        this.barWrittenAt = nowMs;
         this.barTimeEl = this.barTimeEl || document.getElementById('barTime');
         this.barScoreEl = this.barScoreEl || document.getElementById('barScore');
         const time = UIManager.formatTime(this.elapsedMs);
@@ -982,20 +927,6 @@ export class Game {
         aria('gameCanvas', t('dom.canvas'));
     }
 
-    renderGhost(ctx, w, h) {
-        const pos = this.ghost.positionAt(this.elapsedMs, w, h);
-        if (!pos) return;
-        ctx.save();
-        ctx.globalAlpha = 0.32;
-        drawMarshmallow(ctx, pos.x, pos.y, this.player.radius * 1.9, getSkin(this.ghost.skin));
-        ctx.globalAlpha = 0.6;
-        ctx.font = '700 9px "Fredoka", system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = THEME.TEXT_PRIMARY;
-        ctx.fillText(t('hud.ghost'), pos.x, pos.y - 16);
-        ctx.restore();
-    }
-
     /** Ölüm ekranından sonucu paylaşır / kopyalar */
     async shareResult() {
         if (this.state !== GAME_STATE.DEAD) return;
@@ -1015,84 +946,5 @@ export class Game {
         const result = await shareText(text, this.touchControls.touchDevice);
         if (result === 'copied') this.effects.triggerBanner(t('banner.copied'), THEME.PURPLE);
         else if (result === 'failed') this.effects.triggerBanner(t('banner.copyFailed'), THEME.PINK);
-    }
-
-    /**
-     * Oyuncu kenara yaklaştıkça SADECE yaklaştığı noktada nabız gibi atan pembe uyarı:
-     * kenarda yumuşak bir hale + çerçevenin o kısmı pembe yanar (bütün kenar boyanmaz).
-     * Hale çerçevenin içine kırpılır, çerçeve vurgusu çerçevenin kendi yuvarlak yolunu izler;
-     * köşede iki kenar birden yanınca ikisi de yumuşatılır.
-     */
-    renderEdgeWarning(ctx, w, h, { glowPart = true, linePart = true } = {}) {
-        const p = this.player;
-        if (!p.alive) return;
-        const range = 60;
-        const glowR = 120;   // Kenardaki halenin yarıçapı
-        const span = 85;     // Çerçevede pembe yanan parçanın yarıçapı
-        const pulse = 0.8 + Math.sin(performance.now() * 0.01) * 0.2;
-        const cssH = this.canvas && this.canvas.clientHeight;
-        const lw = cssH ? 6 * h / cssH : 6;
-        const edges = [
-            [p.x - p.radius, 0, p.y],
-            [w - p.x - p.radius, w, p.y],
-            [p.y - p.radius, p.x, 0],
-            [h - p.y - p.radius, p.x, h]
-        ].filter(([dist]) => dist < range);
-        if (!edges.length) return;
-        const soften = edges.length > 1 ? 0.65 : 1; // Köşede iki hale üst üste binip sertleşmesin
-
-        // Çerçevenin yolu (renderArenaBorder ile aynı)
-        const framePath = () => {
-            ctx.beginPath();
-            if (this.barVisible) ctx.roundRect(lw / 2, lw / 2, w - lw, h + lw * 2, [18, 18, 0, 0]);
-            else ctx.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
-        };
-
-        ctx.save();
-        if (glowPart) {
-            framePath();
-            ctx.clip(); // Hale çerçevenin dışına (yuvarlak köşenin arkasına) taşmaz
-            for (const [dist, ex, ey] of edges) {
-                const k = Math.max(0, 1 - dist / range) * pulse * soften;
-                const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, glowR);
-                glow.addColorStop(0, `rgba(240, 70, 143, ${0.4 * k})`);
-                glow.addColorStop(0.35, `rgba(240, 70, 143, ${0.22 * k})`);
-                glow.addColorStop(0.7, `rgba(240, 70, 143, ${0.07 * k})`);
-                glow.addColorStop(1, 'rgba(240, 70, 143, 0)');
-                ctx.fillStyle = glow;
-                ctx.fillRect(ex - glowR, ey - glowR, glowR * 2, glowR * 2);
-            }
-        }
-        if (linePart) {
-            ctx.lineWidth = lw;
-            for (const [dist, ex, ey] of edges) {
-                const k = Math.max(0, 1 - dist / range) * pulse * soften;
-                const line = ctx.createRadialGradient(ex, ey, 0, ex, ey, span);
-                line.addColorStop(0, `rgba(255, 111, 174, ${Math.min(1, 1.2 * k)})`);
-                line.addColorStop(0.6, `rgba(255, 111, 174, ${0.45 * k})`);
-                line.addColorStop(1, 'rgba(255, 111, 174, 0)');
-                ctx.strokeStyle = line;
-                framePath();
-                ctx.stroke(); // Çerçevenin kendisi (köşe kıvrımı dahil) o noktada pembeleşir
-            }
-        }
-        ctx.restore();
-    }
-
-    /**
-     * Arena sınırlarını parlayan çizgi ile belirler
-     */
-    renderArenaBorder(ctx, w, h) {
-        // Ekranda her zaman ~6 CSS px kalınlık; alt şerit varken alt kenar şeridin üst çizgisine dönüşür
-        const cssH = this.canvas && this.canvas.clientHeight;
-        const lw = cssH ? 6 * h / cssH : 6;
-        ctx.save();
-        ctx.strokeStyle = THEME.FRAME;
-        ctx.lineWidth = lw;
-        ctx.beginPath();
-        if (this.barVisible) ctx.roundRect(lw / 2, lw / 2, w - lw, h + lw * 2, [18, 18, 0, 0]);
-        else ctx.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
-        ctx.stroke();
-        ctx.restore();
     }
 }

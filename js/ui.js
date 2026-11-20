@@ -13,7 +13,7 @@ import { SETTING_ROWS } from './settings.js';
 import { dateLabel } from './rng.js';
 import { t, upper } from './i18n.js';
 
-const SETTINGS_LAYOUT = { x: 110, y: 104, w: 380, rowTop: 160, rowH: 42 };
+const SETTINGS_LAYOUT = { x: 110, y: 100, w: 380, rowTop: 154, rowH: 40 };
 
 // K2: Ekran oranına göre üç menü yerleşimi; ekrana en büyük ölçekte sığan seçilir.
 export const MENU_LAYOUTS = {
@@ -350,6 +350,30 @@ export class UIManager {
         };
     }
 
+    /** Dizzy stars circling the result-card marshmallow (card coordinates, y relative to the marshmallow) */
+    deadStars(now) {
+        const out = [];
+        for (let i = 0; i < 3; i++) {
+            const a = now * 2.4 + (i * Math.PI * 2) / 3;
+            const depth = 0.75 + Math.sin(a) * 0.25;
+            out.push({ x: Math.cos(a) * 30, y: -16 + Math.sin(a) * 7, r: 4.5 * depth });
+        }
+        return out;
+    }
+
+    /** Vertical slide of the result card while it fades in (logical units) */
+    deadSlide(reveal) {
+        return (1 - reveal) * 24;
+    }
+
+    /** Result card body (below the header band) in arena coordinates, for masking the backdrop */
+    getDeadBodyRect(reveal = 1) {
+        const D = this.getDeadLayout();
+        const x = D.cx + (-D.cw / 2 + 1.25) * D.s;
+        const y = D.cy + this.deadSlide(reveal) + (D.top + D.headerH) * D.s;
+        return { x, y, w: (D.cw - 2.5) * D.s, h: (D.ch - D.headerH - 1.25) * D.s, r: 25 * D.s };
+    }
+
     /** Sonuç kartında dokunulan eylem: 'info' | 'retry' | 'menu' | 'share' | null */
     deadAction(px, py) {
         const L = this.getDeadLayout();
@@ -465,20 +489,8 @@ export class UIManager {
         UIManager.roundButton(ctx, L.info.cx, L.info.cy, L.info.r, 'i');
         if (focus === 'info') focusRing(ctx, L.info.cx - L.info.r, L.info.cy - L.info.r, L.info.r * 2, L.info.r * 2, L.info.r);
 
-        // Başlık
-        const ti = L.title;
-        const titleY = ti.y + Math.sin(now * 2) * 2;
-        ctx.font = font(ti.size, 700);
-        ctx.textBaseline = 'alphabetic';
-        ctx.fillStyle = THEME.PINK;
-        ctx.fillText('BULLET HELL', ti.x + 3, titleY + 4);
-        outlinedText(ctx, 'BULLET HELL', ti.x, titleY, THEME.TEXT, THEME.TEXT_HALO, 6);
-        const titleW = ctx.measureText('BULLET HELL').width;
-        ctx.save();
-        ctx.translate(ti.x + titleW / 2 - 18, titleY + 14);
-        ctx.rotate(-0.08);
-        UIManager.pill(ctx, 'micro', 0, 0, THEME.PINK, THEME.INK, 'center', 14);
-        ctx.restore();
+        // Title (the renderer draws it as its own sprite when menuSplit is on)
+        if (!this.menuSplit) this.drawMenuTitle(ctx, L, Math.sin(now * 2) * 2);
 
         ctx.textBaseline = 'middle';
         const fs = L.textScale || 1; // Telefonda kart yazıları biraz daha büyük
@@ -527,18 +539,8 @@ export class UIManager {
         ctx.font = font(13, 600);
         ctx.fillStyle = THEME.MUTED;
 
-        // OYNA
-        const pb = L.play;
-        const bob = Math.sin(now * 3) * 2;
-        candyPanel(ctx, pb.x, pb.y + bob, pb.w, pb.h, pb.h / 2, THEME.PURPLE, { depth: 6, lineWidth: 2.5 });
-        ctx.beginPath();
-        ctx.roundRect(pb.x + 20, pb.y + bob + 9, pb.w - 40, 8, 4);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
-        ctx.fill();
-        ctx.font = font(24, 700);
-        ctx.fillStyle = THEME.WHITE;
-        ctx.fillText(t('menu.play', { mode: activeMode.label }), pb.x + pb.w / 2, pb.y + bob + pb.h / 2 + 2, pb.w - 30);
-        if (focus === 'play') focusRing(ctx, pb.x, pb.y, pb.w, pb.h, pb.h / 2);
+        // PLAY button (own sprite when menuSplit is on)
+        if (!this.menuSplit) this.drawMenuPlay(ctx, L, activeMode, Math.sin(now * 3) * 2, focus === 'play');
 
         this.renderSkinPicker(ctx, now, L, focus === 'skin');
 
@@ -562,6 +564,7 @@ export class UIManager {
             ['🧱', t('info.edge.title'), t('info.edge.text')],
             ['👑', t('info.boss.title'), t('info.boss.text')]
         ];
+        rows.push(['😖', t('info.sour.title'), t('info.sour.text')]);
         rows.push(['🍭', t('info.candy.title'), t('info.candy.text')]);
         if (!touch) rows.push(['⌨️', t('info.keys.title'), t('info.keys.text')]);
 
@@ -617,6 +620,58 @@ export class UIManager {
         ctx.restore();
     }
 
+    /** Menu title "BULLET HELL" + "micro" pill, in menu (layout) coordinates */
+    drawMenuTitle(ctx, L, bob = 0) {
+        const ti = L.title;
+        const titleY = ti.y + bob;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.font = font(ti.size, 700);
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = THEME.PINK;
+        ctx.fillText('BULLET HELL', ti.x + 3, titleY + 4);
+        outlinedText(ctx, 'BULLET HELL', ti.x, titleY, THEME.TEXT, THEME.TEXT_HALO, 6);
+        const titleW = ctx.measureText('BULLET HELL').width;
+        ctx.translate(ti.x + titleW / 2 - 18, titleY + 14);
+        ctx.rotate(-0.08);
+        UIManager.pill(ctx, 'micro', 0, 0, THEME.PINK, THEME.INK, 'center', 14);
+        ctx.restore();
+    }
+
+    /** PLAY button with its gloss stripe and focus ring, in menu (layout) coordinates */
+    drawMenuPlay(ctx, L, activeMode, bob = 0, focused = false) {
+        const pb = L.play;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        candyPanel(ctx, pb.x, pb.y + bob, pb.w, pb.h, pb.h / 2, THEME.PURPLE, { depth: 6, lineWidth: 2.5 });
+        ctx.beginPath();
+        ctx.roundRect(pb.x + 20, pb.y + bob + 9, pb.w - 40, 8, 4);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.28)';
+        ctx.fill();
+        ctx.font = font(24, 700);
+        ctx.fillStyle = THEME.WHITE;
+        ctx.fillText(t('menu.play', { mode: activeMode.label }), pb.x + pb.w / 2, pb.y + bob + pb.h / 2 + 2, pb.w - 30);
+        if (focused) focusRing(ctx, pb.x, pb.y, pb.w, pb.h, pb.h / 2);
+        ctx.restore();
+    }
+
+    /** Costume marshmallow of the skin picker at rest (no bob / squash), in menu coordinates */
+    drawMenuSkinBody(ctx, L, blink = 1) {
+        if (!this.progress) return;
+        const s = L.skin;
+        const skin = SKINS[this.skinIndex] || SKINS[0];
+        const locked = !this.progress.isUnlocked(skin.id);
+        const forSale = this.progress.isForSale(skin.id);
+        drawMarshmallow(ctx, s.cx, s.cy - 4, s.r, skin, { locked: locked && !forSale, blink, squash: 1 });
+    }
+
+    /** Applies the menu layout transform (offset + scale) */
+    applyMenuTransform(ctx) {
+        ctx.translate(this.lOffX, this.lOffY);
+        ctx.scale(this.lScale, this.lScale);
+    }
+
     renderSkinPicker(ctx, time, L = this.layout, focused = false) {
         if (!this.progress) return;
         const s = L.skin;
@@ -629,7 +684,7 @@ export class UIManager {
         const blink = (time % 3.2) < 0.12 ? 0.25 : 1;
         // Satılık kostüm görünür (ne aldığını gör); başarım kostümü kilitli sürpriz kalır
         const forSale = this.progress.isForSale(skin.id);
-        drawMarshmallow(ctx, s.cx, s.cy - 4 + Math.sin(time * 2.4) * 2, s.r, skin, { locked: locked && !forSale, blink, squash: 1 + Math.sin(time * 5) * 0.03 });
+        if (!this.menuSplit) drawMarshmallow(ctx, s.cx, s.cy - 4 + Math.sin(time * 2.4) * 2, s.r, skin, { locked: locked && !forSale, blink, squash: 1 + Math.sin(time * 5) * 0.03 });
 
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
@@ -755,91 +810,148 @@ export class UIManager {
      * @param {boolean} compact Dokunmatik şerit açıkken süre ve puan şeritte gösterilir; tuvalde tekrar edilmez
      */
     renderHUD(ctx, elapsedMs, mode = this.currentMode, player = null, pickupManager = null, score = null, compact = false, runCandies = 0) {
-        const w = GAME_CONFIG.CANVAS.WIDTH;
-        const h = GAME_CONFIG.CANVAS.HEIGHT;
-        const left = 18 + this.safe.left;
-        const right = w - 18 - this.safe.right;
+        this.renderHudLeft(ctx, mode, player, runCandies);
+        if (!compact) this.renderHudCenter(ctx, elapsedMs, mode);
+        this.renderHudRight(ctx, player, pickupManager, score, compact);
+        this.renderHudDash(ctx, player);
+    }
 
+    /** HUD top-left: mode pill, graze count, candies collected this run */
+    renderHudLeft(ctx, mode, player, runCandies = 0, opts = {}) {
+        const left = 18 + this.safe.left;
         ctx.save();
         ctx.translate(0, this.safe.top);
         ctx.textBaseline = 'middle';
-
-        // Sol üst: mod ve graze
         UIManager.pill(ctx, mode.label, left, 24, THEME.LAVENDER, THEME.INK, 'left', 11);
+        // The renderer draws the counters from baked glyphs (opts.skipCounters)
+        if (opts.skipCounters) {
+            ctx.restore();
+            return;
+        }
         ctx.font = font(12, 600);
         ctx.textAlign = 'left';
         ctx.fillStyle = THEME.MUTED;
         ctx.fillText(t('hud.graze', { n: player ? player.grazeCount : 0 }), left + 2, 50);
         if (runCandies > 0) {
-            // Bu turda toplanan şeker paralar
             ctx.font = font(13, 700);
             ctx.fillStyle = THEME.TEXT_ACCENT;
             ctx.fillText(t('hud.candies', { n: formatScore(runCandies) }), left + 2, 70);
         }
+        ctx.restore();
+    }
 
-        let rowY = 24;
-        if (!compact) {
-            // Orta: süre ve rekor
-            ctx.textAlign = 'center';
+    /** HUD top-centre: run time and best score (hidden when the touch bar shows the time) */
+    renderHudCenter(ctx, elapsedMs, mode, opts = {}) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        ctx.save();
+        ctx.translate(0, this.safe.top);
+        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'center';
+        if (!opts.skipTime) {
             ctx.font = font(Math.min(36, w * 0.085), 700);
             outlinedText(ctx, UIManager.formatTime(elapsedMs), w / 2, 42, THEME.TEXT, THEME.TEXT_HALO, 6);
-            ctx.font = font(11, 600);
-            ctx.fillStyle = THEME.MUTED;
-            ctx.fillText(t('hud.best', { score: formatScore(this.getBestScore(mode.id)) }), w / 2, 70);
+        }
+        ctx.font = font(11, 600);
+        ctx.fillStyle = THEME.MUTED;
+        ctx.fillText(t('hud.best', { score: formatScore(this.getBestScore(mode.id)) }), w / 2, 70);
+        ctx.restore();
+    }
 
-            // Sağ üst: skor
-            UIManager.pill(ctx, `★ ${formatScore(score ? score.total : 0)}`, right, 24, THEME.PINK, THEME.INK, 'right', 13);
+    /** HUD top-right: score and active power-up / sour candy timers */
+    renderHudRight(ctx, player, pickupManager, score, compact = false, opts = {}) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const right = w - 18 - this.safe.right;
+        ctx.save();
+        ctx.translate(0, this.safe.top);
+        ctx.textBaseline = 'middle';
+        let rowY = 24;
+        if (!compact) {
+            if (!opts.skipScore) UIManager.pill(ctx, `★ ${formatScore(score ? score.total : 0)}`, right, 24, THEME.PINK, THEME.INK, 'right', 13);
             rowY = 54;
         }
-        // Sağ üst: aktif güçlendirmeler
         if (player && player.hasShield) {
             UIManager.pill(ctx, t('hud.shield', { pips: player.shieldPips() }), right, rowY, THEME.PURPLE_DEEP, THEME.WHITE, 'right', 10);
             rowY += 24;
         }
-        if (pickupManager && pickupManager.isSlowmoActive()) {
-            const remaining = (pickupManager.slowmoTimer / 1000).toFixed(1);
-            UIManager.pill(ctx, t('hud.slowmo', { s: remaining }), right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
-        }
-
-        // Alt orta: dash çubuğu (dokunmatikte buton halkası gösterir)
-        if (player && !matchMedia('(any-pointer: coarse)').matches) {
-            const barW = 140;
-            const barH = 10;
-            const barX = (w - barW) / 2;
-            const barY = h - this.safe.top - this.safe.bottom - 26;
-            const ratio = player.getDashReadyRatio();
-            const isReady = ratio >= 1.0;
-
-            ctx.beginPath();
-            ctx.roundRect(barX, barY, barW, barH, barH / 2);
-            ctx.fillStyle = THEME.SURFACE;
-            ctx.fill();
-            if (ratio > 0) {
-                ctx.save();
-                ctx.clip();
-                ctx.fillStyle = isReady ? THEME.PINK : THEME.LAVENDER;
-                ctx.fillRect(barX, barY, barW * ratio, barH);
-                ctx.restore();
+        // Timers: with opts.timerSlots the digits are left out (room reserved with figure
+        // spaces) and their positions returned, so the renderer draws them from baked glyphs
+        // instead of redrawing / re-uploading the whole HUD ten times a second
+        const slots = opts.timerSlots;
+        const timerPill = (kind, key, ms, fill, color) => {
+            const value = (ms / 1000).toFixed(1);
+            if (!slots) {
+                UIManager.pill(ctx, t(key, { s: value }), right, rowY, fill, color, 'right', 10);
+                return;
             }
-            ctx.beginPath();
-            ctx.roundRect(barX, barY, barW, barH, barH / 2);
-            ctx.strokeStyle = THEME.INK;
-            ctx.lineWidth = 2;
-            ctx.stroke();
-
-            ctx.textAlign = 'center';
-            ctx.font = font(11, 700);
-            ctx.fillStyle = isReady ? THEME.TEXT_ACCENT : THEME.MUTED;
-            ctx.fillText(isReady ? t('hud.dashReady') : t('hud.dashCharging'), w / 2, barY - 11);
+            const gap = ' '.repeat(value.length);
+            const text = t(key, { s: gap });
+            ctx.font = font(10, 700);
+            const tw = ctx.measureText(text).width;
+            const at = text.indexOf(gap);
+            const gapCenter = right - (tw + 16) + 8 + ctx.measureText(text.slice(0, at)).width + ctx.measureText(gap).width / 2;
+            UIManager.pill(ctx, text, right, rowY, fill, color, 'right', 10);
+            slots.push({ kind, x: gapCenter, y: rowY + 1 + this.safe.top, fill: color });
+        };
+        if (pickupManager && pickupManager.isSlowmoActive()) {
+            timerPill('slowmo', 'hud.slowmo', pickupManager.slowmoTimer, THEME.LAVENDER, THEME.INK);
+            rowY += 24;
         }
+        // Sour candy effects (dark plum pill: a bad state)
+        if (player && player.slowTimer > 0) {
+            timerPill('heavy', 'hud.heavy', player.slowTimer, '#5B3A86', '#FFFFFF');
+            rowY += 24;
+        }
+        if (player && player.growTimer > 0) {
+            timerPill('big', 'hud.big', player.growTimer, '#7A3E78', '#FFFFFF');
+        }
+        ctx.restore();
+    }
 
+    /** Whether the bottom dash bar is shown (touch devices use the DASH button ring instead) */
+    hasDashBar() {
+        return typeof matchMedia !== 'function' || !matchMedia('(any-pointer: coarse)').matches;
+    }
+
+    /** HUD bottom-centre: dash cooldown bar */
+    renderHudDash(ctx, player) {
+        if (!player || !this.hasDashBar()) return;
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        const barW = 140;
+        const barH = 10;
+        const barX = (w - barW) / 2;
+        const barY = h - this.safe.bottom - 26;
+        const ratio = player.getDashReadyRatio();
+        const isReady = ratio >= 1.0;
+        ctx.save();
+        ctx.textBaseline = 'middle';
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barW, barH, barH / 2);
+        ctx.fillStyle = THEME.SURFACE;
+        ctx.fill();
+        if (ratio > 0) {
+            ctx.save();
+            ctx.clip();
+            ctx.fillStyle = isReady ? THEME.PINK : THEME.LAVENDER;
+            ctx.fillRect(barX, barY, barW * ratio, barH);
+            ctx.restore();
+        }
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barW, barH, barH / 2);
+        ctx.strokeStyle = THEME.INK;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.textAlign = 'center';
+        ctx.font = font(11, 700);
+        ctx.fillStyle = isReady ? THEME.TEXT_ACCENT : THEME.MUTED;
+        ctx.fillText(isReady ? t('hud.dashReady') : t('hud.dashCharging'), w / 2, barY - 11);
         ctx.restore();
     }
 
     /**
      * Oyuncunun yanındaki seri göstergesi ve süzülen puan yazıları (dünya koordinatı)
      */
-    renderComboAndPopups(ctx, player, score) {
+    renderComboAndPopups(ctx, player, score, opts = {}) {
         if (!score) return;
         ctx.save();
         ctx.textAlign = 'center';
@@ -861,8 +973,10 @@ export class UIManager {
             const tw = ctx.measureText(label).width + 16;
             candyPanel(ctx, x - tw / 2, y - 9, tw, 18, 9, score.multiplier > 1 ? THEME.PINK : THEME.SURFACE, { lineWidth: 1.5, depth: 2 });
             // Kalan seri süresi
-            ctx.fillStyle = score.multiplier > 1 ? 'rgba(255, 255, 255, 0.5)' : 'rgba(205, 184, 255, 0.7)';
-            ctx.fillRect(x - tw / 2 + 6, y + 5, (tw - 12) * score.comboRatio, 2);
+            if (!opts.skipBar) {
+                ctx.fillStyle = score.multiplier > 1 ? 'rgba(255, 255, 255, 0.5)' : 'rgba(205, 184, 255, 0.7)';
+                ctx.fillRect(x - tw / 2 + 6, y + 5, (tw - 12) * score.comboRatio, 2);
+            }
             ctx.fillStyle = score.multiplier > 1 ? THEME.INK : THEME.TEXT;
             ctx.fillText(label, x, y);
         }
@@ -889,7 +1003,8 @@ export class UIManager {
         ctx.restore();
     }
 
-    renderPaused(ctx, countdownMs = 0, touch = false) {
+    /** Pause overlay. opts.skipResume leaves out the pulsing "tap to resume" line. */
+    renderPaused(ctx, countdownMs = 0, touch = false, opts = {}) {
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
 
@@ -922,12 +1037,11 @@ export class UIManager {
         ctx.fillStyle = THEME.PURPLE;
         ctx.fillText(t('pause.title'), w / 2, h / 2 - 36);
 
-        const pulse = (Math.sin(performance.now() * 0.006) + 1) * 0.5;
-        ctx.font = font(14, 600);
-        ctx.globalAlpha = 0.65 + pulse * 0.35;
-        ctx.fillStyle = THEME.TEXT;
-        ctx.fillText(touch ? t('pause.resumeTouch') : t('pause.resume'), w / 2, h / 2 + 2);
-        ctx.globalAlpha = 1;
+        if (!opts.skipResume) {
+            ctx.globalAlpha = this.pauseResumeAlpha();
+            this.drawPausedResume(ctx, touch);
+            ctx.globalAlpha = 1;
+        }
 
         if (!touch) {
             ctx.font = font(12, 600);
@@ -937,12 +1051,33 @@ export class UIManager {
         ctx.restore();
     }
 
+    /** Pulse of the pause screen's resume hint (0.65..1) */
+    pauseResumeAlpha() {
+        return 0.65 + ((Math.sin(performance.now() * 0.006) + 1) * 0.5) * 0.35;
+    }
+
+    drawPausedResume(ctx, touch = false) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const h = GAME_CONFIG.CANVAS.HEIGHT;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = font(14, 600);
+        ctx.fillStyle = THEME.TEXT;
+        ctx.fillText(touch ? t('pause.resumeTouch') : t('pause.resume'), w / 2, h / 2 + 2);
+        ctx.restore();
+    }
+
     /**
      * Ölüm ekranı
      * @param {object} info { score, waves, unlocked: Skin[], reveal, cause, bossTitle }
      */
     renderDead(ctx, finalTimeMs, mode = this.currentMode, player = null, info = {}) {
-        const { score = null, waves = null, unlocked = [], reveal = 1, cause = 'bullet', bossTitle = '', candies = 0, backdrop = null } = info;
+        // pass: 'base' = scrim + card panel + body, 'content' = everything on top of the body.
+        // The renderer draws the interactive backdrop between the two passes, masked to the card body.
+        const { score = null, waves = null, unlocked = [], reveal = 1, cause = 'bullet', bossTitle = '', candies = 0, pass = 'all', skipStars = false } = info;
+        const drawBase = pass !== 'content';
+        const drawContent = pass !== 'base';
         if (reveal <= 0) return; // Önce ölüm patlaması görünsün
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const h = GAME_CONFIG.CANVAS.HEIGHT;
@@ -951,15 +1086,16 @@ export class UIManager {
 
         ctx.save();
         ctx.globalAlpha = reveal;
-        ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.85)`;
-        ctx.fillRect(0, 0, w, h);
-        const baseTransform = ctx.getTransform(); // Arka plan efekti arena koordinatında çizilir
-        ctx.translate(D.cx, D.cy + (1 - reveal) * 24); // Kart hafifçe yukarı kayarak gelir
+        if (drawBase && info.scrim !== false) {
+            ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.85)`;
+            ctx.fillRect(0, 0, w, h);
+        }
+        ctx.translate(D.cx, D.cy + this.deadSlide(reveal)); // Card slides up slightly as it appears
         ctx.scale(D.s, D.s);
 
         const top = D.top;
         const ch = D.ch;
-        candyPanel(ctx, -cw / 2, top, cw, ch, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
+        if (drawBase) candyPanel(ctx, -cw / 2, top, cw, ch, 26, THEME.SURFACE, { depth: 7, lineWidth: 2.5 });
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         const now = performance.now() / 1000;
@@ -971,20 +1107,20 @@ export class UIManager {
         ctx.beginPath();
         ctx.roundRect(-cw / 2 + 1.25, top + 1.25, cw - 2.5, ch - 2.5, 25);
         ctx.clip();
-        const body = ctx.createLinearGradient(0, yb, 0, top + ch);
-        body.addColorStop(0, THEME.SURFACE);
-        body.addColorStop(1, THEME.SURFACE_SOFT);
-        ctx.fillStyle = body;
-        ctx.fillRect(-cw / 2, yb, cw, ch - bandH);
-        if (backdrop && reveal > 0.6) {
-            // Ana menüdeki etkileşimli arka plan, kartın gövdesinde (soluk, içerik önde kalır)
-            ctx.save();
-            ctx.setTransform(baseTransform);
-            backdrop.render(ctx, 0.6);
+        if (drawBase) {
+            const body = ctx.createLinearGradient(0, yb, 0, top + ch);
+            body.addColorStop(0, THEME.SURFACE);
+            body.addColorStop(1, THEME.SURFACE_SOFT);
+            ctx.fillStyle = body;
+            ctx.fillRect(-cw / 2, yb, cw, ch - bandH);
+        }
+        if (!drawContent) {
             ctx.restore();
+            ctx.restore();
+            return;
         }
         const sprinkleColors = [THEME.PINK, THEME.PURPLE, THEME.LAVENDER];
-        for (let i = 0; i < (backdrop ? 0 : 26); i++) {
+        for (let i = 0; i < (pass === 'content' ? 0 : 26); i++) {
             const sx = -cw / 2 + ((i * 61 + 23) % 100) / 100 * cw;
             const sy = yb + 16 + ((i * 43 + 7) % 100) / 100 * (ch - bandH - 24);
             ctx.save();
@@ -1055,10 +1191,8 @@ export class UIManager {
         ctx.fillRect(-46, my - 46, 92, 92);
         drawMarshmallow(ctx, 0, my, 19, (player && player.skin) || SKINS[0], { blink: 0.12, squash: 1.06 });
         ctx.fillStyle = '#FFFFFF';
-        for (let i = 0; i < 3; i++) {
-            const a = now * 2.4 + (i * Math.PI * 2) / 3;
-            const depth = 0.75 + Math.sin(a) * 0.25;
-            drawSparkle(ctx, Math.cos(a) * 30, my - 16 + Math.sin(a) * 7, 4.5 * depth);
+        if (!skipStars) {
+            for (const st of this.deadStars(now)) drawSparkle(ctx, st.x, st.y + my, st.r);
         }
 
         ctx.font = font(30, 700);
@@ -1113,7 +1247,11 @@ export class UIManager {
         // Yeni rekor rozeti ya da en iyi skor + bu turun şekeri
         const parts = [this.isNewRecord ? t('dead.newRecord') : t('menu.best', { score: formatScore(this.getBestScore(mode.id)) })];
         if (candies > 0) parts.push(t('dead.candies', { n: candies }));
-        if (this.isNewRecord) {
+        if (this.isNewRecord && info.recordPill) {
+            // The renderer bakes and bounces the pill itself (no full-card redraw 30×/s)
+            info.recordPill.text = parts.join('  ·  ');
+            info.recordPill.y = b + 64 + grow + inner;
+        } else if (this.isNewRecord) {
             const bounce = Math.abs(Math.sin(now * 5)) * 2;
             UIManager.pill(ctx, parts.join('  ·  '), 0, b + 64 + grow + inner - bounce, THEME.PURPLE_DEEP, '#FFFFFF', 'center', 13);
         } else {

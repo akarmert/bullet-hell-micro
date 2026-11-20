@@ -1,0 +1,12 @@
+{
+  "note": "Canvas 2D baseline before PixiJS. Desktop Chromium (in-app browser pane, background tab), viewport 900x600, DPR 1. CPU time of game.update/game.render only; GPU raster time is NOT measurable from JS. 120 frames per scene, 1/60 s steps.",
+  "tests": { "total": 60, "pass": 60, "fail": 0 },
+  "webBuild": "npm run build:web -> www/ OK",
+  "androidBuild": "npx cap sync android + gradlew assembleDebug -> OK, app-debug.apk 4231468 bytes",
+  "scenes": [
+    { "scene": "play (dense, ~77 bullets)", "theme": "light", "updateMs": 0.04, "renderMs": 0.875, "maxRenderMs": 3.0, "canvasPaintCallsPerFrame": 700, "arcsPerFrame": 497 },
+    { "scene": "play (dense, ~77 bullets)", "theme": "dark", "updateMs": 0.027, "renderMs": 0.958, "maxRenderMs": 3.5, "canvasPaintCallsPerFrame": 842, "arcsPerFrame": 562 },
+    { "scene": "boss Bubblegum", "theme": "light", "updateMs": 0.032, "renderMs": 0.404, "maxRenderMs": 1.1, "canvasPaintCallsPerFrame": 370 },
+    { "scene": "menu", "theme": "light", "updateMs": 0.02, "renderMs": 0.331, "maxRenderMs": 3.6, "canvasPaintCallsPerFrame": 180 }
+  ]
+}

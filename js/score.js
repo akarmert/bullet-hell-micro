@@ -52,8 +52,13 @@ export class ScoreSystem {
                 this.comboTimer = 0;
             }
         }
-        for (const p of this.popups) p.age += dtMs;
-        this.popups = this.popups.filter(p => p.age < 700);
+        let n = 0;
+        for (let i = 0; i < this.popups.length; i++) {
+            const p = this.popups[i];
+            p.age += dtMs;
+            if (p.age < 700) this.popups[n++] = p;
+        }
+        this.popups.length = n;
     }
 
     /**

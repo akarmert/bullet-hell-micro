@@ -67,17 +67,6 @@ export class BulletManager {
     }
 
     /**
-     * Tüm aktif mermileri ekrana çizer
-     * @param {CanvasRenderingContext2D} ctx 
-     */
-    render(ctx) {
-        const len = this.bullets.length;
-        for (let i = 0; i < len; i++) {
-            this.bullets[i].render(ctx);
-        }
-    }
-
-    /**
      * EMP patlaması gibi durumlarda ekrandaki tüm mermileri yok eder
      * ve patlama parçacığı oluşturabilmek için koordinatlarını döner
      * @returns {Array<{x: number, y: number, color: string}>}

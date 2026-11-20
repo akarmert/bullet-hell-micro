@@ -7,7 +7,9 @@ import { t, detectLang, getLang, LANGS, LANG_NAMES } from './i18n.js';
 import { THEME_MODES } from './theme.js';
 
 /** Seçenekli satırların sırayla dönen değerleri */
-const CHOICES = { lang: LANGS, theme: THEME_MODES };
+/** Frame rate cap during play (menus always run at 60). 60 saves battery and heat on 120 Hz phones. */
+export const FPS_CHOICES = ['60', '90', '120'];
+const CHOICES = { lang: LANGS, theme: THEME_MODES, fps: FPS_CHOICES };
 
 const KEY = 'bulletHellMicro_settings';
 
@@ -17,6 +19,7 @@ export const SETTING_ROWS = [
     { id: 'shake', label: 'sarsıntı ve flaş', type: 'toggle' },
     { id: 'contrast', label: 'yüksek kontrast', type: 'toggle' },
     { id: 'ghost', label: 'hayalet (en iyi tur)', type: 'toggle' },
+    { id: 'fps', label: 'kare hızı', type: 'choice' },
     { id: 'theme', label: 'tema', type: 'choice' },
     { id: 'lang', label: 'dil', type: 'choice' },
     { id: 'tutorial', label: 'ipuçlarını tekrar göster', type: 'action' },
@@ -25,7 +28,7 @@ export const SETTING_ROWS = [
 
 export class Settings {
     constructor() {
-        this.values = { musicVolume: 0.8, sfxVolume: 0.9, shake: true, contrast: false, ghost: true, theme: 'system', lang: detectLang() };
+        this.values = { musicVolume: 0.8, sfxVolume: 0.9, shake: true, contrast: false, ghost: true, fps: '60', theme: 'system', lang: detectLang() };
         this.listeners = [];
         this.load();
     }
@@ -37,6 +40,7 @@ export class Settings {
                 if (typeof saved[k] === typeof this.values[k]) this.values[k] = saved[k];
             }
             if (!THEME_MODES.includes(this.values.theme)) this.values.theme = 'system';
+            if (!FPS_CHOICES.includes(this.values.fps)) this.values.fps = '60';
         } catch (e) {
             // varsayılanlar
         }
@@ -87,6 +91,7 @@ export class Settings {
         if (typeof v === 'boolean') return v ? t('settings.on') : t('settings.off');
         if (id === 'lang') return LANG_NAMES[v] || v;
         if (id === 'theme') return t(`settings.theme.${v}`);
+        if (id === 'fps') return `${v} FPS`;
         return '';
     }
 }

@@ -102,75 +102,114 @@ export class SoundSystem {
     // ------------------------------------------------------------
 
     /**
-     * Kullanıcının ilk etkileşiminde AudioContext'i ve ses yollarını kurar:
-     * müzik → filtre → kazanç → (yankı, reverb) → master → kompresör
+     * Ses grafiği: müzik → filtre → kazanç → (yankı, reverb) → master → kompresör
      * efekt → (stereo) → efekt yolu → (reverb) → master
+     *
+     * Kurulum telefonda ~40–50 ms sürüyor (AudioContext, 2,2 sn'lik reverb yanıtı, convolver
+     * hazırlığı, gürültü) ve eskiden ilk dokunuşun içinde yapılıyordu: menüden ilk "oyna"
+     * dokunuşu 57–71 ms donuyordu (Galaxy A54 ölçümü). Artık menüdeyken boşta adım adım
+     * hazırlanıyor (prepareStep); bağlam askıda kalır, ses çıkmaz. İlk dokunuş (init) yalnızca
+     * kalan adımları bitirir ve resume() çağırır. Hazırlanan bağlam ilk dokunuşa kadar
+     * `this.ctx` değildir: tüm "ses açık mı" kontrolleri eskisi gibi çalışır.
      */
     init() {
         if (!this.ctx) {
-            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContextClass) return;
-            const ctx = new AudioContextClass();
-            this.ctx = ctx;
-
-            const comp = ctx.createDynamicsCompressor();
-            comp.threshold.value = -14;
-            comp.ratio.value = 4;
-            comp.connect(ctx.destination);
-
-            this.master = ctx.createGain();
-            this.master.gain.value = GAME_CONFIG.AUDIO.MASTER_VOLUME * 3;
-            this.master.connect(comp);
-
-            // Ortak reverb (üretilmiş oda yanıtı)
-            this.reverb = ctx.createConvolver();
-            this.reverb.buffer = this.createImpulse(2.2, 3);
-            const reverbOut = ctx.createGain();
-            reverbOut.gain.value = 0.9;
-            this.reverb.connect(reverbOut);
-            reverbOut.connect(this.master);
-
-            // Müzik yolu
-            this.bgmFilter = ctx.createBiquadFilter();
-            this.bgmFilter.type = 'lowpass';
-            this.bgmFilter.frequency.value = 1800;
-            this.bgmGain = ctx.createGain();
+            while (this.prepareStep()) { /* finish whatever idle time did not */ }
+            if (!this.pctx) return;
+            this.ctx = this.pctx;
+            // Volumes may have changed in settings since the graph was prepared
             this.bgmGain.gain.value = this.musicLevel;
-            this.bgmFilter.connect(this.bgmGain);
-            this.bgmGain.connect(this.master);
-            this.send(this.bgmGain, this.reverb, 0.22);
-
-            // Müzik yankısı: 3/16'lık gecikme, kararan geri besleme
-            this.delay = ctx.createDelay(1.0);
-            this.delay.delayTime.value = (60 / 116) * 0.75;
-            const delayTone = ctx.createBiquadFilter();
-            delayTone.type = 'lowpass';
-            delayTone.frequency.value = 2400;
-            const feedback = ctx.createGain();
-            feedback.gain.value = 0.32;
-            this.delay.connect(delayTone);
-            delayTone.connect(feedback);
-            feedback.connect(this.delay);
-            delayTone.connect(this.master);
-            this.send(this.bgmGain, this.delay, 0.16);
-
-            // Efekt yolu
-            this.sfxBus = ctx.createGain();
             this.sfxBus.gain.value = this.sfxVolume;
-            this.sfxBus.connect(this.master);
-            this.send(this.sfxBus, this.reverb, 0.14);
-
-            const len = ctx.sampleRate;
-            this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
-            const data = this.noiseBuffer.getChannelData(0);
-            for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
         }
         if (this.ctx.state === 'suspended') this.ctx.resume();
     }
 
+    /** Bir hazırlık adımı yapar; daha adım kaldıysa true döner. */
+    prepareStep() {
+        if (this.ctx || this.prepStage === 'done' || this.prepStage === 'none') return false;
+        if (!this.pctx) {
+            const AudioContextClass = typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext);
+            if (!AudioContextClass) {
+                this.prepStage = 'none';
+                return false;
+            }
+            this.pctx = new AudioContextClass();
+            this.buildGraph(this.pctx);
+            this.prepStage = 1;
+            return true;
+        }
+        if (this.prepStage === 1) {
+            this.pendingImpulse = this.createImpulse(2.2, 3);
+            this.prepStage = 2;
+            return true;
+        }
+        if (this.prepStage === 2) {
+            this.reverb.buffer = this.pendingImpulse;   // convolver prepares its FFT tables here
+            this.pendingImpulse = null;
+            this.prepStage = 3;
+            return true;
+        }
+        const ctx = this.pctx;
+        const len = ctx.sampleRate;
+        this.noiseBuffer = ctx.createBuffer(1, len, ctx.sampleRate);
+        const data = this.noiseBuffer.getChannelData(0);
+        for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+        this.prepStage = 'done';
+        return false;
+    }
+
+    /** Düğümleri kurar ve bağlar (reverb yanıtı ve gürültü ayrı adımlarda). */
+    buildGraph(ctx) {
+        const comp = ctx.createDynamicsCompressor();
+        comp.threshold.value = -14;
+        comp.ratio.value = 4;
+        comp.connect(ctx.destination);
+
+        this.master = ctx.createGain();
+        this.master.gain.value = GAME_CONFIG.AUDIO.MASTER_VOLUME * 3;
+        this.master.connect(comp);
+
+        // Ortak reverb (üretilmiş oda yanıtı; tamponu sonraki adımda)
+        this.reverb = ctx.createConvolver();
+        const reverbOut = ctx.createGain();
+        reverbOut.gain.value = 0.9;
+        this.reverb.connect(reverbOut);
+        reverbOut.connect(this.master);
+
+        // Müzik yolu
+        this.bgmFilter = ctx.createBiquadFilter();
+        this.bgmFilter.type = 'lowpass';
+        this.bgmFilter.frequency.value = 1800;
+        this.bgmGain = ctx.createGain();
+        this.bgmGain.gain.value = this.musicLevel;
+        this.bgmFilter.connect(this.bgmGain);
+        this.bgmGain.connect(this.master);
+        this.send(this.bgmGain, this.reverb, 0.22);
+
+        // Müzik yankısı: 3/16'lık gecikme, kararan geri besleme
+        this.delay = ctx.createDelay(1.0);
+        this.delay.delayTime.value = (60 / 116) * 0.75;
+        const delayTone = ctx.createBiquadFilter();
+        delayTone.type = 'lowpass';
+        delayTone.frequency.value = 2400;
+        const feedback = ctx.createGain();
+        feedback.gain.value = 0.32;
+        this.delay.connect(delayTone);
+        delayTone.connect(feedback);
+        feedback.connect(this.delay);
+        delayTone.connect(this.master);
+        this.send(this.bgmGain, this.delay, 0.16);
+
+        // Efekt yolu
+        this.sfxBus = ctx.createGain();
+        this.sfxBus.gain.value = this.sfxVolume;
+        this.sfxBus.connect(this.master);
+        this.send(this.sfxBus, this.reverb, 0.14);
+    }
+
     /** Kaynak → hedef arasına seviyeli bir gönderim bağlar */
     send(from, to, level) {
-        const g = this.ctx.createGain();
+        const g = (this.ctx || this.pctx).createGain();
         g.gain.value = level;
         from.connect(g);
         g.connect(to);
@@ -179,9 +218,10 @@ export class SoundSystem {
 
     /** Sönümlenen stereo gürültüden reverb yanıtı üretir */
     createImpulse(seconds, decay) {
-        const rate = this.ctx.sampleRate;
+        const ctx = this.ctx || this.pctx;
+        const rate = ctx.sampleRate;
         const len = Math.max(1, Math.floor(rate * seconds));
-        const buffer = this.ctx.createBuffer(2, len, rate);
+        const buffer = ctx.createBuffer(2, len, rate);
         for (let ch = 0; ch < 2; ch++) {
             const data = buffer.getChannelData(ch);
             for (let i = 0; i < len; i++) {
@@ -552,6 +592,15 @@ export class SoundSystem {
         const t = this.ctx.currentTime;
         const out = this.out(x);
         [96, 91, 88, 84].forEach((m, i) => this.tone(midi(m), t + i * 0.045, { dur: 0.22, vol: 0.05, dest: out }));
+    }
+
+    /** Ekşi şeker: aşağı kayan "vııın" + kısa bas tık (kötü bir şey oldu hissi) */
+    playDebuff(x = null) {
+        if (!this.ready()) return;
+        const t = this.ctx.currentTime;
+        const out = this.out(x);
+        this.tone(520, t, { dur: 0.32, vol: 0.18, glideTo: 170, dest: out });
+        this.tone(90, t, { dur: 0.12, vol: 0.25, glideTo: 60, dest: out });
     }
 
     /** Güçlendirme: parlak üçlü çan */
