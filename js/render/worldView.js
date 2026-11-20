@@ -475,12 +475,14 @@ export class WorldView {
         }
         this.bossSprite.show();
         const R = bossTextureRadius(boss);
-        // The boss shape wobbles every frame, so its texture re-uploads at 30 Hz. On devices
-        // that adaptive quality has stepped down: ≤1.5 px per unit, and 15 Hz at the lowest level.
+        // The boss shape wobbles every frame, so its texture re-uploads continuously; it was the
+        // largest GPU upload on a phone (~30×/s, ~10 MB/s). Its shape animates at 20 Hz (the
+        // sprite itself still moves every frame) and it is drawn at ≤1.5 px per unit; on devices
+        // that adaptive quality stepped down to the lowest level: 15 Hz.
         const q = this.qualityLevel || 0;
-        const resScale = q >= 1 ? Math.min(1, 1.5 / TexState.res) : 1;
-        const tick = q >= 2 ? Math.floor(boss.age * 15) : tick30(boss.age);
-        const key = [boss.kind, boss.state, boss.stage, tick, Math.floor(boss.stateTimer / 33),
+        const resScale = Math.min(1, 1.5 / TexState.res);
+        const tick = q >= 2 ? Math.floor(boss.age * 15) : Math.floor(boss.age * 20);
+        const key = [boss.kind, boss.state, boss.stage, tick,
             boss.hitFlash > 0.05, Math.round((boss.inflate || 0) * 20), boss.pulling, THEME.mode, THEME.highContrast].join('|');
         this.bossSprite.draw(key, { x: boss.x - R, y: boss.y - R, w: R * 2, h: R * 2 + 24 }, (ctx) => boss.render(ctx), resScale);
     }

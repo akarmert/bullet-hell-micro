@@ -1,8 +1,11 @@
 // ============================================================
 // quality.js — Adaptive render quality (frame pacing watchdog)
 //
-// Watches real frame intervals while a run is being played. If many frames miss
-// the display's refresh interval for a sustained period, quality steps down:
+// Watches real frame intervals while a run is being played. A frame counts as slow
+// when it misses 60 FPS (not the display's own rate: on a 120 Hz phone, frames that
+// fall back to 16.7 ms are frame pacing, and lowering the resolution barely helps —
+// measured on a Galaxy A54: 88 → 96 FPS for a much blurrier image). If many frames
+// are slow for a sustained period, quality steps down:
 //   level 1 → resolution cap 1.25x, level 2 → resolution cap 1x + reduced effects.
 // It never steps back up automatically during a session (no oscillation); a page
 // reload starts again at full quality. Pure logic: no rendering imports.
@@ -18,6 +21,7 @@ const WINDOW = 180;          // frames per evaluation window (~3 s at 60 Hz)
 const MISS_RATIO = 0.2;      // more than 20 % slow frames → step down
 const COOLDOWN_MS = 4000;    // after a change, wait (re-bakes cause one-off hitches)
 const HITCH_MS = 250;        // longer gaps (tab switch, GC of a background tab) are ignored
+const MIN_BUDGET_MS = 1000 / 60; // never demand more than 60 FPS before lowering quality
 
 export class AdaptiveQuality {
     constructor() {
@@ -33,6 +37,11 @@ export class AdaptiveQuality {
         this.frameMs = 0;
         this.fpsFrames = 0;
         this.fpsTime = 0;
+    }
+
+    /** A frame slower than this (ms) counts as missed: 1.5 × max(refresh interval, 60 FPS budget) */
+    get slowThreshold() {
+        return Math.max(this.interval, MIN_BUDGET_MS) * 1.5;
     }
 
     get settings() {
@@ -73,7 +82,7 @@ export class AdaptiveQuality {
             return false;
         }
         this.count++;
-        if (dtMs > this.interval * 1.5) this.slow++;
+        if (dtMs > this.slowThreshold) this.slow++;
         if (this.count < WINDOW) return false;
         const missed = this.slow / this.count > MISS_RATIO;
         this.count = 0;

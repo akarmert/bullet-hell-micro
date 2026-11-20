@@ -7,10 +7,10 @@
 // ============================================================
 
 import 'pixi.js/unsafe-eval'; // No runtime eval/new Function → works under a strict CSP
-import { Application, Container } from 'pixi.js';
+import { Application, Container, Sprite, Graphics, Texture, RenderTexture, ParticleContainer, Particle } from 'pixi.js';
 import { GAME_CONFIG } from '../config.js';
 import { THEME } from '../theme.js';
-import { setBakeResolution, invalidateBaked, flushTextureTrash, TexState, PerfStats } from './textures.js';
+import { setBakeResolution, invalidateBaked, flushTextureTrash, TexState, PerfStats, setAtlasRenderer } from './textures.js';
 import { WorldView } from './worldView.js';
 import { FxView } from './fxView.js';
 import { UiView } from './uiView.js';
@@ -42,6 +42,7 @@ export class PixiRenderer {
             hello: false
         });
         this.app = app;
+        setAtlasRenderer(app.renderer);
 
         // Layers (back → front)
         this.root = new Container();
@@ -63,7 +64,42 @@ export class PixiRenderer {
             this.lost = false;
             invalidateBaked(); // Re-create every generated texture on the new context
         });
+        this.warmUp();
+        // Measured once on a phone: the app was started behind the lock screen and on its first
+        // visible frames the GPU reported "no texture bound to unit 0–31" — Pixi's cached
+        // texture bindings no longer matched the GL state. Coming back to the foreground now
+        // drops those caches so Pixi rebinds everything (one frame of extra binds).
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.app && !this.lost) this.app.renderer.resetState();
+        });
         this.ready = true;
+    }
+
+    /**
+     * Draws one of each kind of object (sprite batch, Graphics, ParticleContainer, stencil
+     * mask) into a tiny off-screen texture, so their shaders are compiled at load time
+     * instead of on first use in the middle of a run (measured as 80–180 ms hitches).
+     */
+    warmUp() {
+        try {
+            const scene = new Container();
+            const sprite = new Sprite(Texture.WHITE);
+            const g = new Graphics().roundRect(0, 0, 6, 6, 2).fill({ color: 0xff88aa }).stroke({ width: 1, color: 0x000000 });
+            const masked = new Container();
+            const mask = new Graphics().rect(0, 0, 4, 4).fill({ color: 0xffffff });
+            masked.addChild(new Sprite(Texture.WHITE));
+            masked.mask = mask;
+            const particles = new ParticleContainer({ dynamicProperties: { position: true, rotation: true, color: true, vertex: true, uvs: false } });
+            particles.addParticle(new Particle({ texture: Texture.WHITE, x: 1, y: 1 }));
+            scene.addChild(sprite, g, mask, masked, particles);
+            const target = RenderTexture.create({ width: 8, height: 8 });
+            this.app.renderer.render({ container: scene, target });
+            scene.destroy({ children: true });
+            target.destroy(true);
+            this.app.renderer.resetState();
+        } catch (e) {
+            console.warn('render warm-up skipped', e);
+        }
     }
 
     /**

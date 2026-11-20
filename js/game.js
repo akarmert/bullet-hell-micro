@@ -148,8 +148,9 @@ export class Game {
         resizeArena(this);
         new ResizeObserver(() => resizeArena(this)).observe(this.canvas);
         // Some WebViews skip ResizeObserver on rotation: also listen to the window events
-        window.addEventListener('resize', () => resizeArena(this));
-        window.addEventListener('orientationchange', () => setTimeout(() => resizeArena(this), 50));
+        window.addEventListener('resize', () => { this.checkOrientation(); resizeArena(this); });
+        window.addEventListener('orientationchange', () => setTimeout(() => { this.checkOrientation(); resizeArena(this); }, 50));
+        this.landscape = window.innerWidth > window.innerHeight;
         // Odak kaybında oyunu otomatik duraklat (sekme değişimi, bildirim, uygulama değişimi)
         window.addEventListener('blur', () => { this.keys = {}; this.pauseGame(); });
         document.addEventListener('visibilitychange', () => { if (document.hidden) this.pauseGame(); });
@@ -571,6 +572,18 @@ export class Game {
     /**
      * Oyunu dondurur; simülasyon süresi ilerlemez, müzik durur
      */
+    /**
+     * Rotating the phone mid-run pauses the game: the arena changes shape and every texture is
+     * re-baked at the new resolution, which measured as 150–180 ms of frozen frames on a
+     * phone (enough to die to a bullet you could not see).
+     */
+    checkOrientation() {
+        const landscape = window.innerWidth > window.innerHeight;
+        if (landscape === this.landscape) return;
+        this.landscape = landscape;
+        if (this.state === GAME_STATE.PLAYING) this.pauseGame();
+    }
+
     pauseGame() {
         if (this.state === GAME_STATE.PAUSED) { this.resumeCountdown = 0; return; }
         if (this.state !== GAME_STATE.PLAYING) return;
@@ -877,6 +890,9 @@ export class Game {
      */
     syncControlBar(showBar) {
         this.barVisible = showBar;
+        // Landscape phones put the controls in side columns (css/style.css): no bar under the arena
+        this.landscapeMq = this.landscapeMq || (typeof matchMedia === 'function' ? matchMedia('(orientation: landscape)') : null);
+        this.barBelow = showBar && !(this.landscapeMq && this.landscapeMq.matches);
         const body = document.body;
         if (body.classList.contains('has-bar') !== showBar) body.classList.toggle('has-bar', showBar);
         const idle = showBar && this.state !== GAME_STATE.PLAYING;

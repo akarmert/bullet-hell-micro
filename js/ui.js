@@ -13,7 +13,7 @@ import { SETTING_ROWS } from './settings.js';
 import { dateLabel } from './rng.js';
 import { t, upper } from './i18n.js';
 
-const SETTINGS_LAYOUT = { x: 110, y: 104, w: 380, rowTop: 160, rowH: 42 };
+const SETTINGS_LAYOUT = { x: 110, y: 100, w: 380, rowTop: 154, rowH: 40 };
 
 // K2: Ekran oranına göre üç menü yerleşimi; ekrana en büyük ölçekte sığan seçilir.
 export const MENU_LAYOUTS = {
@@ -817,12 +817,17 @@ export class UIManager {
     }
 
     /** HUD top-left: mode pill, graze count, candies collected this run */
-    renderHudLeft(ctx, mode, player, runCandies = 0) {
+    renderHudLeft(ctx, mode, player, runCandies = 0, opts = {}) {
         const left = 18 + this.safe.left;
         ctx.save();
         ctx.translate(0, this.safe.top);
         ctx.textBaseline = 'middle';
         UIManager.pill(ctx, mode.label, left, 24, THEME.LAVENDER, THEME.INK, 'left', 11);
+        // The renderer draws the counters from baked glyphs (opts.skipCounters)
+        if (opts.skipCounters) {
+            ctx.restore();
+            return;
+        }
         ctx.font = font(12, 600);
         ctx.textAlign = 'left';
         ctx.fillStyle = THEME.MUTED;
@@ -868,18 +873,36 @@ export class UIManager {
             UIManager.pill(ctx, t('hud.shield', { pips: player.shieldPips() }), right, rowY, THEME.PURPLE_DEEP, THEME.WHITE, 'right', 10);
             rowY += 24;
         }
+        // Timers: with opts.timerSlots the digits are left out (room reserved with figure
+        // spaces) and their positions returned, so the renderer draws them from baked glyphs
+        // instead of redrawing / re-uploading the whole HUD ten times a second
+        const slots = opts.timerSlots;
+        const timerPill = (kind, key, ms, fill, color) => {
+            const value = (ms / 1000).toFixed(1);
+            if (!slots) {
+                UIManager.pill(ctx, t(key, { s: value }), right, rowY, fill, color, 'right', 10);
+                return;
+            }
+            const gap = ' '.repeat(value.length);
+            const text = t(key, { s: gap });
+            ctx.font = font(10, 700);
+            const tw = ctx.measureText(text).width;
+            const at = text.indexOf(gap);
+            const gapCenter = right - (tw + 16) + 8 + ctx.measureText(text.slice(0, at)).width + ctx.measureText(gap).width / 2;
+            UIManager.pill(ctx, text, right, rowY, fill, color, 'right', 10);
+            slots.push({ kind, x: gapCenter, y: rowY + 1 + this.safe.top, fill: color });
+        };
         if (pickupManager && pickupManager.isSlowmoActive()) {
-            const remaining = (pickupManager.slowmoTimer / 1000).toFixed(1);
-            UIManager.pill(ctx, t('hud.slowmo', { s: remaining }), right, rowY, THEME.LAVENDER, THEME.INK, 'right', 10);
+            timerPill('slowmo', 'hud.slowmo', pickupManager.slowmoTimer, THEME.LAVENDER, THEME.INK);
             rowY += 24;
         }
         // Sour candy effects (dark plum pill: a bad state)
         if (player && player.slowTimer > 0) {
-            UIManager.pill(ctx, t('hud.heavy', { s: (player.slowTimer / 1000).toFixed(1) }), right, rowY, '#5B3A86', '#FFFFFF', 'right', 10);
+            timerPill('heavy', 'hud.heavy', player.slowTimer, '#5B3A86', '#FFFFFF');
             rowY += 24;
         }
         if (player && player.growTimer > 0) {
-            UIManager.pill(ctx, t('hud.big', { s: (player.growTimer / 1000).toFixed(1) }), right, rowY, '#7A3E78', '#FFFFFF', 'right', 10);
+            timerPill('big', 'hud.big', player.growTimer, '#7A3E78', '#FFFFFF');
         }
         ctx.restore();
     }
@@ -1063,7 +1086,7 @@ export class UIManager {
 
         ctx.save();
         ctx.globalAlpha = reveal;
-        if (drawBase) {
+        if (drawBase && info.scrim !== false) {
             ctx.fillStyle = `rgba(${THEME.SCRIM}, 0.85)`;
             ctx.fillRect(0, 0, w, h);
         }
@@ -1224,7 +1247,11 @@ export class UIManager {
         // Yeni rekor rozeti ya da en iyi skor + bu turun şekeri
         const parts = [this.isNewRecord ? t('dead.newRecord') : t('menu.best', { score: formatScore(this.getBestScore(mode.id)) })];
         if (candies > 0) parts.push(t('dead.candies', { n: candies }));
-        if (this.isNewRecord) {
+        if (this.isNewRecord && info.recordPill) {
+            // The renderer bakes and bounces the pill itself (no full-card redraw 30×/s)
+            info.recordPill.text = parts.join('  ·  ');
+            info.recordPill.y = b + 64 + grow + inner;
+        } else if (this.isNewRecord) {
             const bounce = Math.abs(Math.sin(now * 5)) * 2;
             UIManager.pill(ctx, parts.join('  ·  '), 0, b + 64 + grow + inner - bounce, THEME.PURPLE_DEEP, '#FFFFFF', 'center', 13);
         } else {

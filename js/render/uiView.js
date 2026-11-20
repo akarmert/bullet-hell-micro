@@ -9,10 +9,10 @@
 
 import { Container, Graphics, Sprite } from 'pixi.js';
 import { GAME_CONFIG } from '../config.js';
-import { THEME, font, candyPanel } from '../theme.js';
+import { THEME, font, candyPanel, outlinedText } from '../theme.js';
 import { UIManager } from '../ui.js';
 import { formatScore } from '../score.js';
-import { getLang } from '../i18n.js';
+import { getLang, t } from '../i18n.js';
 import { bake, applyBaked, LiveCanvasSprite, toTint } from './textures.js';
 import { glowEntry, GLOW_RADIUS } from './shapes.js';
 import { BackdropView } from './backdropView.js';
@@ -69,6 +69,12 @@ export class UiView {
         this.timeText = new GlyphText();
         this.scorePill = new Sprite();
         this.scoreText = new GlyphText();
+        // Power-up / sour candy countdowns in the right HUD pills (digits only)
+        this.timerTexts = [new GlyphText(), new GlyphText(), new GlyphText()];
+        // Left HUD counters (graze / candies): change many times a run
+        this.grazeText = new GlyphText();
+        this.candyText = new GlyphText();
+        this.rightSlots = [];
         // Boss bar: labels + empty track / animated fill (Graphics) / marks + outline
         this.bossBar = new LiveCanvasSprite('bossBar');
         this.bossFill = new Graphics();
@@ -84,7 +90,12 @@ export class UiView {
         this.menuSkin = new LiveCanvasSprite('menuSkin');
         this.pause = new LiveCanvasSprite('pause');
         this.pauseResume = new LiveCanvasSprite('pauseResume');
+        // Resume countdown: scrim rectangle + one baked digit animated by scale / alpha
+        this.countScrim = new Graphics();
+        this.countDigit = new Sprite();
+        this.deadScrim = new Graphics();
         this.deadBase = new LiveCanvasSprite('deadBase');
+        this.recordPill = new Sprite();
         this.cardBackdrop = new BackdropView();
         this.cardMask = new Graphics();
         this.cardBackdrop.container.mask = this.cardMask;
@@ -101,17 +112,20 @@ export class UiView {
 
         this.container.addChild(
             this.edgeGlowMask, this.edgeGlows,
-            this.hudLeft.sprite, this.hudCenter.sprite, this.timeText.container,
-            this.hudRight.sprite, this.scorePill, this.scoreText.container, this.hudDash.sprite,
+            this.hudLeft.sprite, this.grazeText.container, this.candyText.container, this.hudCenter.sprite, this.timeText.container,
+            this.hudRight.sprite, ...this.timerTexts.map((g) => g.container), this.scorePill, this.scoreText.container, this.hudDash.sprite,
             this.hint.sprite, this.bossBar.sprite, this.bossFillMask, this.bossFill, this.bossBarTop.sprite,
             this.menu.sprite, this.menuTitle.sprite, this.menuPlay.sprite, this.menuSkin.sprite,
-            this.pause.sprite, this.pauseResume.sprite,
-            this.deadBase.sprite, this.cardMask, this.cardBackdrop.container, this.deadContent.sprite, this.deadStarLayer,
+            this.pause.sprite, this.pauseResume.sprite, this.countScrim, this.countDigit,
+            this.deadScrim, this.deadBase.sprite, this.cardMask, this.cardBackdrop.container, this.deadContent.sprite,
+            this.recordPill, this.deadStarLayer,
             this.frame, this.edgeLineMask, this.edgeLines
         );
         this.all = [this.hudLeft, this.hudCenter, this.hudRight, this.hudDash, this.hint, this.bossBar, this.bossBarTop,
             this.menu, this.menuTitle, this.menuPlay, this.menuSkin, this.pause, this.pauseResume, this.deadBase, this.deadContent];
-        this.extras = [this.timeText.container, this.scorePill, this.scoreText.container, this.bossFill, this.deadStarLayer];
+        this.extras = [this.timeText.container, this.scorePill, this.scoreText.container, this.bossFill, this.deadStarLayer,
+            this.deadScrim, this.recordPill, this.countScrim, this.countDigit, this.grazeText.container, this.candyText.container,
+            ...this.timerTexts.map((g) => g.container)];
     }
 
     sync(game, w, h) {
@@ -148,15 +162,33 @@ export class UiView {
                 this.syncBossBar(boss, ui, w, theme, lang);
             }
             if (state === 'PAUSED') {
-                this.pause.show();
-                const counting = game.resumeCountdown > 0;
-                const step = Math.ceil(game.resumeCountdown / 500);
-                // The countdown digit grows and fades (redrawn at 30 Hz for 1.5 s); the pause card is static
-                const pulse = counting ? Math.floor((game.resumeCountdown % 500) / 33) : '';
                 const touch = game.touchControls.touchDevice;
-                const key = `${step}|${pulse}|${touch}|${theme}|${lang}`;
-                this.pause.draw(key, { x: 0, y: 0, w, h }, (ctx) => ui.renderPaused(ctx, game.resumeCountdown, touch, { skipResume: true }));
-                if (!counting) {
+                if (game.resumeCountdown > 0) {
+                    // 3-2-1 before resuming. It used to redraw a full-screen texture 30×/s
+                    // (~4 MB per upload on a phone; ~400 MB per measured session now that
+                    // rotating the phone pauses the game). Same look, no uploads.
+                    const step = Math.ceil(game.resumeCountdown / 500);
+                    const frac = (game.resumeCountdown % 500) / 500;
+                    const [sr, sg, sb] = String(THEME.SCRIM).split(',').map(Number);
+                    this.countScrim.visible = true;
+                    this.countScrim.clear().rect(0, 0, w, h).fill({ color: (sr << 16) | (sg << 8) | sb, alpha: 0.35 });
+                    const SIZE = 90;
+                    const entry = bake(`countdown:${step}:${theme}`, { x: -70, y: -70, w: 140, h: 145 }, (ctx) => {
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.font = font(SIZE, 700);
+                        ctx.fillStyle = THEME.PINK;
+                        ctx.fillText(String(step), 3.5, 6);
+                        outlinedText(ctx, String(step), 0, 0, THEME.TEXT, THEME.TEXT_HALO, 7);
+                    });
+                    applyBaked(this.countDigit, entry, (64 + frac * 26) / SIZE);
+                    this.countDigit.position.set(w / 2, h / 2);
+                    this.countDigit.alpha = 0.5 + frac * 0.5;
+                    this.countDigit.visible = true;
+                } else {
+                    this.pause.show();
+                    this.pause.draw(`${touch}|${theme}|${lang}`, { x: 0, y: 0, w, h },
+                        (ctx) => ui.renderPaused(ctx, 0, touch, { skipResume: true }));
                     // "Press to resume" line: its own sprite, pulsing with alpha only
                     this.pauseResume.show();
                     this.pauseResume.draw(`${touch}|${theme}|${lang}`, { x: w / 2 - 170, y: h / 2 - 14, w: 340, h: 32 },
@@ -270,9 +302,17 @@ export class UiView {
         const compact = !!game.barVisible;
         const top = ui.safe.top;
         this.hudLeft.show();
-        this.hudLeft.draw(`${game.currentMode.label}|${p.grazeCount}|${game.runCandies}|${theme}|${lang}|${top}`,
-            { x: 0, y: 0, w: Math.min(w, 280), h: top + 90 },
-            (ctx) => ui.renderHudLeft(ctx, game.currentMode, p, game.runCandies));
+        this.hudLeft.draw(`${game.currentMode.label}|${theme}|${lang}|${top}`,
+            { x: 0, y: 0, w: Math.min(w, 240), h: top + 40 },
+            (ctx) => ui.renderHudLeft(ctx, game.currentMode, p, game.runCandies, { skipCounters: true }));
+        const left = 18 + ui.safe.left + 2;
+        this.grazeText.show();
+        this.grazeText.set(t('hud.graze', { n: p.grazeCount }), left, top + 50, { size: 12, weight: 600, fill: THEME.MUTED, align: 'left' });
+        if (game.runCandies > 0) {
+            this.candyText.show();
+            this.candyText.set(t('hud.candies', { n: formatScore(game.runCandies) }), left, top + 70,
+                { size: 13, weight: 700, fill: THEME.TEXT_ACCENT, align: 'left' });
+        }
         if (!compact) {
             this.hudCenter.show();
             this.hudCenter.draw(`${ui.getBestScore(game.currentMode.id)}|${theme}|${lang}|${top}|${w | 0}`,
@@ -293,12 +333,34 @@ export class UiView {
             this.scoreText.set(text, right - pw / 2, top + 25, { size: 13, weight: 700, fill: THEME.INK });
         }
         const pm = game.pickupManager;
-        const rightKey = [compact, p.shieldCharges,
-            pm.isSlowmoActive() ? (pm.slowmoTimer / 1000).toFixed(1) : '', p.slowTimer > 0 ? (p.slowTimer / 1000).toFixed(1) : '',
-            p.growTimer > 0 ? (p.growTimer / 1000).toFixed(1) : '', theme, lang, top, w | 0].join('|');
-        this.hudRight.show();
-        this.hudRight.draw(rightKey, { x: w - 300, y: 0, w: 300, h: top + 160 },
-            (ctx) => ui.renderHudRight(ctx, p, pm, game.score, compact, { skipScore: true }));
+        // Timer values: only their string length is in the key (digits are glyph sprites)
+        const timers = {
+            slowmo: pm.isSlowmoActive() ? (pm.slowmoTimer / 1000).toFixed(1) : '',
+            heavy: p.slowTimer > 0 ? (p.slowTimer / 1000).toFixed(1) : '',
+            big: p.growTimer > 0 ? (p.growTimer / 1000).toFixed(1) : ''
+        };
+        const rows = (p.hasShield ? 1 : 0) + (timers.slowmo ? 1 : 0) + (timers.heavy ? 1 : 0) + (timers.big ? 1 : 0);
+        const rightKey = [compact, p.shieldCharges, timers.slowmo.length, timers.heavy.length, timers.big.length,
+            theme, lang, top, w | 0].join('|');
+        if (rows > 0 || !compact) {
+            // Tight bounds: the whole canvas is uploaded on every redraw
+            const hRight = top + (compact ? 24 : 54) + Math.max(0, rows - 1) * 24 + 20;
+            this.hudRight.show();
+            this.hudRight.draw(rightKey, { x: w - 230, y: 0, w: 230, h: hRight }, (ctx) => {
+                const slots = [];
+                ui.renderHudRight(ctx, p, pm, game.score, compact, { skipScore: true, timerSlots: slots });
+                this.rightSlots = slots;
+            });
+        } else {
+            this.rightSlots = [];
+        }
+        for (let i = 0; i < this.timerTexts.length; i++) {
+            const slot = this.rightSlots[i];
+            const g = this.timerTexts[i];
+            if (!slot || !timers[slot.kind]) continue;
+            g.show();
+            g.set(timers[slot.kind], slot.x, slot.y, { size: 10, weight: 700, fill: slot.fill });
+        }
         if (ui.hasDashBar()) {
             this.hudDash.show();
             const ratio = p.getDashReadyRatio();
@@ -311,13 +373,13 @@ export class UiView {
     /** Arena frame stroke (top-only rounded when the touch bar continues it below). */
     framePath(g, game, w, h) {
         const lw = this.frameWidth(game, h);
-        if (game.barVisible) g.roundRect(lw / 2, lw / 2, w - lw, h + 60, 18);
+        if (game.barBelow) g.roundRect(lw / 2, lw / 2, w - lw, h + 60, 18);
         else g.roundRect(lw / 2, lw / 2, w - lw, h - lw, 18);
         return lw;
     }
 
     frameWidth(game, h) {
-        const cssH = game.canvas && game.canvas.clientHeight;
+        const cssH = game.canvasCssHeight || (game.canvas && game.canvas.clientHeight);
         return cssH ? 6 * h / cssH : 6;
     }
 
@@ -378,11 +440,23 @@ export class UiView {
             unlocked: game.lastUnlocked,
             candies: game.lastCandies || 0
         };
-        const revealKey = Math.round(reveal * 20);
-        // Base: scrim + card panel + body
+        // The card is drawn ONCE per death at full reveal; the fade-in and slide-up are sprite
+        // alpha / position. Redrawing two full-screen textures for every reveal step (and the
+        // whole content 30×/s for a bouncing "new record" pill) uploaded ~5 MB per redraw on a
+        // phone: ~850 MB in one measured session with a few deaths.
+        const slide = ui.deadSlide(reveal);
+        const deathKey = `${game.deathTimestamp}|${theme}|${lang}|${w | 0}x${h | 0}`;
+        const full = { ...info, reveal: 1 };
+        // Scrim: a plain rectangle (does not slide)
+        const [sr, sg, sb] = String(THEME.SCRIM).split(',').map(Number);
+        this.deadScrim.visible = true;
+        this.deadScrim.clear().rect(0, 0, w, h).fill({ color: (sr << 16) | (sg << 8) | sb, alpha: 0.85 * reveal });
+        // Base: card panel + body
         this.deadBase.show();
-        this.deadBase.draw(`${revealKey}|${theme}|${w | 0}x${h | 0}`, { x: 0, y: 0, w, h },
-            (ctx) => ui.renderDead(ctx, game.elapsedMs, game.currentMode, game.player, { ...info, pass: 'base' }));
+        this.deadBase.draw(deathKey, { x: 0, y: 0, w, h },
+            (ctx) => ui.renderDead(ctx, game.elapsedMs, game.currentMode, game.player, { ...full, pass: 'base', scrim: false }));
+        this.deadBase.sprite.position.set(0, slide);
+        this.deadBase.sprite.alpha = reveal;
         // Interactive backdrop inside the card body
         if (reveal > 0.6) {
             const r = ui.getDeadBodyRect(reveal);
@@ -392,11 +466,27 @@ export class UiView {
         }
         // Content: header band, score, chips, buttons (+ info panel)
         this.deadContent.show();
-        // Only the "new record" pill bounces; everything else is static once revealed
-        const anim = ui.isNewRecord ? tick30(now) : '';
-        const key = `${anim}|${revealKey}|${ui.isNewRecord}|${ui.infoOpen}|${ui.focusedItem}|${theme}|${lang}|${w | 0}x${h | 0}`;
-        this.deadContent.draw(key, { x: 0, y: 0, w, h },
-            (ctx) => ui.renderDead(ctx, game.elapsedMs, game.currentMode, game.player, { ...info, pass: 'content', skipStars: true }));
+        const pill = {};
+        const key = `${deathKey}|${ui.isNewRecord}|${ui.infoOpen}|${ui.focusedItem}`;
+        this.deadContent.draw(key, { x: 0, y: 0, w, h }, (ctx) => {
+            ui.renderDead(ctx, game.elapsedMs, game.currentMode, game.player, { ...full, pass: 'content', skipStars: true, recordPill: pill });
+            this.recordPillInfo = pill.text ? pill : null;
+        });
+        this.deadContent.sprite.position.set(0, slide);
+        this.deadContent.sprite.alpha = reveal;
+        // "New record" pill: baked once, bounces as a sprite
+        const D0 = ui.getDeadLayout();
+        const rp = ui.isNewRecord && !ui.infoOpen ? this.recordPillInfo : null;
+        if (rp) {
+            const pw = textWidth(rp.text, font(13, 700)) + 16;
+            const entry = bake(`deadpill:${rp.text}:${theme}`, { x: -pw / 2 - 4, y: -16, w: pw + 8, h: 34 },
+                (ctx) => UIManager.pill(ctx, rp.text, 0, 0, THEME.PURPLE_DEEP, '#FFFFFF', 'center', 13));
+            applyBaked(this.recordPill, entry, D0.s);
+            const bounce = Math.abs(Math.sin(now * 5)) * 2;
+            this.recordPill.position.set(D0.cx, D0.cy + slide + (rp.y - bounce) * D0.s);
+            this.recordPill.alpha = reveal;
+            this.recordPill.visible = true;
+        }
         // Dizzy stars circling the marshmallow
         const D = ui.getDeadLayout();
         const oy = D.cy + ui.deadSlide(reveal);

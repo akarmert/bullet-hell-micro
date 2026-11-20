@@ -68,7 +68,6 @@ button:focus-visible { outline: 3px solid var(--pink); outline-offset: 4px; }
 /* ---------- Dokunmatik kontrol şeridi (oyun sırasında, oyun alanının altında) ---------- */
 #barCenter { display: none; }
 body.has-bar .game-container { display: flex; flex-direction: column; --safe-bottom: 0px; --bar-h: clamp(120px, 18vh, 156px); }
-@media (orientation: landscape) { body.has-bar .game-container { --bar-h: clamp(86px, 25vh, 112px); } }
 body.has-bar #gameCanvas { flex: 1 1 auto; min-height: 0; height: auto; }
 body.has-bar #touchControls {
     position: relative; inset: auto; flex: 0 0 auto;
@@ -134,15 +133,50 @@ body.has-bar #dashButton { --size: min(calc(var(--bar-h) - 24px), 27vw); width: 
 body.has-bar #dashButton.ready { background: var(--pink-soft); }
 /* Orta: dikeyde süre / puan / duraklat alt alta, yatayda yan yana */
 body.has-bar #barCenter { display: flex; flex: 1 1 auto; min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
-@media (orientation: landscape) { body.has-bar #barCenter { flex-direction: row; gap: 14px; } }
 body.bar-dead #barCenter { visibility: hidden; }
 #barTime { font: 700 clamp(18px, 5.4vw, 26px) 'Fredoka', system-ui, sans-serif; line-height: 1.1; color: var(--text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-@media (orientation: landscape) { #barTime { font-size: clamp(22px, 7vh, 34px); } }
 #barScore { font: 700 15px 'Fredoka', system-ui, sans-serif; color: var(--ink); background: var(--pink); border: 2px solid var(--ink); border-radius: 999px; padding: 3px 14px; box-shadow: 0 2px 0 var(--ink); white-space: nowrap; }
 body.has-bar #pauseButton { position: static; transform: none; width: 42px; height: 42px; flex: 0 0 auto; opacity: 1; background: var(--bg); box-shadow: 0 3px 0 var(--ink); }
 /* Duraklatma ve oyun bitti: kontroller gizlenir, süre ve puan kalır; ANA MENÜ / PAYLAŞ şeridin köşelerine oturur */
 body.bar-idle #joystick, body.bar-idle #dashButton { visibility: hidden; }
 body.has-bar #menuButton, body.has-bar #shareButton { bottom: calc(var(--bar-h) / 2 - 22px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---------- Yatay telefon: kontroller yan sütunlarda, oyun alanı tam yükseklikte ----------
+   Alt şerit yatayda ekranın ~%25'ini alıyordu: oyun alanı 411 px'in 309 px'ine sığıyor, her şey dikeye
+   göre ~2,2 kat küçük görünüyordu (cihaz ölçümü, Galaxy A54). Şimdi joystick solda, DASH sağda;
+   süre / puan / duraklat sağ üstte. Şeker konsol zemini kabın kendisinde, tuval ortada. */
+@media (orientation: landscape) {
+    body.has-bar .game-container {
+        --side: clamp(112px, 30vh, 168px);
+        --safe-left: 0px; --safe-right: 0px; --safe-bottom: env(safe-area-inset-bottom, 0px);
+        padding: 0 calc(var(--side) + env(safe-area-inset-right, 0px)) 0 calc(var(--side) + env(safe-area-inset-left, 0px));
+        background:
+            radial-gradient(circle at 20% 30%, var(--sprinkle-1) 0 2px, transparent 2.6px) 0 0 / 46px 38px,
+            radial-gradient(circle at 72% 72%, var(--sprinkle-2) 0 2px, transparent 2.6px) 0 0 / 46px 38px,
+            radial-gradient(circle at 45% 50%, var(--sprinkle-3) 0 1.6px, transparent 2.2px) 11px 7px / 31px 29px,
+            linear-gradient(180deg, var(--surface) 0%, var(--surface-soft) 100%);
+    }
+    body.has-bar.bar-dead .game-container { background: var(--bg); }
+    body.has-bar #touchControls {
+        position: absolute; inset: 0; height: auto; border: 0; background: none; pointer-events: none;
+        display: grid; gap: 10px;
+        grid-template-columns: calc(var(--side) + env(safe-area-inset-left, 0px)) minmax(0, 1fr) calc(var(--side) + env(safe-area-inset-right, 0px));
+        grid-template-rows: minmax(0, 1fr) auto;
+        padding: 12px 0 calc(14px + env(safe-area-inset-bottom, 0px));
+    }
+    body.has-bar #touchControls::before { display: none; }
+    body.has-bar #joystick { grid-column: 1; grid-row: 2; justify-self: center; margin-left: env(safe-area-inset-left, 0px); --size: calc(var(--side) - 14px); }
+    body.has-bar #dashButton { grid-column: 3; grid-row: 2; justify-self: center; margin-right: env(safe-area-inset-right, 0px); --size: calc(var(--side) - 30px); }
+    body.has-bar #barCenter {
+        grid-column: 3; grid-row: 1; align-self: start; justify-self: center; flex-direction: column; gap: 8px;
+        margin-right: env(safe-area-inset-right, 0px); padding: 8px 10px;
+    }
+    body.has-bar #barCenter::before { inset: 0; }
+    #barTime { font-size: clamp(16px, 5vh, 22px); }
+    #barScore { font-size: 13px; padding: 2px 10px; }
+    body.has-bar #pauseButton { pointer-events: auto; }
+    body.has-bar #menuButton, body.has-bar #shareButton { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
 
 #rotateHint { display: none; position: absolute; top: calc(10px + var(--safe-top)); left: 50%; transform: translateX(-50%); padding: 4px 12px; text-align: center; font-size: 12px; font-weight: 600; color: var(--text); background: var(--glass-strong); border-radius: 999px; pointer-events: none; white-space: nowrap; }
 /* Sadece gerçekten dikey (telefon) ekranlarda ve sadece oyun başlarken birkaç saniye (game.js showRotateHint) */

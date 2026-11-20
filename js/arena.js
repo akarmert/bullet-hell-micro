@@ -4,6 +4,9 @@ import { GAME_CONFIG } from './config.js';
 export function resizeArena(game) {
     const rect = game.canvas.getBoundingClientRect();
     if (!rect.width || !rect.height) return;
+    // Remembered so the renderer never reads layout (clientHeight) in the middle of a frame:
+    // right after the touch bar appears that read forced a synchronous page layout
+    game.canvasCssHeight = rect.height;
     const oldWidth = GAME_CONFIG.CANVAS.WIDTH;
     const height = 600;
     const width = height * rect.width / rect.height;
@@ -14,7 +17,8 @@ export function resizeArena(game) {
     // Dokunmatik cihazlarda (telefon) çözünürlük tavanı daha düşük: çizim yükü ciddi azalır
     const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     const P = GAME_CONFIG.PERFORMANCE;
-    let dpr = Math.min(window.devicePixelRatio || 1, coarse ? P.MAX_DPR_TOUCH : P.MAX_DPR);
+    const touchCap = rect.width > rect.height ? (P.MAX_DPR_TOUCH_LANDSCAPE || P.MAX_DPR_TOUCH) : P.MAX_DPR_TOUCH;
+    let dpr = Math.min(window.devicePixelRatio || 1, coarse ? touchCap : P.MAX_DPR);
     // Adaptive quality may lower the resolution cap on devices that miss frames
     if (game.quality) dpr = Math.min(dpr, Math.max(1, game.quality.settings.dprCap));
     // PixiJS owns the drawing buffer: it sizes the canvas and scales the logical stage

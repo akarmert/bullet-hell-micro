@@ -3,3 +3,6 @@
 www/
 node_modules/
 *.apk
+
+# On-device perf sessions (npm run perf:collect)
+perf-sessions/

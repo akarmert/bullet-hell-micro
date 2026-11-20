@@ -227,6 +227,7 @@ export const GAME_CONFIG = {
     PERFORMANCE: {
         MAX_DPR: 2,            // Masaüstünde en fazla 2x çözünürlük
         MAX_DPR_TOUCH: 1.5,    // Telefonda 1.5x: çizilen piksel ~%44 azalır, görüntü yine keskin
+        MAX_DPR_TOUCH_LANDSCAPE: 1.75, // Yatay telefonda oyun alanı kısa (≈411 px): biraz daha keskin, toplam piksel dikey menü kadar
         BG_SCALE: 0.5,         // Arka plan katmanı yarı çözünürlükte (yumuşak bulutlar fark edilmez)
         BG_REFRESH_FRAMES: 4,  // Arka plan katmanı 4 karede bir yenilenir (bulutlar çok yavaş süzülür)
         BAR_REFRESH_MS: 100,   // Alt şeritteki süre/puan DOM'a en fazla saniyede 10 kez yazılır

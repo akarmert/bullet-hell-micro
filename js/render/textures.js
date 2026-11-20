@@ -8,6 +8,12 @@
 
 import { Texture, Sprite, ParticleContainer, Particle, Rectangle } from 'pixi.js';
 
+/** Pixi renderer, for partial atlas uploads (set by PixiRenderer.init). */
+let atlasRenderer = null;
+export function setAtlasRenderer(renderer) {
+    atlasRenderer = renderer;
+}
+
 /** Diagnostics: how often each live texture re-uploads, and how many bytes go to the GPU. */
 export const PerfStats = {
     bakedCount: () => baked.size,
@@ -37,6 +43,17 @@ function makeCanvas(w, h) {
     return c;
 }
 
+/**
+ * 2D context for texture generation, kept in CPU memory (willReadFrequently).
+ * Chrome otherwise GPU-accelerates large canvases, and copying an accelerated canvas into a
+ * WebGL texture takes a slow readback path on Android: on a Galaxy A54 every full-screen
+ * menu / card upload (4–10 MB) froze the next frame for 80–190 ms. A CPU canvas uploads
+ * with a plain memory copy.
+ */
+function ctx2d(canvas) {
+    return canvas.getContext('2d', { willReadFrequently: true });
+}
+
 // ------------------------------------------------------------
 // Baked (static) textures
 // ------------------------------------------------------------
@@ -62,7 +79,7 @@ export function bake(key, bounds, draw, res = TexState.res) {
     const w = bounds.w + pad * 2;
     const h = bounds.h + pad * 2;
     const canvas = makeCanvas(w * res, h * res);
-    const ctx = canvas.getContext('2d');
+    const ctx = ctx2d(canvas);
     ctx.setTransform(res, 0, 0, res, -x * res, -y * res);
     draw(ctx);
     const texture = Texture.from(canvas, true);
@@ -91,12 +108,13 @@ export class TextureAtlas {
         this.res = 0;
         this.dirty = false;
         this.disabled = false;
+        this.pending = [];   // regions drawn since the last flush
     }
 
     reset() {
         if (!this.canvas) {
             this.canvas = makeCanvas(this.size, this.size);
-            this.ctx = this.canvas.getContext('2d');
+            this.ctx = ctx2d(this.canvas);
             const base = Texture.from(this.canvas, true);
             base.source.scaleMode = 'linear';
             this.source = base.source;
@@ -111,6 +129,7 @@ export class TextureAtlas {
         this.epoch = TexState.epoch;
         this.res = TexState.res;
         this.dirty = true;
+        this.pending.length = 0;
     }
 
     get(key, bounds, draw) {
@@ -141,29 +160,66 @@ export class TextureAtlas {
         const py = this.cy;
         this.cx += pw + 2;
         this.rowH = Math.max(this.rowH, ph);
-        const ctx = this.ctx;
-        ctx.save();
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.beginPath();
-        ctx.rect(px, py, pw, ph);
-        ctx.clip();
-        ctx.setTransform(res, 0, 0, res, px - x * res, py - y * res);
-        draw(ctx);
-        ctx.restore();
+        // Draw into a small scratch canvas, copy it into the atlas canvas (kept complete for
+        // full re-uploads, e.g. after a context loss) and queue only this region for the GPU
+        const scratch = makeCanvas(pw, ph);
+        const sctx = ctx2d(scratch);
+        sctx.setTransform(res, 0, 0, res, -x * res, -y * res);
+        draw(sctx);
+        this.ctx.drawImage(scratch, px, py);
         const texture = new Texture({ source: this.source, frame: new Rectangle(px, py, pw, ph) });
         entry = { texture, anchorX: -x / w, anchorY: -y / h, scale: 1 / res, atlas: true };
         this.entries.set(key, entry);
-        this.dirty = true;
+        this.pending.push({ canvas: scratch, x: px, y: py });
         PerfStats.bakes++;
         return entry;
     }
 
-    /** Uploads the atlas once per frame if entries were added. */
+    /**
+     * Sends new entries to the GPU once per frame. After the first full upload only the new
+     * regions are uploaded (texSubImage2D): on a phone a full 1024² re-upload is 4 MB and
+     * showed up as a hitch every time a new bullet type appeared.
+     */
     flush() {
-        if (!this.dirty || !this.source) return;
-        this.dirty = false;
-        this.source.update();
-        PerfStats.record(this.name, this.size * this.size * 4);
+        if (!this.source) return;
+        if (this.dirty) {
+            this.dirty = false;
+            this.pending.length = 0;
+            this.source.update();
+            PerfStats.record(this.name, this.size * this.size * 4);
+            return;
+        }
+        if (!this.pending.length) return;
+        if (!this.uploadRegions()) {
+            this.pending.length = 0;
+            this.source.update();
+            PerfStats.record(this.name, this.size * this.size * 4);
+        }
+    }
+
+    /** Uploads pending regions directly; false when the GL path is not available (full upload instead). */
+    uploadRegions() {
+        const r = atlasRenderer;
+        const ts = r && r.texture;
+        const gl = r && r.gl;
+        const src = this.source;
+        const gpu = src._gpuData && src._gpuData[r && r.uid];
+        if (!gl || !ts || !gpu || typeof ts.getGlSource !== 'function' || typeof ts._setBoundTexture !== 'function'
+            || ts._activeTextureLocation < 0) return false;
+        const glTex = ts.getGlSource(src);
+        gl.bindTexture(gl.TEXTURE_2D, glTex.texture);
+        ts._setBoundTexture(ts._activeTextureLocation, src);   // keep Pixi's binding cache truthful
+        const premultiply = src.alphaMode === 'premultiply-alpha-on-upload';
+        if (ts._premultiplyAlpha !== premultiply) {
+            ts._premultiplyAlpha = premultiply;
+            gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, premultiply);
+        }
+        for (const p of this.pending) {
+            gl.texSubImage2D(gl.TEXTURE_2D, 0, p.x, p.y, gl.RGBA, gl.UNSIGNED_BYTE, p.canvas);
+            PerfStats.record(this.name, p.canvas.width * p.canvas.height * 4);
+        }
+        this.pending.length = 0;
+        return true;
     }
 }
 
@@ -195,10 +251,17 @@ export function retireTexture(texture) {
     if (texture) trash.push(texture);
 }
 
-/** Sets the bake resolution; quantized to 0.25 to avoid re-baking on tiny resizes. */
+/**
+ * Sets the bake resolution; quantized to 0.25 to avoid re-baking on tiny resizes.
+ * Hysteresis: re-bakes when the scale grows by more than 10 % (textures would look soft)
+ * or shrinks below 60 % (wasted memory / upload size). Smaller drops keep the sharper
+ * textures: on a phone the touch bar appearing at run start shrinks the arena canvas
+ * (2.25 → 1.75 px per unit), and re-baking everything there caused a visible hitch.
+ */
 export function setBakeResolution(deviceScale) {
     const res = Math.max(0.5, Math.round(deviceScale * 4) / 4);
-    if (res !== TexState.res) {
+    const cur = TexState.res;
+    if (res !== cur && (res > cur * 1.1 || res < cur * 0.6)) {
         TexState.res = res;
         invalidateBaked();
     }
@@ -239,16 +302,19 @@ export class LiveCanvasSprite {
         // Backing canvas rounded up to 32 px to avoid churn
         const needW = Math.ceil((bounds.w * res) / 32) * 32 || 32;
         const needH = Math.ceil((bounds.h * res) / 32) * 32 || 32;
-        // Grow when too small; shrink when more than twice the needed area (the whole canvas
-        // is uploaded on every redraw, so a leftover large canvas wastes bandwidth)
+        // Grow when too small; shrink when a side is more than 1.5× too long (the whole canvas is
+        // uploaded on every redraw). Per side, not by area: after rotating the phone a full-screen
+        // canvas kept its portrait height (measured: 1632×1376 for a 1560×720 landscape menu,
+        // 9 MB per upload instead of ~4.5 MB).
         const tooSmall = !this.canvas || this.canvas.width < needW || this.canvas.height < needH;
-        const tooBig = this.canvas && this.canvas.width * this.canvas.height > needW * needH * 2;
+        const tooBig = this.canvas && (this.canvas.width > needW * 1.5 || this.canvas.height > needH * 1.5);
         if (tooSmall || tooBig) {
             if (this.texture) retireTexture(this.texture);
-            this.canvas = tooBig
-                ? makeCanvas(needW, needH)
-                : makeCanvas(Math.max(needW, this.canvas ? this.canvas.width : 0), Math.max(needH, this.canvas ? this.canvas.height : 0));
-            this.ctx = this.canvas.getContext('2d');
+            // Per side: keep the current length if it still fits and is not 1.5× too long
+            // (avoids churn for a sprite that breathes), otherwise use exactly what is needed
+            const fit = (cur, need) => (cur >= need && cur <= need * 1.5 ? cur : need);
+            this.canvas = makeCanvas(fit(this.canvas ? this.canvas.width : 0, needW), fit(this.canvas ? this.canvas.height : 0, needH));
+            this.ctx = ctx2d(this.canvas);
             this.texture = Texture.from(this.canvas, true);
             this.sprite.texture = this.texture;
         }
