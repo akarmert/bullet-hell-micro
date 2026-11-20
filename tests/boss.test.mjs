@@ -6,6 +6,7 @@ import { WaveManager } from '../js/waveManager.js';
 import { BulletManager } from '../js/bulletManager.js';
 import { ModeRegistry } from '../js/modes.js';
 import { Boss, BOSS_STATE } from '../js/boss.js';
+import { seedRandom } from '../js/rng.js';
 
 const B = GAME_CONFIG.BOSS;
 
@@ -246,6 +247,9 @@ test('İlk boss sonrası mola: sakin başlangıç, daha az ve daha yavaş mermi,
 });
 
 test('Pamuk Bulut eskisinden zor: daha uzun, daha yoğun yağmur, duvarlarda çisenti', () => {
+    // Sabit tohum: yağmurdaki güvenli boşluğun yeri rastgele; 400 tohumun %2,5'inde tek bir
+    // 3 sn'lik örnek 1,15 eşiğinin altına düşüyordu (medyan 1,39). Test hep aynı senaryoyu ölçsün.
+    seedRandom(1);
     const C = GAME_CONFIG.BOSS_CLOUD;
     assert.ok(C.DURATION > B.DURATION, 'Jöle Kral\'dan uzun dayanır');
     const { bullets, waves } = bossWaves();
