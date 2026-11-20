@@ -869,7 +869,23 @@ export class Boss {
      * Üst orta enerji barı (şeker çubuğu)
      * @param {number} topOffset Safe-area üst boşluğu
      */
-    renderHealthBar(ctx, topOffset = 0) {
+    /** Bar geometry (arena coordinates) */
+    healthBarRect(topOffset = 0) {
+        const w = GAME_CONFIG.CANVAS.WIDTH;
+        const barW = Math.min(280, w - 80);
+        return { x: (w - barW) / 2, y: topOffset + 110, w: barW, h: 10 };
+    }
+
+    /** Fill ratio shown by the bar (entry animation, then remaining energy) */
+    get healthBarFill() {
+        return this.state === BOSS_STATE.ENTERING ? Math.min(1, this.stateTimer / this.cfg.ENTRY_TIME) : this.hpRatio;
+    }
+
+    /**
+     * Boss energy bar. part: 'all' | 'base' (labels + empty bar) | 'overlay' (stage marks + outline);
+     * the renderer draws the fill itself between 'base' and 'overlay'.
+     */
+    renderHealthBar(ctx, topOffset = 0, part = 'all') {
         if (this.state === BOSS_STATE.DEAD) return;
         const w = GAME_CONFIG.CANVAS.WIDTH;
         const barW = Math.min(280, w - 80);
@@ -881,20 +897,26 @@ export class Boss {
             : this.hpRatio;
 
         ctx.save();
-        ctx.font = font(11, 700);
-        ctx.textAlign = 'left';
-        ctx.fillStyle = THEME.TEXT_ACCENT;
-        ctx.fillText(`${upper(this.title)} · ${this.stageName}`, x, y - 6);
-        ctx.textAlign = 'right';
-        ctx.fillStyle = THEME.MUTED;
-        ctx.font = font(10, 600);
-        ctx.fillText(t('boss.barHint'), x + barW, y - 6);
+        if (part !== 'overlay') {
+            ctx.font = font(11, 700);
+            ctx.textAlign = 'left';
+            ctx.fillStyle = THEME.TEXT_ACCENT;
+            ctx.fillText(`${upper(this.title)} · ${this.stageName}`, x, y - 6);
+            ctx.textAlign = 'right';
+            ctx.fillStyle = THEME.MUTED;
+            ctx.font = font(10, 600);
+            ctx.fillText(t('boss.barHint'), x + barW, y - 6);
 
-        ctx.beginPath();
-        ctx.roundRect(x, y, barW, barH, barH / 2);
-        ctx.fillStyle = THEME.SURFACE;
-        ctx.fill();
-        if (fill > 0) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, barW, barH, barH / 2);
+            ctx.fillStyle = THEME.SURFACE;
+            ctx.fill();
+        }
+        if (part === 'base') {
+            ctx.restore();
+            return;
+        }
+        if (part === 'all' && fill > 0) {
             ctx.save();
             ctx.clip();
             ctx.fillStyle = this.hitFlash > 0.05 ? THEME.LAVENDER : THEME.PINK;

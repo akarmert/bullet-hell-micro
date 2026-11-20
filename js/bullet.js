@@ -105,10 +105,16 @@ export class Bullet {
 
         // Trail kaydı
         if (this.trailLength > 0) {
-            this.trail.unshift({ x: this.x, y: this.y });
-            if (this.trail.length > this.trailLength) {
-                this.trail.pop();
+            // Reuse the oldest point object once the trail is full (no per-step allocation)
+            let pt;
+            if (this.trail.length >= this.trailLength) {
+                pt = this.trail.pop();
+                pt.x = this.x;
+                pt.y = this.y;
+            } else {
+                pt = { x: this.x, y: this.y };
             }
+            this.trail.unshift(pt);
         }
 
         // Hareket (salınım varsa ana yöne dik küçük bir dalga eklenir)

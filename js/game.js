@@ -16,6 +16,7 @@ import { ModeRegistry } from './modes.js';
 import { TouchControls } from './touchControls.js';
 import { resizeArena } from './arena.js';
 import { PixiRenderer } from './render/pixiRenderer.js';
+import { AdaptiveQuality } from './quality.js';
 import { THEME, setHighContrast, applyTheme, resolveTheme, systemPrefersDark } from './theme.js';
 import { MenuBackdrop } from './menuBackdrop.js';
 import { ScoreSystem, formatScore } from './score.js';
@@ -40,6 +41,7 @@ export class Game {
     constructor(canvas) {
         this.canvas = canvas;
         // PixiJS (WebGL) renderer; initialised asynchronously, the loop waits for `ready`
+        this.quality = new AdaptiveQuality();
         this.renderer = new PixiRenderer(canvas);
         this.ready = this.renderer.init().then(() => resizeArena(this));
 

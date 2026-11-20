@@ -9,6 +9,7 @@ import '@fontsource/fredoka/600.css';
 import '@fontsource/fredoka/700.css';
 import { Game } from './game.js';
 import { createFixedStepper } from './loop.js';
+import { resizeArena } from './arena.js';
 
 window.addEventListener('DOMContentLoaded', async () => {
     const canvas = document.getElementById('gameCanvas');
@@ -36,8 +37,10 @@ window.addEventListener('DOMContentLoaded', async () => {
     let last = performance.now();
 
     function frame(now) {
-        advance((now - last) / 1000);
+        const dtMs = now - last;
+        advance(dtMs / 1000);
         last = now;
+        if (game.quality.sample(dtMs, game.state === 'PLAYING', now)) resizeArena(game);
         game.render();
         requestAnimationFrame(frame);
     }

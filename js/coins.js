@@ -171,7 +171,10 @@ export class CoinManager {
                 collected.push(coin);
             }
         }
-        this.coins = this.coins.filter(c => c.active);
+        // In-place compaction (no new array every step)
+        let n = 0;
+        for (let i = 0; i < this.coins.length; i++) if (this.coins[i].active) this.coins[n++] = this.coins[i];
+        this.coins.length = n;
         return collected;
     }
 

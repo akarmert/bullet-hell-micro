@@ -33,7 +33,7 @@ export class FxView {
         this.particles = new SpritePool(this.particleLayer);
         this.flash = new Sprite(Texture.WHITE);
         this.flash.tint = 0xffc4de;
-        this.banner = new LiveCanvasSprite();
+        this.banner = new LiveCanvasSprite('banner');
         this.container.addChild(this.shockwaves, this.particleLayer, this.flash, this.banner.sprite);
         this.stats = { particles: 0 };
     }
@@ -48,8 +48,10 @@ export class FxView {
 
         // Candy confetti
         this.particles.begin();
+        let k = 0;
         for (const p of effects.particles) {
             if (p.life <= 0) continue;
+            if (this.reducedFx && (k++ & 1)) continue;   // adaptive quality: half the confetti
             const sp = this.particles.next();
             const entry = confettiEntry(p.round, p.color);
             applyBaked(sp, entry);

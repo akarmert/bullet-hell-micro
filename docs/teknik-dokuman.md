@@ -60,6 +60,7 @@ PIXIJS-STAGE1-REPORT.md  PixiJS Aşama 1 teknik raporu
 |---|---|---|
 | `main.js` | ~50 | Giriş noktası: yerel Fredoka yazı tipini yükler, `Game` oluşturur, sabit adımlı döngüyü (`loop.js`) çalıştırır |
 | `loop.js` | ~30 | Sabit adımlı (1/120 sn) simülasyon; kare başına en fazla 8 adım (DOM'suz, test edilir) |
+| `quality.js` | ~95 | Uyarlanabilir kalite: kare aralıklarını izler, gerekirse çözünürlük tavanını ve efekt yoğunluğunu düşürür (DOM'suz, test edilir) |
 | `game.js` | ~1080 | **Orkestratör**: durum makinesi, girdi, güncelleme sırası, ölüm, ödüller, alt şerit senkronu; çizimi `PixiRenderer`'a devreder |
 | `config.js` | ~360 | **Tüm ayarlanabilir sayılar**: oyuncu, fazlar, 3 boss, güçlendirmeler, ekşi şekerler, testere, para, mobil denge, performans, modlar |
 | `arena.js` | ~40 | Mantıksal arena boyutu (yükseklik sabit 600, genişlik ekran oranına göre), DPR tavanı, PixiJS'e yeniden boyutlandırma, güvenli alanlar |
@@ -89,11 +90,12 @@ PIXIJS-STAGE1-REPORT.md  PixiJS Aşama 1 teknik raporu
 | `share.js` | ~60 | Sonuç paylaşımı (Web Share API → panoya kopyala yedeği) |
 | `devMode.js` | ~170 | Geliştirici modu (`?dev`): ölümsüzlük, boss'a atlama, kayıtlar kapalı; yayın paketinden çıkarılır |
 | `render/pixiRenderer.js` | ~140 | PixiJS `Application` (WebGL, elle çizim), katman sırası, ekran sarsıntısı, WebGL bağlam kaybı/kurtarma |
-| `render/textures.js` | ~200 | Doku pişirme önbelleği, içerik değişince yeniden çizilen `LiveCanvasSprite`, havuzlu `ParticleLayer`, ertelenmiş doku silme |
+| `render/textures.js` | ~360 | Doku pişirme önbelleği, mermi `TextureAtlas`'ı, içerik değişince yeniden çizilen `LiveCanvasSprite`, havuzlu `ParticleLayer`, ertelenmiş doku silme, `PerfStats` yükleme sayaçları |
+| `render/glyphText.js` | ~110 | Her karede değişen sayılar (süre, skor) için önceden pişirilmiş karakter sprite'ları |
 | `render/shapes.js` | ~110 | Ortak beyaz şekil dokuları (nokta, ışık, hale, şerit, yıldız, iz); GPU'da renklendirilir |
-| `render/worldView.js` | ~420 | Arka plan, yıldızlar, benekler, uyarı lazerleri, şekerler, paralar, boss, hayalet, mermiler (havuz + hale + iz), oyuncu, puan baloncukları |
+| `render/worldView.js` | ~720 | Arka plan, yıldızlar, benekler, uyarı lazerleri, şekerler, paralar, boss, hayalet, mermiler (havuz + hale + iz), oyuncu, puan baloncukları |
 | `render/fxView.js` | ~90 | Konfeti parçacıkları, şok dalgaları, flaş, bildirim afişi |
-| `render/uiView.js` | ~230 | HUD bölgeleri, ipucu, boss barı, menü/duraklatma/sonuç kartı, arena çerçevesi, maskeli kenar uyarısı |
+| `render/uiView.js` | ~430 | HUD bölgeleri, ipucu, boss barı, menü/duraklatma/sonuç kartı, arena çerçevesi, maskeli kenar uyarısı |
 | `render/backdropView.js` | ~150 | Menü ve sonuç kartının etkileşimli arka planı (şekerler, yıldızlar, ateşböcekleri) |
 
 ---
@@ -261,12 +263,13 @@ Bütün okuma/yazmalar `try/catch` içindedir (gizli sekme, kota hatası).
 - **Yayın paketinde (`npm run build:web`) geliştirici modunun kodu yoktur**; `?dev` hiçbir şey yapmaz. İstenirse `VITE_ENABLE_DEV_MODE=true npm run build:web` ile bilerek açılabilir.
 
 ## 12. Testler
-`node --test tests/*.test.mjs`, 8 dosya, 65 test. DOM ve WebGL gerektirmeyen mantık test edilir:
+`node --test tests/*.test.mjs`, 9 dosya, 70 test. DOM ve WebGL gerektirmeyen mantık test edilir:
 - `boss.test.mjs`: boss girişi, hasar modeli, aşamalar, 3 boss rotasyonu, Pamuk Bulut desenleri, Sakız Balon, mobil yoğunluk ölçeği
 - `mobile.test.mjs`: kalkan kuralları, ekşi şeker etkileri
 - `features.test.mjs`: skor, modlar, günlük RNG, i18n, kostümler, geliştirici modu
 - `ui.test.mjs`: menü yerleşimleri, ≥44 px dokunma hedefleri, sonuç kartı butonları, odak sırası
 - `stage1.test.mjs`: sabit adımın 30/60/90/120 Hz'de aynı süreyi simüle etmesi, takılma sınırı, aynı tohumla 30 Hz ve 120 Hz'de **birebir aynı mermiler**, oyun mantığının çiziciye bağımlı olmaması, yayın güvenliği (eski sunucu yok, CSP yalnızca derlemede, uzak yazı tipi yok, sürümler sabit)
+- `stage2.test.mjs`: uyarlanabilir kalite (60/120 Hz algılama, kademeli düşüş, menü ve uzun boşlukların yok sayılması), mermi izinin nesne yeniden kullanımı
 - `theme.test.mjs`, `menuBackdrop.test.mjs`, `audio.test.mjs`
 
 Görsel doğrulama otomatik piksel karşılaştırması değildir: `docs/pixijs-stage1/baseline/` (Canvas 2D) ve `docs/pixijs-stage1/after/` (PixiJS) klasörlerinde aynı senaryoların ekran görüntüleri vardır. `ux-preview/sandbox.js` kayıtlara yazmayan bir test ortamı sağlar.
@@ -281,10 +284,18 @@ Görsel doğrulama otomatik piksel karşılaştırması değildir: `docs/pixijs-
 - Dokunmatikte DPR tavanı 1,5; alt şerit DOM yazımı saniyede en fazla 10; graze sesi sınırlı.
 - Sabit adımlı simülasyon (FPS'den bağımsız oynanış).
 
-**Bilinen sınırlar (Aşama 2 adayları)**
-- Masaüstünde HUD'un süre ve skor bölgeleri her karede yeniden yüklenir (küçük ama sürekli). Menü ve sonuç kartı animasyonu tam ekran dokuyu saniyede 30 kez yeniler.
-- Gerçek telefonda FPS ölçülmedi; ölçümler masaüstü tarayıcıda telefon emülasyonuyla, gizli panelde (`gl.finish` ile) yapıldı.
-- p99 kare süresinde ara ara 12–35 ms sıçramalar görüldü (muhtemelen doku yüklemeleri ve çöp toplayıcı); kaynağı ölçümle doğrulanmalı.
+**Uygulanmış (Aşama 2 — ayrıntı ve ölçümler: `PIXIJS-STAGE2-REPORT.md`)**
+- Her karede doku yükleme kaldırıldı: süre/skor pişmiş karakterlerle (`render/glyphText.js`); menü, duraklat ve sonuç kartı statik doku + dönüşümle oynatılan parçalar; oyuncu, şeker, para, seri hapı ve boss barı parçalara ayrıldı. Masaüstünde menü ~66 MB/s → 32 KB/s, oyun ~25 MB/s → ~0,3 MB/s, duraklat/sonuç → 0.
+- Mermi doku atlası (`TextureAtlas`, 1024²): 1000 mermide çizim çağrısı 70 → 7.
+- GC: mermi izi nokta nesneleri yeniden kullanılıyor; para/skor yazısı listeleri yerinde sıkıştırılıyor; `toTint` önbellekli.
+- Uyarlanabilir kalite (`js/quality.js`): oyunda kareler sürekli yenileme aralığını kaçırırsa çözünürlük tavanı 1,25× → 1× ve azaltılmış efekt; boss dokusu düşük çözünürlük / 15 Hz. Menüde yargılamaz, otomatik geri yükselmez.
+- Canlı doku tuvali gereğinden çok büyükse küçülür.
+- Ölçüm aracı: `ux-preview/perf-harness.js` (simüle 60 Hz saat, `gl.finish`, çizim çağrısı ve yükleme sayacı). Geliştirici panelinde FPS / Hz / kalite kademesi.
+
+**Bilinen sınırlar**
+- Boss gövdesi her karede dalgalandığı için 30 Hz canlı doku (telefon emülasyonunda kalite 0'da 13–25 MB/s). Kalıcı çözüm boss çiziminin PixiJS Graphics'e taşınması.
+- 90 Hz ekranlarda ara değerleme yok (120 Hz sabit adım; kare başına 1–2 adım).
+- Gerçek telefonda FPS/ısınma ölçülmedi; ölçümler masaüstü tarayıcıda telefon emülasyonuyla, gizli panelde (`gl.finish` ile) yapıldı.
 - Görsel regresyon testi otomatik değil.
 
 ## 14. Güvenlik notları

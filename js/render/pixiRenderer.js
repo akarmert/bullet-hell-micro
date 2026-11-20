@@ -10,10 +10,11 @@ import 'pixi.js/unsafe-eval'; // No runtime eval/new Function → works under a 
 import { Application, Container } from 'pixi.js';
 import { GAME_CONFIG } from '../config.js';
 import { THEME } from '../theme.js';
-import { setBakeResolution, invalidateBaked, flushTextureTrash, TexState } from './textures.js';
+import { setBakeResolution, invalidateBaked, flushTextureTrash, TexState, PerfStats } from './textures.js';
 import { WorldView } from './worldView.js';
 import { FxView } from './fxView.js';
 import { UiView } from './uiView.js';
+import { resetGlyphMetrics } from './glyphText.js';
 import { BackdropView } from './backdropView.js';
 
 export class PixiRenderer {
@@ -93,6 +94,11 @@ export class PixiRenderer {
         }
 
         const inMenu = game.state === 'MENU';
+        // Adaptive quality (js/quality.js): fewer trail dots / confetti on struggling devices
+        const reducedFx = !!(game.quality && game.quality.settings.reducedFx);
+        this.world.reducedFx = reducedFx;
+        this.world.qualityLevel = game.quality ? game.quality.level : 0;
+        this.fx.reducedFx = reducedFx;
         this.world.syncBackground(game, w, h);
         this.menuBackdrop.container.visible = inMenu;
         if (inMenu) this.menuBackdrop.sync(game.menuBackdrop, 1);
@@ -111,7 +117,13 @@ export class PixiRenderer {
 
     /** Re-bakes every generated texture (e.g. once the bundled font has loaded). */
     refreshTextures() {
+        resetGlyphMetrics();
         invalidateBaked();
+    }
+
+    /** Upload / bake counters (see PerfStats) */
+    get perf() {
+        return PerfStats;
     }
 
     /** Diagnostics for dev mode / reports */
@@ -120,6 +132,7 @@ export class PixiRenderer {
             bullets: this.world.stats.bullets,
             particles: this.fx.stats.particles,
             textureRes: TexState.res,
+            baked: PerfStats.bakedCount(),
             renderer: this.app ? this.app.renderer.name : 'none'
         };
     }

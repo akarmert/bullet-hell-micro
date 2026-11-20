@@ -14,7 +14,9 @@ export function resizeArena(game) {
     // Dokunmatik cihazlarda (telefon) çözünürlük tavanı daha düşük: çizim yükü ciddi azalır
     const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
     const P = GAME_CONFIG.PERFORMANCE;
-    const dpr = Math.min(window.devicePixelRatio || 1, coarse ? P.MAX_DPR_TOUCH : P.MAX_DPR);
+    let dpr = Math.min(window.devicePixelRatio || 1, coarse ? P.MAX_DPR_TOUCH : P.MAX_DPR);
+    // Adaptive quality may lower the resolution cap on devices that miss frames
+    if (game.quality) dpr = Math.min(dpr, Math.max(1, game.quality.settings.dprCap));
     // PixiJS owns the drawing buffer: it sizes the canvas and scales the logical stage
     if (game.renderer) game.renderer.resize(rect.width, rect.height, dpr);
     if (game.player) {

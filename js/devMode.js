@@ -132,6 +132,7 @@ export class DevMode {
                 </div>
                 <button type="button" data-act="end">⏹ turu bitir</button>
                 <p class="dev-note"></p>
+                <p class="dev-perf"></p>
             </div>`;
         // Paneldeki dokunuşlar oyuna (canvas'a) geçmesin
         for (const type of ['pointerdown', 'pointermove', 'pointerup', 'click', 'touchstart']) {
@@ -155,6 +156,17 @@ export class DevMode {
         document.body.appendChild(panel);
         this.panel = panel;
         this.refresh();
+        // Performance readout for on-device profiling (dev builds only)
+        const perfLine = panel.querySelector('.dev-perf');
+        setInterval(() => {
+            const g = this.game;
+            if (!this.open || !g.renderer || !g.renderer.ready) return;
+            const q = g.quality;
+            const st = g.renderer.getStats();
+            const hz = q ? Math.round(1000 / q.interval) : 0;
+            perfLine.textContent = `${q ? q.fps.toFixed(0) : '?'} fps · ${q ? q.frameMs.toFixed(1) : '?'} ms · ${hz} Hz · `
+                + `q${q ? q.level : 0} · res ${st.textureRes} · ${st.bullets} mermi`;
+        }, 500);
     }
 
     refresh() {

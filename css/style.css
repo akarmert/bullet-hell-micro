@@ -170,3 +170,4 @@ body:not(.has-bar) #rotateHint { top: auto; bottom: calc(10px + var(--safe-botto
 #devPanel .dev-toggle { background: var(--purple-deep); color: #fff; }
 #devPanel button.on { background: var(--pink); color: var(--ink); }
 #devPanel .dev-note { margin: 0; font-size: 11px; color: var(--text); opacity: .75; text-align: center; }
+#devPanel .dev-perf { margin: 0; font-size: 10px; font-family: ui-monospace, monospace; color: var(--text); opacity: .75; text-align: center; }
