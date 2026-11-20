@@ -118,7 +118,8 @@ export class WaveManager {
     addTelegraph(telegraph) {
         this.telegraphs.push({
             ...telegraph,
-            remaining: telegraph.duration
+            remaining: telegraph.duration,
+            arenaW: GAME_CONFIG.CANVAS.WIDTH   // fire callbacks captured coordinates in this width
         });
     }
 
@@ -134,7 +135,15 @@ export class WaveManager {
             t.remaining -= dtMs;
             if (t.remaining <= 0) {
                 if (typeof t.onFire === 'function') {
+                    const list = this.bulletManager && this.bulletManager.bullets;
+                    const first = list ? list.length : 0;
                     t.onFire();
+                    // The arena changed width since the warning appeared (phone rotated):
+                    // move what it fired by the same factor as everything else (arena.js)
+                    const f = GAME_CONFIG.CANVAS.WIDTH / (t.arenaW || GAME_CONFIG.CANVAS.WIDTH);
+                    if (list && f !== 1) {
+                        for (let k = first; k < list.length; k++) list[k].x *= f;
+                    }
                 }
             } else {
                 this.telegraphs[activeCount++] = t;

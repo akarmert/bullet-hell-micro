@@ -129,3 +129,65 @@ test('frame pacer: a 60 Hz display renders every frame whatever the cap', () => 
     assert.ok(Math.abs(rendered(60, 60) - 60) <= 1);
     assert.ok(Math.abs(rendered(120, 60) - 60) <= 1);
 });
+
+// ------------------------------------------------------------
+// Rotating mid-run: world objects keep their place (arena width changes ~2.6×)
+// ------------------------------------------------------------
+import { remapWorldX } from '../js/arena.js';
+import { GAME_CONFIG } from '../js/config.js';
+import { BulletManager } from '../js/bulletManager.js';
+import { WaveManager } from '../js/waveManager.js';
+
+test('rotation: every world object moves with the arena width', () => {
+    const bullet = { x: 100, y: 50, vx: 30, vy: 0, trail: [{ x: 90, y: 50 }, { x: 80, y: 50 }] };
+    const game = {
+        bulletManager: { bullets: [bullet] },
+        pickupManager: { pickups: [{ x: 200, y: 10 }] },
+        coins: { coins: [{ x: 300, y: 10 }] },
+        waveManager: {
+            telegraphs: [
+                { x1: 0, y1: 300, x2: 360, y2: 300 },     // horizontal wall: stretches
+                { x1: 100, y1: 0, x2: 200, y2: 400 }      // aimed line: moves, keeps direction
+            ],
+            boss: { x: 180, y: 120, rainGap: 150 }
+        },
+        score: { popups: [{ x: 50, y: 5 }] },
+        effects: { particles: [{ x: 10, y: 1 }], shockwaves: [{ x: 20, y: 2 }] },
+        player: { afterImages: [{ x: 40, y: 3 }], mouseTarget: { x: 60, y: 4 } }
+    };
+    remapWorldX(game, 2.5);
+    assert.equal(bullet.x, 250);
+    assert.deepEqual(bullet.trail.map((p) => p.x), [225, 200]);
+    assert.equal(bullet.vx, 30, 'speed unchanged');
+    assert.equal(game.pickupManager.pickups[0].x, 500);
+    assert.equal(game.coins.coins[0].x, 750);
+    assert.deepEqual([game.waveManager.telegraphs[0].x1, game.waveManager.telegraphs[0].x2], [0, 900]);
+    assert.deepEqual([game.waveManager.telegraphs[1].x1, game.waveManager.telegraphs[1].x2], [250, 350]);
+    assert.equal(game.waveManager.boss.x, 450);
+    assert.equal(game.waveManager.boss.rainGap, 375);
+    assert.equal(game.score.popups[0].x, 125);
+    assert.equal(game.effects.particles[0].x, 25);
+    assert.equal(game.effects.shockwaves[0].x, 50);
+    assert.equal(game.player.afterImages[0].x, 100);
+    assert.equal(game.player.mouseTarget.x, 150);
+    // y never changes
+    assert.equal(bullet.y, 50);
+    assert.equal(game.waveManager.boss.y, 120);
+});
+
+test('rotation: a warning shown before the rotation fires at the new position', () => {
+    const W = GAME_CONFIG.CANVAS.WIDTH;
+    try {
+        GAME_CONFIG.CANVAS.WIDTH = 360;
+        const bm = new BulletManager();
+        const waves = new WaveManager(bm);
+        waves.addTelegraph({ x1: 180, y1: 0, x2: 180, y2: 600, duration: 10,
+            onFire: () => bm.spawn({ x: 180, y: 0, vx: 0, vy: 100 }) });
+        GAME_CONFIG.CANVAS.WIDTH = 900;          // phone turned to landscape meanwhile
+        waves.updateTelegraphs(20);
+        assert.equal(bm.bullets.length, 1);
+        assert.equal(bm.bullets[0].x, 450, 'still in the middle of the arena');
+    } finally {
+        GAME_CONFIG.CANVAS.WIDTH = W;
+    }
+});

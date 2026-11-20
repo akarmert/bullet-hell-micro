@@ -24,6 +24,8 @@ export function resizeArena(game) {
     // PixiJS owns the drawing buffer: it sizes the canvas and scales the logical stage
     if (game.renderer) game.renderer.resize(rect.width, rect.height, dpr);
     if (game.player) {
+        // Mid-run width change (phone rotated: ~360 ↔ ~940 units): everything keeps its place
+        if (game.state === 'PLAYING' || game.state === 'PAUSED') remapWorldX(game, width / oldWidth);
         game.player.x *= width / oldWidth;
         game.player.clampToArena();
         game.player.prevX = game.player.x;
@@ -39,4 +41,54 @@ export function resizeArena(game) {
         top: (parseFloat(style.getPropertyValue('--safe-top')) || 0) * scale,
         bottom: (parseFloat(style.getPropertyValue('--safe-bottom')) || 0) * scale
     });
+}
+
+/**
+ * Moves every world object horizontally by `f` (new width / old width). The arena is always
+ * 600 units tall but its width follows the screen, so rotating a phone mid-run changed the
+ * width ~2.6× while bullets, candies, coins and the boss kept their old coordinates: in
+ * landscape they were bunched on the left while new ones arrived from the right.
+ * Velocities are left alone (difficulty does not change). The player is handled by the caller.
+ * Pure data, no rendering: unit-tested.
+ */
+export function remapWorldX(game, f) {
+    if (!(f > 0) || f === 1 || !Number.isFinite(f)) return;
+    const scale = (o) => {
+        if (o && Number.isFinite(o.x)) o.x *= f;
+    };
+    const each = (list, fn) => {
+        if (list) for (const o of list) fn(o);
+    };
+    each(game.bulletManager && game.bulletManager.bullets, (b) => {
+        scale(b);
+        each(b.trail, scale);
+    });
+    each(game.pickupManager && game.pickupManager.pickups, scale);
+    each(game.coins && game.coins.coins, scale);
+    const waves = game.waveManager;
+    if (waves) {
+        // Warning lines: walls that span the arena (horizontal) stretch with it; aimed lines keep
+        // their direction and move with their origin, like the bullets they will fire
+        each(waves.telegraphs, (t) => {
+            if (t.y1 === t.y2) {
+                t.x1 *= f;
+                t.x2 *= f;
+            } else {
+                const dx = t.x1 * f - t.x1;
+                t.x1 += dx;
+                t.x2 += dx;
+            }
+        });
+        if (waves.boss) {
+            scale(waves.boss);
+            if (Number.isFinite(waves.boss.rainGap)) waves.boss.rainGap *= f;
+        }
+    }
+    each(game.score && game.score.popups, scale);
+    each(game.effects && game.effects.particles, scale);
+    each(game.effects && game.effects.shockwaves, scale);
+    if (game.player) {
+        each(game.player.afterImages, scale);
+        scale(game.player.mouseTarget);
+    }
 }
